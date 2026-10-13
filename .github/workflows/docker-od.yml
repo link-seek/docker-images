@@ -32,7 +32,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/link-seek/opendesign
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/link-seek/opendesign
+  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign
 
 jobs:
   build:

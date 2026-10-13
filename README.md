@@ -7,7 +7,7 @@
 | 镜像 | 说明 |
 | --- | --- |
 | `ghcr.io/link-seek/opendesign:<od>-oc<oc>`（+ `latest`）| 官方 `ghcr.io/nexu-io/od` + 固定版 `opencode` 二进制 + `--dir` shim，开箱即用，不再挂宿主机 CLI |
-| `swr.cn-north-9.myhuaweicloud.com/link-seek/opendesign`（同 tag）| 国内加速镜像 |
+| `swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign`（同 tag）| 国内加速镜像（SWR 华北九区组织数配额满，暂用个人命名空间） |
 
 ## 为什么 OpenCode 版本要 pin 死
 
@@ -22,7 +22,7 @@ daemon 日志 `test:agent ... ok` 再切生产。
 
 ```bash
 # compose 里把 image 换掉，并删掉 opencode 的两行 bind mount，home 卷和环境变量保留
-image: swr.cn-north-9.myhuaweicloud.com/link-seek/opendesign:0.24.1-oc2.0.6
+image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign:0.24.1-oc2.0.6
 ```
 
 ## 手动触发
