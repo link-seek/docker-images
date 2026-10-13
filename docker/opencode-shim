@@ -1,0 +1,16 @@
+#!/bin/bash
+# Shim: od 0.23.1 spawns `opencode run --dir <cwd> ...` but bundled CLI
+# (2.0.6) has no --dir flag. Translate --dir into cd; pass the rest through.
+TARGET_DIR=""
+args=()
+while (($#)); do
+  case "$1" in
+    --dir) TARGET_DIR="$2"; shift 2 ;;
+    --dir=*) TARGET_DIR="${1#--dir=}"; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+if [ -n "$TARGET_DIR" ]; then
+  cd "$TARGET_DIR" || { echo "shim: cannot cd to $TARGET_DIR" >&2; exit 1; }
+fi
+exec /usr/local/bin/opencode-real "${args[@]}"

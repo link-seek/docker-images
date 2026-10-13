@@ -1,0 +1,142 @@
+name: od-image
+
+# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+push。
+# 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，
+# 如 --dir/--pure flag 差异）；升 opencode 只走手动 workflow_dispatch，见 README。
+on:
+  schedule:
+    # 每周一 02:00 UTC 巡检一次（OD 发版不算频繁，不值得天天跟）
+    - cron: "0 2 * * 1"
+  repository_dispatch:
+    types: [upstream-od-image]
+  workflow_dispatch:
+    inputs:
+      od_tag:
+        description: "上游 OD tag（空则自动取最新，形如 0.24.1，无 v 前缀）"
+        required: false
+        default: ""
+      opencode_tag:
+        description: "OpenCode 版本（默认用 Dockerfile 里的 pin，只在 OD 要求时手动 bump）"
+        required: false
+        default: ""
+      force:
+        description: "强制重打（true/false）"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write # 回写 .upstream-od-tag
+  packages: write # push ghcr.io/link-seek/opendesign
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/link-seek/opendesign
+  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
+  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/link-seek/opendesign
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve upstream OD tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 以 GHCR 上的镜像 tag 为准（形如 0.24.x，无 v 前缀；git tag 另有前缀，不能直接用）。
+          # 滞后策略：只采用发布时间超过 3 天的 tag，避开刚发版的 hotfix churn。
+          normalize() { echo "${1#v}"; }
+          if [ -n "${{ inputs.od_tag }}" ]; then
+            OD_TAG="$(normalize "${{ inputs.od_tag }}")"
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ] && [ -n "${{ github.event.client_payload.tag }}" ]; then
+            OD_TAG="$(normalize "${{ github.event.client_payload.tag }}")"
+          else
+            CUTOFF="$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+            OD_TAG=""
+            while read -r T D; do
+              if [[ "${D}" < "${CUTOFF}" ]]; then OD_TAG="${T}"; break; fi
+            done < <(gh api 'orgs/nexu-io/packages/container/od/versions?per_page=100' \
+              --jq '([.[] | {tags: .metadata.container.tags, created: .created_at} as $v | $v.tags[]? as $t | {tag: $t, created: $v.created} | select(.tag | test("^0\\.[0-9]+\\.[0-9]+$"))] | sort_by(.tag | split(".") | map(tonumber)) | reverse | .[] | "\(.tag) \(.created)")')
+            if [ -z "${OD_TAG}" ]; then echo "no tag older than 3 days."; fi
+          fi
+          if [ -n "${{ inputs.opencode_tag }}" ]; then
+            OPENCODE_TAG="$(normalize "${{ inputs.opencode_tag }}")"
+          else
+            OPENCODE_TAG="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opendesign | head -n1)"
+          fi
+          echo "od_tag=${OD_TAG}" >> "$GITHUB_OUTPUT"
+          echo "opencode_tag=${OPENCODE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "combo=${OD_TAG}-oc${OPENCODE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "upstream combo: ${OD_TAG}-oc${OPENCODE_TAG}"
+
+      - name: Skip if unchanged
+        id: check
+        run: |
+          PREV="$(cat .upstream-od-tag 2>/dev/null || true)"
+          FORCE="${{ inputs.force }}"
+          COMBO="${{ steps.upstream.outputs.combo }}"
+          if [ -z "${{ steps.upstream.outputs.od_tag }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "no qualifying tag, skip."
+          elif [ "${PREV}" = "${COMBO}" ] && [ "${FORCE}" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "no new upstream release (still ${PREV}), skip."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Buildx
+        if: steps.check.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to SWR via token
+        if: steps.check.outputs.skip != 'true'
+        env:
+          HCLOUD_AK: ${{ secrets.HCLOUD_AK }}
+          HCLOUD_SK: ${{ secrets.HCLOUD_SK }}
+        run: |
+          mkdir -p ~/.docker
+          curl -fsSL -o /tmp/hcloud.tgz "https://ap-southeast-3-hwcloudcli.obs.ap-southeast-3.myhuaweicloud.com/cli/latest/huaweicloud-cli-linux-amd64.tar.gz"
+          tar -xzf /tmp/hcloud.tgz -C /tmp
+          echo y | /tmp/hcloud SWR CreateAuthorizationToken --cli-region=cn-north-9 --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" > /tmp/swr.json 2> /tmp/hcloud.err; echo "hcloud exit: $?"; wc -c /tmp/swr.json; head -c 120 /tmp/hcloud.err
+          python3 -c "import json,os,re; t=json.loads(re.search(r'\{.*\}', open('/tmp/swr.json').read(), re.S).group(0)); assert t.get('auths'); c=os.path.expanduser('~/.docker/config.json'); d=json.load(open(c)) if os.path.exists(c) else {}; d.setdefault('auths',{}).update(t['auths']); json.dump(d,open(c,'w')); print('swr auth merged')"
+
+      - name: Login to GHCR
+        if: steps.check.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.opendesign
+          push: true
+          build-args: |
+            OD_TAG=${{ steps.upstream.outputs.od_tag }}
+            OPENCODE_TAG=${{ steps.upstream.outputs.opencode_tag }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.upstream.outputs.combo }}
+            ${{ env.IMAGE }}:latest
+            ${{ env.SWR_IMAGE }}:${{ steps.upstream.outputs.combo }}
+            ${{ env.SWR_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Record upstream tag
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          echo -n "${{ steps.upstream.outputs.combo }}" > .upstream-od-tag
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .upstream-od-tag
+          git diff --staged --quiet || git commit -m "chore: track upstream ${{ steps.upstream.outputs.combo }}"
+          git push
