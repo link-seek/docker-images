@@ -74,11 +74,23 @@ jobs:
             { echo "autoUpdate must be false"; exit 1; }
           echo "versions pinned: opencode-mem@$MEM_DOCKER"
 
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+      - name: Login to SWR via token (短效，无长效密码）
+        env:
+          HCLOUD_AK: ${{ secrets.HCLOUD_AK }}
+          HCLOUD_SK: ${{ secrets.HCLOUD_SK }}
+        run: |
+          mkdir -p ~/.docker
+          curl -fsSL -o /tmp/hcloud.tgz "https://ap-southeast-3-hwcloudcli.obs.ap-southeast-3.myhuaweicloud.com/cli/latest/huaweicloud-cli-linux-amd64.tar.gz"
+          tar -xzf /tmp/hcloud.tgz -C /tmp
+          echo y | /tmp/hcloud SWR CreateAuthorizationToken --cli-region=cn-north-9 --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" > /tmp/swr.json 2> /tmp/hcloud.err; echo "hcloud exit: $?"; wc -c /tmp/swr.json; head -c 120 /tmp/hcloud.err
+          python3 -c "import json,os,re; t=json.loads(re.search(r'\{.*\}', open('/tmp/swr.json').read(), re.S).group(0)); assert t.get('auths'); c=os.path.expanduser('~/.docker/config.json'); d=json.load(open(c)) if os.path.exists(c) else {}; d.setdefault('auths',{}).update(t['auths']); json.dump(d,open(c,'w')); print('swr auth merged')"
 
-      - name: Login to SWR
-        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push (ghcr + SWR)
         run: |
