@@ -1,0 +1,158 @@
+name: Test memory integration
+
+# L2 记忆集成测试（glibc 线成品镜像）：opencode + 烘入插件 + litellm 网关 + Ollama。
+# 触发：记忆相关文件改动 + 手动。分钟级。零密钥（dummy + 合成）。
+on:
+  pull_request:
+    paths:
+      - Dockerfile.opencode-tools
+      - docker/opencode-tools/**
+      - .github/workflows/test-memory.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.opencode-tools
+      - docker/opencode-tools/**
+  workflow_dispatch:
+
+jobs:
+  secret-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 烘焙文件无真值（ak/sk/key/token/私钥头，注释和占位符除外）
+        run: |
+          if grep -rniE '(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|LTAI[A-Za-z0-9]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[bap]-[A-Za-z0-9-]+)' \
+              Dockerfile.opencode-tools docker/opencode-tools/ .github/workflows/test-memory.yml; then
+            echo "FAIL: 疑似真值进仓"; exit 1
+          fi
+          echo "OK: no live secrets in build context"
+
+  memory-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start ollama (CPU)
+        run: |
+          docker run -d --name ollama --network host \
+            -v ollama-data:/root/.ollama \
+            -e OLLAMA_HOST=0.0.0.0:11434 \
+            ollama/ollama:0.40.3
+          for i in $(seq 1 30); do
+            curl -sf --max-time 5 http://127.0.0.1:11434/ >/dev/null && break
+            sleep 5
+          done
+          docker exec ollama ollama pull nomic-embed-text
+          docker exec ollama ollama pull qwen3:8b
+
+      - name: Render test gateway config (dummy key)
+        run: |
+          pip install pyyaml -q 2>/dev/null || true
+          python3 - <<'EOF'
+          import yaml
+          gw = {"model_name": "test-chat",
+                "litellm_params": {"model": "ollama/qwen3:8b",
+                                   "api_base": "http://127.0.0.1:11434", "timeout": 300}}
+          emb = {"model_name": "nomic-embed-text",
+                 "litellm_params": {"model": "ollama/nomic-embed-text",
+                                    "api_base": "http://127.0.0.1:11434", "timeout": 120}}
+          cfg = {"general_settings": {"drop_params": True},
+                 "litellm_settings": {"request_timeout": 300, "num_retries": 0, "drop_params": True},
+                 "model_list": [gw, emb]}
+          open('/tmp/litellm-memtest.yaml', 'w').write(yaml.safe_dump(cfg))
+          print("gateway config render OK")
+          EOF
+          mkdir -p /tmp/oc-cfg-test /tmp/ochome-mem
+          cat > /tmp/oc-cfg-test/opencode.jsonc <<'EOF'
+          {"$schema": "https://opencode.ai/config.json",
+           "permission": "allow",
+           "model": "gw/test-chat",
+           "provider": {"gw": {"options": {
+             "baseURL": "http://127.0.0.1:4001/v1",
+             "apiKey": "test-only"}}},
+           "plugins": ["opencode-mem@2.31.1"]}
+          EOF
+          cat > /tmp/oc-cfg-test/opencode-mem.jsonc <<'EOF'
+          {"storagePath": "/memdata",
+           "embeddingModel": "nomic-embed-text",
+           "embeddingApiUrl": "http://127.0.0.1:4001/v1",
+           "embeddingApiKey": "test-only",
+           "embeddingDimensions": 768,
+           "webServerEnabled": true, "webServerPort": 4747, "webServerHost": "127.0.0.1",
+           "autoCaptureEnabled": false,
+           "chatMessage": {"enabled": true, "maxMemories": 3, "injectOn": "first"},
+           "autoUpdate": false,
+           "showAutoCaptureToasts": false, "showUserProfileToasts": false, "showErrorToasts": false}
+          EOF
+          echo "override configs render OK"
+
+      - name: Start litellm (test gateway, embeddings+chat 经 ollama)
+        run: |
+          docker run -d --name litellm-memtest --network host \
+            -v /tmp/litellm-memtest.yaml:/app/config.yaml:ro \
+            -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
+            ghcr.io/berriai/litellm@sha256:3def0387871a732a6d18b009576c4bf4313c54d448fa938a58f51cf189d1fa33 \
+            --config /app/config.yaml --port 4001
+          for i in $(seq 1 24); do
+            curl -sf --max-time 5 "http://127.0.0.1:4001/v1/models" \
+              -H "Authorization: Bearer test-only" >/dev/null 2>&1 && break
+            sleep 5
+          done
+          curl -s --max-time 10 http://127.0.0.1:4001/v1/embeddings \
+            -H "Authorization: Bearer test-only" -H "Content-Type: application/json" \
+            -d '{"model":"nomic-embed-text","input":"probe"}' | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['data'][0]['embedding'])==768, d; print('gateway embeddings OK (768)')" || \
+            (echo "FAIL: 测试网关 embeddings 不通"; exit 1)
+
+      - name: Tool parity matrix (成品镜像工具对照表）
+        run: |
+          for t in "gh --version" "aliyun --version" "hcloud version" "oci --version" \
+                   "tailscale version" "terraform version" "wrangler --version" \
+                   "agent-browser --version" "markitdown --version" "git --version" \
+                   "node --version" "python3 --version" "msmtp --version" "opencode --version" "send-mail --help"; do
+            echo "== $t"; docker run --rm --entrypoint sh ghcr.io/xieyucheng123/opencode-tools:latest -c "$t" 2>&1 | head -2 || \
+              (echo "FAIL: $t 缺失"; exit 1)
+          done
+          echo "OK: tool parity matrix"
+
+      - name: Serve (成品镜像，插件已烘入） + sessions + asserts
+        run: |
+          docker run -d --name oc-memtest --network host \
+            -v /tmp/oc-cfg-test/opencode.jsonc:/root/.config/opencode/opencode.jsonc:ro \
+            -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
+            -v /tmp/ochome-mem:/memdata \
+            -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
+            ghcr.io/xieyucheng123/opencode-tools:latest serve --port 4096 --hostname 127.0.0.1
+          echo "waiting for plugin"
+          for i in $(seq 1 20); do
+            curl -sf --max-time 5 http://127.0.0.1:4747/api/health >/dev/null 2>&1 && break
+            sleep 15
+          done
+          curl -sf --max-time 15 http://127.0.0.1:4747/api/health >/dev/null || \
+            (echo "FAIL: 插件 5 分钟未起"; docker logs oc-memtest --tail 30; \
+             docker exec oc-memtest ls /root/.local/share/opencode/log/ 2>/dev/null; exit 1)
+          echo "OK: plugin live"; ls /tmp/ochome-mem/ | head -4
+          OEX="docker exec -e OPENCODE_PASSWORD=test-srv-pw oc-memtest opencode run --server http://127.0.0.1:4096"
+          timeout 280 $OEX \
+            "reply with exactly: MEM-OK" > /tmp/mem-out.txt 2>&1; tail -4 /tmp/mem-out.txt
+          grep -q "MEM-OK" /tmp/mem-out.txt && echo "OK: client closure" || \
+            (echo "FAIL: 客户端不通"; docker logs oc-memtest --tail 20; exit 1)
+          timeout 280 $OEX \
+            "Call the memory tool with mode 'add' and content 'sky test word is CERULEAN-7'. Reply with exactly: STORED" \
+            > /tmp/mem-a.txt 2>&1; tail -8 /tmp/mem-a.txt
+          grep -q "STORED" /tmp/mem-a.txt || \
+            (echo "FAIL: 会话 A 未存下"; exit 1)
+          curl -s --max-time 60 "http://127.0.0.1:4747/api/search?q=sky%20test%20word" \
+            | grep -q "CERULEAN-7" && echo "OK: api search recall" || \
+            (echo "FAIL: API 未检回记忆"; exit 1)
+          timeout 280 $OEX \
+            "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
+            > /tmp/mem-b.txt 2>&1; tail -8 /tmp/mem-b.txt
+          grep -q "CERULEAN-7" /tmp/mem-b.txt && echo "OK: cross-session recall" || \
+            (echo "FAIL: 跨会话未召回"; exit 1)
+          test -n "$(ls /tmp/ochome-mem/*.db 2>/dev/null)" && echo "OK: shards persisted" || \
+            (echo "FAIL: 无 shard 文件"; exit 1)
+          docker rm -f oc-memtest >/dev/null; echo "ALL GREEN"
