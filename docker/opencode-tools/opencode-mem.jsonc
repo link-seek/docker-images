@@ -1,0 +1,109 @@
+{
+  // 常态记忆 L2：opencode-mem 插件配置（本地向量 + 画像）。
+  // 参考模板见 https://github.com/tickernelz/opencode-mem/blob/main/opencode-mem.example.jsonc
+  // 本文件烘进镜像（Dockerfile.tools COPY），密钥全走 env:///file://，不进镜像。
+  // 完整设计见仓库 Discussions #11。
+
+  // 存储：必须在 prod-data 卷内。默认 ~/.opencode-mem/data 在容器层，重建容器即失忆。
+  "storagePath": "/root/.local/share/opencode/opencode-mem",
+
+  // 不开静态加密：opencode.db 本身明文、卷备份也是明文，信任边界就是卷+备份；
+  // 开则引入“key 丢即数据全丢”的风险，收益不对称。改此项前先三思。
+  "databaseEncryptionEnabled": false,
+  "databaseEncryptionCipher": "aes256gcm",
+
+  // Embedding：本地默认 Xenova/nomic-embed-text-v1（768 维，多语言）。
+  // 首启从 HuggingFace 下约 500MB 模型，缓存进 {storagePath}/.cache（在卷上，只下一次）。
+  // Embedding：远端（网关 Ollama nomic-embed-text，768 维）。本地块留作回退。
+  // "embeddingModel": "Xenova/nomic-embed-text-v1",
+
+  // 远端 embedding（网关 Ollama 已 live，见 Discussions #11；切回本地时注释掉下面四行即可）：
+  // 注意 bridge 下容器 localhost 不是宿主机，必须写 host.docker.internal，不能写 127.0.0.1。
+  "embeddingApiUrl": "http://host.docker.internal:4000/v1",
+  "embeddingApiKey": "env://LITELLM_API_KEY",
+  "embeddingModel": "nomic-embed-text",
+  "embeddingDimensions": 768,
+
+  // Web UI：只绑容器回环，宿主机经 compose 的 127.0.0.1:4747:4747 映射调试，不暴露 LAN。
+  // 绑 0.0.0.0 之前必须先配 webServerApiToken。
+  "webServerEnabled": true,
+  "webServerPort": 4747,
+  "webServerHost": "127.0.0.1",
+
+  "maxVectorsPerShard": 50000,
+  "autoCleanupEnabled": true,
+  // 默认 30 天对长期项目太激进，改 180 天；180 天零命中才清。
+  "autoCleanupRetentionDays": 180,
+  "deduplicationEnabled": true,
+  "deduplicationSimilarityThreshold": 0.9,
+
+  "memory": {
+    // 默认只搜当前项目；跨项目查必须显式 scope: "all-projects"。
+    "defaultScope": "project"
+  },
+
+  "compaction": {
+    "enabled": true,
+    // 豪华版：token 不设限，compaction 后补 20 条防丢上下文。
+    "memoryLimit": 20
+  },
+
+  "chatMessage": {
+    "enabled": true,
+    // 豪华版：首条注入 8 条最相关（默认 3）。
+    "maxMemories": 8,
+    "excludeCurrentSession": true,
+    "injectOn": "first",
+    // host/其他插件注入的系统文本不过滤进库；子 session（subagent）输出默认不记。
+    "filterInjectedPrompts": true,
+    "captureChildSessions": false
+  },
+
+  // Auto-capture 走 opencode 会话内 provider（鉴权/路由全归 opencode 管，不新增 key）。
+  // provider 名必须与 opencode 内 provider 一致；model 用 inherit 复用会话主力模型（额度够，直接上最强）。
+  "opencodeProvider": "opencode-go",
+  "opencodeModel": "inherit",
+  // 推理模型结构化输出慢，超时给到 3 分钟。
+  "opencodeTimeoutMs": 180000,
+
+  "autoCaptureEnabled": true,
+  "memoryProvider": "openai-chat",
+  "autoCaptureMaxIterations": 5,
+  "autoCaptureIterationTimeout": 30000,
+  "autoCaptureMaxRetries": 3,
+  "autoCaptureMaxContextBytes": 131072,
+  "aiSessionRetentionDays": 7,
+  "memoryTemperature": 0.3,
+
+  "showAutoCaptureToasts": true,
+  "showUserProfileToasts": true,
+  "showErrorToasts": true,
+
+  // 版本 pin 在 opencode.jsonc 的 plugins 里；此处永远关自动更新（digest pin 流程）。
+  "autoUpdate": false,
+
+  // 画像：每 10 个 prompt 学一次；2 天不活跃即删对周报节奏太激进，改 30 天。
+  "userProfileAnalysisInterval": 10,
+  "userProfileMaxContextBytes": 32768,
+  "userProfileStaleDays": 30,
+  "userProfileDisplayPreferences": 20,
+  "userProfileDisplayPatterns": 15,
+  "userProfileDisplayWorkflows": 10,
+  // 豪华版：注入加倍（10/10/6），上下文富到流出来为止。
+  "userProfileInjectPreferences": 10,
+  "userProfileInjectPatterns": 10,
+  "userProfileInjectWorkflows": 6,
+  "userProfileConfidenceDecayDays": 30,
+  "userProfileChangelogRetentionCount": 5,
+  "userProfileMinEvidenceForRetention": 3,
+  "userProfileAutoCleanupEnabled": true,
+  "userProfileAutoCleanupInterval": 100,
+  // 实验性：每轮用 LLM 校验 top 偏好是否还成立，自动纠偏画像（用 token 换少人工）。
+  "userProfileValidationEnabled": true,
+
+  "similarityThreshold": 0.6,
+  "maxMemories": 10,
+  "maxProfileItems": 10,
+  "containerTagPrefix": "opencode",
+  "injectProfile": true
+}

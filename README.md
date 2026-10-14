@@ -45,3 +45,29 @@ services:
 
 Actions → od-image → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
 外部巡检可用 `repository_dispatch`（event type `upstream-od-image`，payload `{"tag": "0.25.0"}`）。
+
+## opencode-tools（glibc 线）
+
+第二条流水线：`Dockerfile.opencode-tools` + `docker-tools.yml` + `test-memory.yml`。
+
+```text
+opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
+  → ubuntu:24.04 底座 → 云 CLI/运行时 → 烘焙配置 → RUN plugin add（记忆插件）
+  → ghcr.io/xieyucheng123/opencode-tools:<tag> + :latest
+  → SWR north-9 xieyucheng123（同名，直推）
+```
+
+为什么不用官方镜像（Alpine/musl）：opencode-mem 的 onnxruntime/turso 原生件缺
+`fcntl64`，musl 上启动即死且静默（2026-10 实证）。glibc 线是记忆系统的前提。
+
+* 版本：`OPENCODE_TAG`（默认见 Dockerfile）、`OPENCODE_MEM_VERSION`（与
+  `docker/opencode-tools/opencode.jsonc` 同值，CI 一致性检查）。
+* 跟随：每周一扫 anomalyco git tag（v2.0.x，超 3 天＋二进制资产存在才打），`force` 重打。
+* 回写：`.upstream-tools-tag`＋Dockerfile pin 前移，main 留痕。
+* 测试：`test-memory.yml`（opencode＋烘入插件＋网关＋Ollama 跨会话召回、工具 parity 矩阵、
+  烘焙文件密钥卫生扫描）全绿才算交付。
+* 部署侧（compose/`.env`/pin）在 infra 仓，本仓只管构建。
+
+## 手动触发
+
+Actions → tools-image → Run workflow，可指定 `opencode_tag` / `force`。
