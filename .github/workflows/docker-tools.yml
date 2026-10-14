@@ -3,7 +3,8 @@ name: tools-image
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 + 官方 release 二进制 + 工具层 + 记忆插件。
 # 每周一 02:00 UTC 巡检 anomalyco GitHub tag（v2.0.x，只采用发布超 3 天且二进制资产存在的），
 # 有新 tag 才 build+push；另有 digest 校验门防止上游撤包。
-# 命名：ghcr.io/xieyucheng123/opencode-tools + SWR north-9 xieyucheng123（沿用旧地址，部署零改动）。
+# 命名：ghcr.io/link-seek/opencode-tools + SWR north-9 xieyucheng123（跟 od 混合格局一致；
+# GITHUB_TOKEN 写不了跨账号个人位，GHCR 必须进组织）。
 on:
   schedule:
     - cron: "0 2 * * 1"
@@ -24,7 +25,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/xieyucheng123/opencode-tools
+  IMAGE: ghcr.io/link-seek/opencode-tools
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools
 

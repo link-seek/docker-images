@@ -53,7 +53,7 @@ Actions → od-image → Run workflow，可指定 `od_tag` / `opencode_tag` / `f
 ```text
 opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
   → ubuntu:24.04 底座 → 云 CLI/运行时 → 烘焙配置 → RUN plugin add（记忆插件）
-  → ghcr.io/xieyucheng123/opencode-tools:<tag> + :latest
+  → ghcr.io/link-seek/opencode-tools:<tag> + :latest
   → SWR north-9 xieyucheng123（同名，直推）
 ```
 
