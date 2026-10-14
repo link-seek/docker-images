@@ -76,7 +76,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
  && tar -xzf /tmp/hcloud.tgz -C /tmp \
  && mv /tmp/hcloud /usr/local/bin/hcloud \
  && rm -f /tmp/hcloud.tgz \
- && hcloud version
+ && printf 'y\n' | hcloud version
 
 # oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
 RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown \
