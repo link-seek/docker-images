@@ -113,7 +113,7 @@ jobs:
                    "tailscale version" "terraform version" "wrangler --version" \
                    "agent-browser --version" "markitdown --version" "git --version" \
                    "node --version" "python3 --version" "msmtp --version" "opencode --version" "send-mail --help"; do
-            echo "== $t"; docker run --rm --entrypoint sh ghcr.io/xieyucheng123/opencode-tools:latest -c "$t" 2>&1 | head -2 || \
+            echo "== $t"; docker run --rm --entrypoint sh ghcr.io/link-seek/opencode-tools:latest -c "$t" 2>&1 | head -2 || \
               (echo "FAIL: $t 缺失"; exit 1)
           done
           echo "OK: tool parity matrix"
@@ -125,7 +125,7 @@ jobs:
             -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
             -v /tmp/ochome-mem:/memdata \
             -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
-            ghcr.io/xieyucheng123/opencode-tools:latest serve --port 4096 --hostname 127.0.0.1
+            ghcr.io/link-seek/opencode-tools:latest serve --port 4096 --hostname 127.0.0.1
           echo "waiting for plugin"
           for i in $(seq 1 20); do
             curl -sf --max-time 5 http://127.0.0.1:4747/api/health >/dev/null 2>&1 && break
