@@ -1,0 +1,1 @@
+{"$schema": "https://opencode.ai/config.json", "model": "opencode-go/muse-spark-1.3-contributor", "permission": "allow", "provider": {"opencode-go": {"options": {"apiKey": "{env:LITELLM_API_KEY}", "baseURL": "{env:LITELLM_BASE_URL}"}}}}

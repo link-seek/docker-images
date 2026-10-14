@@ -19,4 +19,13 @@ RUN chmod +x /usr/local/bin/opencode /usr/local/bin/opencode-real \
  && /usr/local/bin/opencode-real --version \
  && /usr/local/bin/opencode --version
 
+# opencode 默认配置（model + provider，只引用 env，不含密钥，见 docker/opencode.jsonc，
+# 内容镜像自 xieyucheng123/opencode fork 的 docker/opencode.jsonc）。
+# 注意：必须放在 /home/open-design 之外——该目录运行时会被宿主机 home 挂载遮住。
+# OPENCODE_CONFIG 的优先级介于全局与项目配置之间；OD 传 -m 时照常用 -m 的模型，
+# OD 选 Default（不传 -m）时落到这里的 opencode-go/muse-spark-1.3-contributor。
+# LITELLM_BASE_URL / LITELLM_API_KEY 由宿主机 .env 经 compose env_file 注入（涉密不进镜像）。
+COPY docker/opencode.jsonc /app/opencode/opencode.json
+ENV OPENCODE_CONFIG=/app/opencode/opencode.json
+
 USER open-design

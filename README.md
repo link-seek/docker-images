@@ -20,10 +20,26 @@ daemon 日志 `test:agent ... ok` 再切生产。
 
 ## 本地用法（HW21）
 
-```bash
-# compose 里把 image 换掉，并删掉 opencode 的两行 bind mount，home 卷和环境变量保留
-image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign:0.24.1-oc2.0.6
+```yaml
+# compose.yml：image 换掉；opencode 的 bind mount 已删（CLI 烘进镜像了）；
+# home 卷保留；LITELLM_* 走 .env（600 权限，不进仓库）
+services:
+  opendesign:
+    image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign:0.24.1-oc2.0.6
+    env_file:
+      - /root/opendesign/.env   # LITELLM_BASE_URL=http://100.91.222.51:4000（容器内 host.docker.internal 不解析）+ LITELLM_API_KEY
+    volumes:
+      - od-data:/app/.od
+      - /root/opendesign/home:/home/open-design
 ```
+
+说明：
+- 镜像里 `OPENCODE_CONFIG=/app/opencode/opencode.json`（默认 `opencode-go/muse-spark-1.3-contributor`，
+  内容镜像自 `xieyucheng123/opencode` 的 `docker/opencode.jsonc`，那边改了这边同步改）。
+  放在 `/home/open-design` 之外是因为该目录会被宿主机 home 挂载遮住。
+- OD 选 Default（不传 `-m`）→ 走 jsonc 默认 muse-spark；OD 显式选模型（传 `-m`）→ 走网关对应模型。
+  注意网关侧各模型协议不同（如 muse-spark 只支持 responses，走 OD 传 `-m` 的 chat 路径会 400），
+  换默认模型前先用 `docker exec <c> opencode run` 验证。
 
 ## 手动触发
 
