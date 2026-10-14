@@ -133,7 +133,14 @@ jobs:
             -v /tmp/ochome-mem:/memdata \
             -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
             ghcr.io/link-seek/opencode-tools:latest serve --port 4096 --hostname 127.0.0.1
-          echo "serve 起了（插件懒加载：首个 session 才初始化，先建会话）"
+          echo "serve 起了，先等 4096 端口就绪（TCP 层，不依赖 HTTP 状态码）"
+          for i in $(seq 1 24); do
+            (echo > /dev/tcp/127.0.0.1/4096) 2>/dev/null && break
+            sleep 5
+          done
+          (echo > /dev/tcp/127.0.0.1/4096) 2>/dev/null || \
+            (echo "FAIL: serve 2 分钟未起"; docker logs oc-memtest --tail 20; exit 1)
+          echo "OK: serve up"
           OEX="docker exec -e OPENCODE_PASSWORD=test-srv-pw oc-memtest opencode run --server http://127.0.0.1:4096"
           timeout 280 $OEX \
             "reply with exactly: MEM-OK" > /tmp/mem-out.txt 2>&1 || echo "session exit=$?"; tail -6 /tmp/mem-out.txt
