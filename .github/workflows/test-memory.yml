@@ -82,6 +82,8 @@ jobs:
            "embeddingApiKey": "test-only",
            "embeddingDimensions": 768,
            "webServerEnabled": true, "webServerPort": 4747, "webServerHost": "127.0.0.1",
+           "opencodeProvider": "gw", "opencodeModel": "inherit", "opencodeTimeoutMs": 180000,
+           "memoryProvider": "openai-chat",
            "autoCaptureEnabled": false,
            "chatMessage": {"enabled": true, "maxMemories": 3, "injectOn": "first"},
            "autoUpdate": false,
@@ -141,6 +143,9 @@ jobs:
             "reply with exactly: MEM-OK" > /tmp/mem-out.txt 2>&1; tail -4 /tmp/mem-out.txt
           grep -q "MEM-OK" /tmp/mem-out.txt && echo "OK: client closure" || \
             (echo "FAIL: 客户端不通"; docker logs oc-memtest --tail 20; exit 1)
+          echo "== plugin state post-session0 (diagnostic, non-fatal):"
+          docker exec oc-memtest ls -la /root/.opencode-mem/ 2>&1 | head -6
+          docker exec oc-memtest ls /root/.local/share/opencode/log/ 2>&1 | head -4
           # 插件 gate 在首会话之后
           echo "waiting for plugin (post-session)"
           for i in $(seq 1 20); do
