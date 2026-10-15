@@ -38,6 +38,12 @@
 
 - 铁律：运行环境缺工具时，禁止在容器内手工安装——去仓库 Dockerfile 加、走流水线重打镜像（2026-10-09 runner 黑户事故教训，详见 docker/README.md）。
 
+容器运维（2026-10-15 僵尸事故教训）：
+
+- 部署 compose 所有服务必须 `init: true`：`opencode serve` 自身是 PID 1（entrypoint 末尾 `exec`），不回收孤儿进程，`git/gh/sleep/timeout` 退出后全变僵尸（旧栈实测堆到 380+，新会话 `fork + git worktree add` 被拖慢）。`init` 只防新增，存量必须重建容器才清。
+- 禁止 `sleep 600; gh run view` 死等轮询：3 进程、占 tool 槽、中断即变僵尸。改 `timeout 900 gh run watch <id> -R owner/repo --interval 30 --compact --exit-status`；单次查询用 `gh run view --json status,conclusion`。
+- 工作树清理：`git worktree list -v` 里无未提交改动的 `detached HEAD` 历史残留随时可删，只留 `/workspace`（main）和当前会话目录。
+
 记忆系统（L1 文件 + L2 向量，设计见仓库 Discussions #11）：
 
 - L1：规矩在各 AGENTS.md；内容在 `/workspace/memory/`（`GLOBAL.md` 个人偏好、`PROJECTS/<名>.md` 项目架构决策踩坑、`DAILY/` 临时沉淀）。做 A 项目只读 A 的文件，不相关的不进上下文。
