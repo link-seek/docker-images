@@ -170,6 +170,9 @@ jobs:
             (echo "FAIL: 插件 5 分钟未起"; docker logs oc-memtest --tail 30; \
              docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -20; exit 1)
           echo "OK: plugin live"; ls /tmp/ochome-mem/ | head -4
+          # API 鉴权：search 必须带内部 token（无 token 直接 Unauthorized 空转，之前全栽在这）
+          MTOK="$(docker exec oc-memtest cat /root/.opencode-mem/.auth-token)"
+          [ -n "$MTOK" ] && echo "OK: api token acquired" || (echo "FAIL: 无 api token"; exit 1)
           # 写入 + API 检回：弱模型（qwen3:8b）证词不可靠，agent 回执只作参考；
           # 硬门是 API search。最多试 3 轮，任一轮 API 命中即过。
           TAG="opencode_project_$(python3 -c "import hashlib; print(hashlib.sha256(b'path:/').hexdigest()[:16])")"
@@ -179,13 +182,13 @@ jobs:
               "Call the memory tool with mode 'add' and content 'sky test word is CERULEAN-7'. Reply with exactly: STORED" \
               > /tmp/mem-a.txt 2>&1; tail -3 /tmp/mem-a.txt
             sleep 10
-            if curl -s --max-time 60 "http://127.0.0.1:4747/api/search?q=sky%20test%20word&tag=$TAG" | grep -q "CERULEAN-7" \
-              || curl -s --max-time 60 "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | grep -q "CERULEAN-7"; then
+            if curl -s --max-time 60 -H "x-opencode-mem-token: $MTOK" "http://127.0.0.1:4747/api/search?q=sky%20test%20word&tag=$TAG" | grep -q "CERULEAN-7" \
+              || curl -s --max-time 60 -H "x-opencode-mem-token: $MTOK" "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | grep -q "CERULEAN-7"; then
               SEED_OK=1; echo "OK: api search recall (attempt $attempt)"; break
             fi
             echo "attempt $attempt: api 未见，重试"
           done
-          [ -n "$SEED_OK" ] || (echo "FAIL: API 未检回记忆"; echo "== raw search body:"; curl -s --max-time 60 "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | head -c 800; echo; echo "== plugin log tail:"; docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -25; echo "== db tables+rows:"; docker exec oc-memtest sh -c "ls /memdata/*.db* 2>/dev/null; python3 -c \"import sqlite3,glob; [print(f, [r for r in __import__('sqlite3').connect(f'file:{f}?mode=ro', uri=True).execute(\\\"select name from sqlite_master where type='table'\\\")]) for f in glob.glob('/memdata/*.db')]\" 2>&1 | head -8"; exit 1)
+          [ -n "$SEED_OK" ] || (echo "FAIL: API 未检回记忆"; echo "== raw search body:"; curl -s --max-time 60 -H "x-opencode-mem-token: $MTOK" "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | head -c 800; echo; echo "== plugin log tail:"; docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -25; echo "== db tables+rows:"; docker exec oc-memtest sh -c "ls /memdata/*.db* 2>/dev/null; python3 -c \"import sqlite3,glob; [print(f, [r for r in __import__('sqlite3').connect(f'file:{f}?mode=ro', uri=True).execute(\\\"select name from sqlite_master where type='table'\\\")]) for f in glob.glob('/memdata/*.db')]\" 2>&1 | head -8"; exit 1)
           # 会话B：跨会话召回（弱模型 → 软断言，只记 NOTE）
           timeout 280 $OEX \
             "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
