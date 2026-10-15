@@ -185,7 +185,7 @@ jobs:
             fi
             echo "attempt $attempt: api 未见，重试"
           done
-          [ -n "$SEED_OK" ] || (echo "FAIL: API 未检回记忆"; exit 1)
+          [ -n "$SEED_OK" ] || (echo "FAIL: API 未检回记忆"; echo "== raw search body:"; curl -s --max-time 60 "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | head -c 800; echo; echo "== plugin log tail:"; docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -25; echo "== db tables+rows:"; docker exec oc-memtest sh -c "ls /memdata/*.db* 2>/dev/null; python3 -c \"import sqlite3,glob; [print(f, [r for r in __import__('sqlite3').connect(f'file:{f}?mode=ro', uri=True).execute(\\\"select name from sqlite_master where type='table'\\\")]) for f in glob.glob('/memdata/*.db')]\" 2>&1 | head -8"; exit 1)
           # 会话B：跨会话召回（弱模型 → 软断言，只记 NOTE）
           timeout 280 $OEX \
             "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
