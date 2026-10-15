@@ -1,0 +1,127 @@
+# opencode-tools（glibc 线）：官方 opencode 二进制 + 自研工具层 + 记忆插件烘焙
+# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f Dockerfile.opencode-tools -t <镜像> .
+# 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
+# onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
+# 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
+# 二进制版本线：v2 tag 有 release 资产（x64/arm64，x64 取 baseline 最大兼容，随 brew 配方）。
+# 版本 pin：OPENCODE_TAG（默认）+ opencode-mem（MEM_* 与 docker/opencode-tools/opencode.jsonc 同值，
+# workflow 有一致性检查）。
+ARG OPENCODE_TAG=2.0.29
+FROM ubuntu:24.04
+
+USER root
+SHELL ["/bin/bash", "-c"]
+
+# 基础运行时（放最前：裸 ubuntu 连 curl 都没有，后面所有下载都靠它）：
+# node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用，
+# 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh + msmtp + gnupg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git python3 python3-pip openssh-client msmtp gnupg \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+ && git --version && ssh -V && node --version && msmtp --version
+
+# opencode 官方二进制（glibc 版；musl 版另有 -musl 后缀，不要拿错）
+# x64 取 baseline（随 brew 配方，最大 CPU 兼容）；arm64 无 baseline 变体
+ARG OPENCODE_TAG
+RUN ARCH="$(uname -m)"; case "$ARCH" in \
+      x86_64) BIN_ARCH=x64-baseline;; \
+      aarch64) BIN_ARCH=arm64;; \
+      *) echo "unsupported arch $ARCH" && exit 1;; \
+    esac \
+ && curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://opencode.ai/files/bin/${OPENCODE_TAG}/opencode-linux-${BIN_ARCH}.tar.gz" \
+ && tar -xzf /tmp/opencode.tar.gz -C /tmp \
+ && mv /tmp/opencode /usr/local/bin/opencode \
+ && chmod +x /usr/local/bin/opencode \
+ && rm -f /tmp/opencode.tar.gz \
+ && opencode --version
+
+# （基础运行时已在上一步装好：curl/git/python/ssh/msmtp/node，供下面各工具下载校验）
+
+# 版本 pin（沿用 Dockerfile.tools 验证过的版本）
+ARG GH_VERSION=2.97.0
+ARG ALIYUN_VERSION=3.3.16
+ARG OCI_SPEC=oci-cli
+ARG TERRAFORM_VERSION=1.16.5
+ARG AGENT_BROWSER_VERSION=0.39.0
+ARG TAILSCALE_VERSION=1.102.4
+
+# gh：官方 tarball（Go 静态二进制）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/gh.tar.gz \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" \
+ && tar -xzf /tmp/gh.tar.gz -C /tmp \
+ && mv "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh \
+ && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}" \
+ && gh --version
+
+# aliyun CLI v3：官方 tarball
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) ALIYUN_ARCH=amd64;; aarch64) ALIYUN_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/aliyun.tgz \
+      "https://github.com/aliyun/aliyun-cli/releases/download/v${ALIYUN_VERSION}/aliyun-cli-linux-${ALIYUN_VERSION}-${ALIYUN_ARCH}.tgz" \
+ && tar -xzf /tmp/aliyun.tgz -C /tmp \
+ && mv /tmp/aliyun /usr/local/bin/aliyun \
+ && rm -f /tmp/aliyun.tgz \
+ && aliyun --version
+
+# hcloud（华为云 KooCLI）：官方 OBS latest 直链
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCLOUD_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/hcloud.tgz \
+      "https://ap-southeast-3-hwcloudcli.obs.ap-southeast-3.myhuaweicloud.com/cli/latest/huaweicloud-cli-linux-${HCLOUD_ARCH}.tar.gz" \
+ && tar -xzf /tmp/hcloud.tgz -C /tmp \
+ && mv /tmp/hcloud /usr/local/bin/hcloud \
+ && rm -f /tmp/hcloud.tgz \
+ && printf 'y\n' | hcloud version
+
+# oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
+RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown \
+ && oci --version \
+ && markitdown --version
+
+# wrangler + agent-browser + lmnr-cli：npm 全局
+RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
+ && wrangler --version \
+ && agent-browser --version
+
+# terraform：HashiCorp 官方 zip
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/terraform.zip \
+      "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TF_ARCH}.zip" \
+ && python3 -c "import zipfile; zipfile.ZipFile('/tmp/terraform.zip').extract('terraform', '/tmp')" \
+ && mv /tmp/terraform /usr/local/bin/terraform \
+ && chmod +x /usr/local/bin/terraform \
+ && rm -f /tmp/terraform.zip \
+ && terraform version
+
+# tailscale：官方静态二进制（容器运行时需 --device=/dev/net/tun 并 tailscale up）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/tailscale.tgz \
+      "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
+ && tar -xzf /tmp/tailscale.tgz -C /tmp \
+ && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /usr/local/bin/tailscale \
+ && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /usr/local/bin/tailscaled \
+ && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
+ && tailscale version
+
+# 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
+# - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
+# - opencode-mem.jsonc：记忆插件配置（storagePath 钉 prod-data 卷，密钥全走 env://）
+# - AGENTS.md：agent 使用说明（含记忆系统规约）
+# 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
+COPY docker/opencode-tools/opencode.jsonc docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+# opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
+# 注意：配 plugins 只声明不断网，必须 install。pin 与 opencode.jsonc 同值。
+ARG OPENCODE_MEM_VERSION=2.31.1
+RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
+# - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
+COPY docker/opencode-tools/send-mail.sh /usr/local/bin/send-mail
+RUN chmod +x /usr/local/bin/send-mail && send-mail --help >/dev/null \
+ && echo "tools image ready:" && opencode --version
+# 默认直接 serve（compose 仍可用 entrypoint 覆盖；CI 可直接 docker run 起服）
+ENTRYPOINT ["opencode"]
+CMD ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
