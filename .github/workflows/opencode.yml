@@ -5,6 +5,7 @@ name: opencode
 # 指派即开工：assignee 在 AI_ASSIGNEES 变量名单里（逗号分隔，由 infra onboard-account
 # 流水线维护）；/oc 评论触发保留。注：普通 App bot 不能当 assignee（平台限制），
 # 名单里只放真人号/机器号。
+# 注：issues.assigned 发起人调 API 时平台已要求 push 权限，故不验 sender association。
 # 构建流水线全是 schedule/手动触发，合 PR 不会自动打镜像。
 # 前提：repo settings 需有 OPENCODE_API_KEY（Go 订阅 key）。
 
@@ -27,10 +28,7 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR')) ||
       (github.event_name == 'issues' &&
        github.event.action == 'assigned' &&
-       contains(format(',{0},', vars.AI_ASSIGNEES), format(',{0},', github.event.assignee.login)) &&
-       (github.event.sender.author_association == 'OWNER' ||
-        github.event.sender.author_association == 'MEMBER' ||
-        github.event.sender.author_association == 'COLLABORATOR'))
+       contains(format(',{0},', vars.AI_ASSIGNEES), format(',{0},', github.event.assignee.login)))
     runs-on: ubuntu-latest
     permissions:
       contents: write
