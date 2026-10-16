@@ -23,10 +23,11 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
+        # use_github_token 模式下 push 靠 checkout 留下的 GITHUB_TOKEN，
+        # 不能设 persist-credentials: false（那是 OIDC App 模式的写法）。
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          persist-credentials: false
 
       - name: Set git identity for opencode commits
         run: |
