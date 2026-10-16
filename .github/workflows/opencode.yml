@@ -25,12 +25,10 @@ jobs:
        (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'COLLABORATOR')) ||
+      // issues.assigned 的发起人调 API 时平台已要求 push 权限，无需再验 association。
       (github.event_name == 'issues' &&
        github.event.action == 'assigned' &&
-       contains(format(',{0},', vars.AI_ASSIGNEES), format(',{0},', github.event.assignee.login)) &&
-       (github.event.sender.author_association == 'OWNER' ||
-        github.event.sender.author_association == 'MEMBER' ||
-        github.event.sender.author_association == 'COLLABORATOR'))
+       contains(format(',{0},', vars.AI_ASSIGNEES), format(',{0},', github.event.assignee.login)))
     runs-on: ubuntu-latest
     permissions:
       contents: write
