@@ -1,7 +1,12 @@
 name: Test memory integration
 
 # L2 记忆集成测试（glibc 线成品镜像）：opencode + 烘入插件 + litellm 网关 + Ollama。
-# 触发：记忆相关文件改动 + 手动。分钟级。零密钥（dummy + 合成）。
+# 触发关系（构建→质检→放行链）：
+# - push/PR（记忆相关文件改动）：独立质检，用 Dockerfile pin 对应的镜像 tag 做回归。
+# - workflow_dispatch：手动质检，inputs 带默认值，可覆盖镜像 tag / 测试模型。
+# - workflow_call：被 docker-tools.yml 构建成功后自调，传入刚打出的版本 tag；
+#   绿了才由 docker-tools 的 promote 作业打 latest 并 push，红则停（needs 门）。
+# 分钟级。零密钥（dummy + 合成）。沿用 secret-hygiene 门，不碰任何 secret。
 on:
   pull_request:
     paths:
@@ -14,6 +19,54 @@ on:
       - Dockerfile.opencode-tools
       - docker/opencode-tools/**
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "待测镜像版本 tag（如 2.0.29，不含 latest）"
+        required: false
+        default: "2.0.29"
+      test_chat_model:
+        description: "测试用 chat 模型（Ollama 侧）"
+        required: false
+        default: "qwen3:8b"
+      test_embed_model:
+        description: "测试用 embedding 模型（Ollama 侧）"
+        required: false
+        default: "nomic-embed-text"
+      ollama_version:
+        description: "Ollama 镜像版本"
+        required: false
+        default: "0.40.3"
+      opencode_mem_version:
+        description: "opencode-mem 插件 pin（须与 Dockerfile/ jsonc 同值）"
+        required: false
+        default: "2.31.1"
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "待测镜像版本 tag（docker-tools 刚打出的 TAG）"
+        required: false
+        type: string
+        default: "2.0.29"
+      test_chat_model:
+        description: "测试用 chat 模型（Ollama 侧）"
+        required: false
+        type: string
+        default: "qwen3:8b"
+      test_embed_model:
+        description: "测试用 embedding 模型（Ollama 侧）"
+        required: false
+        type: string
+        default: "nomic-embed-text"
+      ollama_version:
+        description: "Ollama 镜像版本"
+        required: false
+        type: string
+        default: "0.40.3"
+      opencode_mem_version:
+        description: "opencode-mem 插件 pin"
+        required: false
+        type: string
+        default: "2.31.1"
 
 jobs:
   secret-hygiene:
@@ -35,49 +88,71 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve test params（inputs 为空时回落到 Dockerfile pin/默认值，保持 push/PR 行为不变）
+        id: params
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then TAG="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"; fi
+          CHAT="${{ inputs.test_chat_model }}"; [ -z "$CHAT" ] && CHAT="qwen3:8b"
+          EMB="${{ inputs.test_embed_model }}"; [ -z "$EMB" ] && EMB="nomic-embed-text"
+          OLLAMA="${{ inputs.ollama_version }}"; [ -z "$OLLAMA" ] && OLLAMA="0.40.3"
+          MEMV="${{ inputs.opencode_mem_version }}"
+          if [ -z "$MEMV" ]; then MEMV="$(grep -oP 'ARG OPENCODE_MEM_VERSION=\K.+' Dockerfile.opencode-tools | head -n1)"; fi
+          [ -z "$MEMV" ] && MEMV="2.31.1"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "chat=${CHAT}" >> "$GITHUB_OUTPUT"
+          echo "emb=${EMB}" >> "$GITHUB_OUTPUT"
+          echo "ollama=${OLLAMA}" >> "$GITHUB_OUTPUT"
+          echo "memv=${MEMV}" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: image=${TAG} chat=${CHAT} emb=${EMB} ollama=${OLLAMA} mem=${MEMV}"
+
       - name: Start ollama (CPU)
         run: |
           docker run -d --name ollama --network host \
             -v ollama-data:/root/.ollama \
             -e OLLAMA_HOST=0.0.0.0:11434 \
-            ollama/ollama:0.40.3
+            "ollama/ollama:${{ steps.params.outputs.ollama }}"
           for i in $(seq 1 30); do
             curl -sf --max-time 5 http://127.0.0.1:11434/ >/dev/null && break
             sleep 5
           done
-          docker exec ollama ollama pull nomic-embed-text
-          docker exec ollama ollama pull qwen3:8b
+          docker exec ollama ollama pull "${{ steps.params.outputs.emb }}"
+          docker exec ollama ollama pull "${{ steps.params.outputs.chat }}"
 
       - name: Render test gateway config (dummy key)
         run: |
           pip install pyyaml -q 2>/dev/null || true
-          python3 - <<'EOF'
-          import yaml
+          CHAT="${{ steps.params.outputs.chat }}" EMB="${{ steps.params.outputs.emb }}" python3 - <<'EOF'
+          import os, yaml
+          chat, emb = os.environ["CHAT"], os.environ["EMB"]
           gw = {"model_name": "test-chat",
-                "litellm_params": {"model": "ollama/qwen3:8b",
+                "litellm_params": {"model": f"ollama/{chat}",
                                    "api_base": "http://127.0.0.1:11434", "timeout": 300}}
-          emb = {"model_name": "nomic-embed-text",
-                 "litellm_params": {"model": "ollama/nomic-embed-text",
-                                    "api_base": "http://127.0.0.1:11434", "timeout": 120}}
+          em = {"model_name": emb,
+                "litellm_params": {"model": f"ollama/{emb}",
+                                   "api_base": "http://127.0.0.1:11434", "timeout": 120}}
           cfg = {"general_settings": {"drop_params": True},
                  "litellm_settings": {"request_timeout": 300, "num_retries": 0, "drop_params": True},
-                 "model_list": [gw, emb]}
+                 "model_list": [gw, em]}
           open('/tmp/litellm-memtest.yaml', 'w').write(yaml.safe_dump(cfg))
           print("gateway config render OK")
           EOF
           mkdir -p /tmp/oc-cfg-test /tmp/ochome-mem
-          cat > /tmp/oc-cfg-test/opencode.jsonc <<'EOF'
-          {"$schema": "https://opencode.ai/config.json",
+          MEMV="${{ steps.params.outputs.memv }}"
+          EMB="${{ steps.params.outputs.emb }}"
+          cat > /tmp/oc-cfg-test/opencode.jsonc <<EOF
+          {"\$schema": "https://opencode.ai/config.json",
            "permission": "allow",
            "model": "gw/test-chat",
            "provider": {"gw": {"options": {
              "baseURL": "http://127.0.0.1:4001/v1",
              "apiKey": "test-only"}}},
-           "plugins": ["opencode-mem@2.31.1"]}
+           "plugins": ["opencode-mem@${MEMV}"]}
           EOF
-          cat > /tmp/oc-cfg-test/opencode-mem.jsonc <<'EOF'
+          cat > /tmp/oc-cfg-test/opencode-mem.jsonc <<EOF
           {"storagePath": "/memdata",
-           "embeddingModel": "nomic-embed-text",
+           "embeddingModel": "${EMB}",
            "embeddingApiUrl": "http://127.0.0.1:4001/v1",
            "embeddingApiKey": "test-only",
            "embeddingDimensions": 768,
@@ -89,8 +164,8 @@ jobs:
            "chatMessage": {"enabled": true, "maxMemories": 3, "injectOn": "first"},
            "autoUpdate": false,
            "showAutoCaptureToasts": false, "showUserProfileToasts": false, "showErrorToasts": false}
-          EOF
-          echo "override configs render OK"
+           EOF
+          echo "override configs render OK (mem=${MEMV} emb=${EMB})"
 
       - name: Start litellm (test gateway, embeddings+chat 经 ollama)
         run: |
@@ -106,29 +181,33 @@ jobs:
           done
           curl -s --max-time 10 http://127.0.0.1:4001/v1/embeddings \
             -H "Authorization: Bearer test-only" -H "Content-Type: application/json" \
-            -d '{"model":"nomic-embed-text","input":"probe"}' | \
+            -d "{\"model\":\"${{ steps.params.outputs.emb }}\",\"input\":\"probe\"}" | \
             python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['data'][0]['embedding'])==768, d; print('gateway embeddings OK (768)')" || \
             (echo "FAIL: 测试网关 embeddings 不通"; exit 1)
 
       - name: Tool parity matrix (成品镜像工具对照表）
         run: |
+          IMAGE="${{ steps.params.outputs.IMAGE }}"
           for t in "gh --version" "aliyun --version" "hcloud version" "oci --version" \
                    "tailscale version" "terraform version" "wrangler --version" \
                    "agent-browser --version" "markitdown --version" "git --version" \
                    "node --version" "python3 --version" "msmtp --version" "opencode --version" "send-mail --help"; do
-            echo "== $t"; docker run --rm --entrypoint sh swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 -c "$t" 2>&1 | head -2 || \
+            echo "== $t"; docker run --rm --entrypoint sh "$IMAGE" -c "$t" 2>&1 | head -2 || \
               (echo "FAIL: $t 缺失"; exit 1)
           done
-          echo "OK: tool parity matrix"
+          echo "OK: tool parity matrix ($IMAGE)"
 
       - name: 工件版本门（拒测旧镜像）
         run: |
-          docker pull -q swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5
-          docker run --rm --entrypoint sh swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 -c "opencode --version" | tee /tmp/ver.txt
-          grep -q "2.0.29" /tmp/ver.txt && echo "OK: artifact is 2.0.29" || (echo "FAIL: 工件版本不符，拒测"; exit 1)
+          IMAGE="${{ steps.params.outputs.IMAGE }}"
+          TAG="${{ steps.params.outputs.tag }}"
+          docker pull -q "$IMAGE"
+          docker run --rm --entrypoint sh "$IMAGE" -c "opencode --version" | tee /tmp/ver.txt
+          grep -q "$TAG" /tmp/ver.txt && echo "OK: artifact is $TAG" || (echo "FAIL: 工件版本不符，拒测"; exit 1)
 
       - name: Serve （成品镜像，插件已烘入） + sessions + asserts
         run: |
+          IMAGE="${{ steps.params.outputs.IMAGE }}"
           # 顺序铁律（2026-10-14 verdict）：插件 lazy activation，首个会话后才起。
           # 先跑会话触发激活，再等 :4747。等插件先于会话必死等（5 连败根因）。
           docker run -d --name oc-memtest --network host \
@@ -136,7 +215,7 @@ jobs:
             -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
             -v /tmp/ochome-mem:/memdata \
             -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
-            swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 serve --port 4096 --hostname 127.0.0.1
+            "$IMAGE" serve --port 4096 --hostname 127.0.0.1
           for i in $(seq 1 24); do
             curl -sf --max-time 5 http://127.0.0.1:4096/ >/dev/null 2>&1 && break
             sleep 5

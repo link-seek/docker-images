@@ -1,9 +1,14 @@
 name: tools-image
 
-# opencode-tools（glibc 线）构建与发布：ubuntu:24.04 + 官方 release 二进制 + 工具层 + 记忆插件。
+# opencode-tools（glibc 线）构建→质检→放行链：
+#   docker-tools.yml（本文件：构建候选版本 tag，只推 :TAG，不推 :latest）
+#     → test-memory.yml（workflow_call 自调质检，用刚打出的 TAG；push/PR/手动触发保持不变）
+#     → promote（本文件：test 绿了才打 :latest 并 push，红则停——靠 needs 门）
+#     → pin-pr（本文件：采用新上游 tag 后自动开 PR 同步 Dockerfile pin，不直推 main）
 # 每周一 02:00 UTC 巡检 anomalyco GitHub tag（v2.0.x，只采用发布超 3 天且二进制资产存在的），
 # 有新 tag 才 build+push；另有 digest 校验门防止上游撤包。
 # 命名：ghcr.io/xieyucheng123/opencode-tools + SWR north-9 xieyucheng123（沿用旧地址，部署零改动）。
+# 约束：不碰任何 secret（只复用现有 GHCR/SWR 登录）；secret 卫生门在 test-memory 侧。
 on:
   schedule:
     - cron: "0 2 * * 1"
@@ -19,8 +24,9 @@ on:
         default: "false"
 
 permissions:
-  contents: write # 回写 .upstream-tools-tag
+  contents: write # pin-pr 开分支+推分支
   packages: write # push ghcr.io/xieyucheng123/opencode-tools
+  pull-requests: write # pin-pr 自动开 PR
 
 env:
   REGISTRY: ghcr.io
@@ -32,6 +38,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.upstream.outputs.tag }}
+      skip: ${{ steps.check.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +66,11 @@ jobs:
             done < <(gh api 'repos/anomalyco/opencode/tags?per_page=20' \
               --jq '[.[] | {tag: .name | ltrimstr("v"), sha: .commit.sha} | select(.tag | test("^2\\.[0-9]+\\.[0-9]+$"))] | sort_by(.tag | split(".") | map(tonumber)) | reverse | .[] | "\(.tag) \(.sha)"' | head -5)
           fi
-          [ -z "$TAG" ] && { echo "no tag older than 3 days."; exit 1; }
+          if [ -z "$TAG" ]; then
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "no tag older than 3 days."
+            exit 0
+          fi
           # 二进制资产必须存在（x64 baseline；tag 无 release 资产就地报错，不静默）
           curl -fsSL -o /dev/null "https://opencode.ai/files/bin/${TAG}/opencode-linux-x64-baseline.tar.gz" \
             || { echo "binary asset missing for ${TAG}"; exit 1; }
@@ -74,45 +87,117 @@ jobs:
             { echo "autoUpdate must be false"; exit 1; }
           echo "versions pinned: opencode-mem@$MEM_DOCKER"
 
+      - name: Skip if unchanged
+        id: check
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          if [ -z "$TAG" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "no qualifying tag, skip."
+            exit 0
+          fi
+          PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
+          if [ "${{ inputs.force }}" != "true" ] && [ "$TAG" = "$PINNED" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "already at ${TAG}, skip (force to rebuild)."
+          else
+            OLDER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | head -n1)"
+            if [ "${{ inputs.force }}" != "true" ] && [ "$OLDER" = "$TAG" ] && [ "$TAG" != "$PINNED" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "pin $PINNED ahead of resolved $TAG, skip (force to override)."
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Login to GHCR
+        if: steps.check.outputs.skip != 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+      - name: Login to SWR
+        if: steps.check.outputs.skip != 'true'
+        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+
+      # 只推候选版本 tag（:TAG），不推 :latest。
+      # :latest 由 promote 作业在 test-memory 绿后才打，保证放行门。
+      - name: Build and push candidate tag (ghcr + SWR, no latest)
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          docker build --build-arg "OPENCODE_TAG=${TAG}" \
+            -f Dockerfile.opencode-tools -t "${{ env.IMAGE }}:${TAG}" .
+          docker push "${{ env.IMAGE }}:${TAG}"
+          docker tag "${{ env.IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:${TAG}"
+          docker push "${{ env.SWR_IMAGE }}:${TAG}"
+          echo "candidate pushed: ${TAG} (awaiting test-memory gate)"
+
+  # 构建后自调质检：用刚打出的 TAG 调 test-memory（reusable workflow_call）。
+  # 红则整个 chain 失败，后续 promote/pin-pr 因 needs 门自动停。
+  test:
+    needs: build
+    if: needs.build.outputs.skip != 'true'
+    uses: ./.github/workflows/test-memory.yml
+    with:
+      image_tag: ${{ needs.build.outputs.tag }}
+
+  # 绿推 latest：test 绿了才把 :TAG 重打为 :latest 并 push 双注册表。
+  promote:
+    needs: [build, test]
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
 
-      - name: Build and push (ghcr + SWR)
+      - name: Promote candidate to latest (test green only)
         run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
-          if [ "${{ inputs.force }}" != "true" ] && [ "$TAG" = "$PINNED" ]; then
-            echo "already at ${TAG}, skip (force to rebuild)."
-            echo "skip=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          # pin 超前于 resolve（如手动 bump 到更新版）时不降级覆盖
-          OLDER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | head -n1)"
-          if [ "${{ inputs.force }}" != "true" ] && [ "$OLDER" = "$TAG" ] && [ "$TAG" != "$PINNED" ]; then
-            echo "pin $PINNED ahead of resolved $TAG, skip (force to override)."
-            echo "skip=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          docker build --build-arg "OPENCODE_TAG=${TAG}" \
-            -f Dockerfile.opencode-tools -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
-          docker push "${{ env.IMAGE }}:${TAG}"
+          TAG="${{ needs.build.outputs.tag }}"
+          docker pull -q "${{ env.IMAGE }}:${TAG}"
+          docker tag "${{ env.IMAGE }}:${TAG}" "${{ env.IMAGE }}:latest"
           docker push "${{ env.IMAGE }}:latest"
-          for t in "${TAG}" latest; do
-            docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
-            docker push "${{ env.SWR_IMAGE }}:${t}"
-          done
-          # Dockerfile 里 pin 前移并回写，main 上留痕
-          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
-          echo "${TAG}" > .upstream-tools-tag
+          docker pull -q "${{ env.SWR_IMAGE }}:${TAG}"
+          docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:latest"
+          docker push "${{ env.SWR_IMAGE }}:latest"
+          echo "promoted ${TAG} -> latest (ghcr + SWR)"
 
-      - name: Commit pin (skip 时跳过）
-        if: env.skip != 'true'
+  # 自动 pin PR：采用新上游 tag 后，把 Dockerfile pin 值同步成 TAG，开 PR 而不直推 main。
+  # 已是最新 pin（force 重打）时跳过，避免空 PR。
+  pin-pr:
+    needs: [build, promote]
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open pin PR (Dockerfile + .upstream-tools-tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ needs.build.outputs.tag }}"
+          PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
+          if [ "$TAG" = "$PINNED" ] && [ -f .upstream-tools-tag ] && [ "$(cat .upstream-tools-tag)" = "$TAG" ]; then
+            echo "pin already at ${TAG}, no PR."
+            exit 0
+          fi
+          BR="chore/pin-tools-${TAG}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BR"
+          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
+          echo -n "${TAG}" > .upstream-tools-tag
           git add Dockerfile.opencode-tools .upstream-tools-tag
-          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.upstream.outputs.tag }}"
-          git push
+          git diff --cached --quiet && { echo "nothing to pin."; exit 0; }
+          git commit -m "chore(tools): 跟进 opencode ${TAG}（放行链：test-memory green → latest 已推）"
+          git push -u origin "$BR"
+          if gh pr view "$BR" --json number -q .number 2>/dev/null; then
+            echo "PR already exists for $BR, skip create."
+          else
+            gh pr create --title "chore(tools): pin opencode ${TAG}" \
+              --body "自动 pin：上游 ${TAG} 已构建（:${TAG}）→ test-memory 全绿 → :latest 已放行。本 PR 仅同步 Dockerfile pin 与 .upstream-tools-tag（构建→质检→放行链）。" \
+              --base main --head "$BR"
+          fi
