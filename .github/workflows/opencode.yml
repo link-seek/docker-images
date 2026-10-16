@@ -28,6 +28,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set git identity for opencode commits
+        run: |
+          git config --global user.name "opencode-agent[bot]"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
