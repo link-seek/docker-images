@@ -21,8 +21,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      # 任务本身就是改workflow文件，push含.github/workflows变更的分支必须有它
-      workflows: write
     steps:
       - name: Checkout repository
         # use_github_token 模式下 push 靠 checkout 留下的 GITHUB_TOKEN，
