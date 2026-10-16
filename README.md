@@ -71,3 +71,5 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 ## 手动触发
 
 Actions → tools-image → Run workflow，可指定 `opencode_tag` / `force`。
+
+试水标记：2026-10-16 /oc PR 验证（只加行，不直推 main）。
