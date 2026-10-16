@@ -1,6 +1,7 @@
 name: opencode
 
-# 试水：评论触发 opencode 改文件开 PR，只动文本，不碰构建密钥。
+# 试水：评论/指派触发 opencode 改文件开 PR，只动文本，不碰构建密钥。
+# 指派过渡：assignee 含 xieyucheng123 即开工（无机器人号前的过渡，机器号建好后收紧）。
 # 构建流水线全是 schedule/手动触发，合 PR 不会自动打镜像。
 # 前提：repo settings 需有 OPENCODE_API_KEY（Go 订阅 key）。
 # 不装 opencode-agent App，用 GITHUB_TOKEN 直连模式。
@@ -10,15 +11,24 @@ on:
     types: [created]
   pull_request_review_comment:
     types: [created]
+  issues:
+    types: [assigned]
 
 jobs:
   opencode:
     if: |
-      (contains(github.event.comment.body, '/oc') ||
-       contains(github.event.comment.body, '/opencode')) &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER' ||
-       github.event.comment.author_association == 'COLLABORATOR')
+      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+       (contains(github.event.comment.body, '/oc') ||
+        contains(github.event.comment.body, '/opencode')) &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR')) ||
+      (github.event_name == 'issues' &&
+       github.event.action == 'assigned' &&
+       github.event.assignee.login == 'xieyucheng123' &&
+       (github.event.sender.author_association == 'OWNER' ||
+        github.event.sender.author_association == 'MEMBER' ||
+        github.event.sender.author_association == 'COLLABORATOR'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
