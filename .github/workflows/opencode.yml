@@ -14,8 +14,11 @@ on:
 jobs:
   opencode:
     if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
+      (contains(github.event.comment.body, '/oc') ||
+       contains(github.event.comment.body, '/opencode')) &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,11 +26,12 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        # use_github_token 模式下 push 靠 checkout 留下的 GITHUB_TOKEN，
-        # 不能设 persist-credentials: false（那是 OIDC App 模式的写法）。
+        # push 改workflow文件的分支必须走用户身份PAT（GITHUB_TOKEN推会被拒，
+        # 且文件里声明不了workflows权），API调用同样走它。
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
+          token: ${{ secrets.OPENCODE_GITHUB_TOKEN }}
 
       - name: Set git identity for opencode commits
         run: |
@@ -38,7 +42,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.OPENCODE_GITHUB_TOKEN }}
         with:
           model: opencode/muse-spark-1.3-contributor-free
           use_github_token: true
