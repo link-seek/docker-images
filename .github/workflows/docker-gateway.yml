@@ -1,0 +1,119 @@
+name: gateway-image
+
+# litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
+# 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
+# 命名：ghcr.io/xieyucheng123/litellm-gateway + SWR north-9 xieyucheng123。
+on:
+  workflow_dispatch:
+    inputs:
+      litellm_version:
+        description: "上游 litellm 版本（默认读 Dockerfile ARG）"
+        required: false
+        default: ""
+      force:
+        description: "强制重打（true/false）"
+        required: false
+        default: "false"
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.litellm-gateway
+      - litellm-gateway/**
+      - .github/workflows/docker-gateway.yml
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/xieyucheng123/litellm-gateway
+  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
+  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/litellm-gateway
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve litellm version
+        id: upstream
+        run: |
+          PINNED="$(grep -oP '^ARG LITELLM_VERSION=\K.+' Dockerfile.litellm-gateway | head -n1)"
+          TAG="${{ inputs.litellm_version }}"
+          [ -n "$TAG" ] || TAG="$PINNED"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved: $TAG (pinned: $PINNED)"
+
+      - name: Sync guard/config from infra（来源唯一，不手搓）
+        run: |
+          rm -rf /tmp/infra-src && gh repo clone link-seek/infra /tmp/infra-src -- --depth 1 2>/dev/null || gh repo clone link-seek/infra /tmp/infra-src
+          rm -rf litellm-gateway && mkdir -p litellm-gateway
+          cp -r /tmp/infra-src/stacks/litellm-gateway/config /tmp/infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          ls litellm-gateway/config litellm-gateway/guard
+          # 漂移门：同步后与 Dockerfile 构建上下文一致（CI 即用此目录构建）
+          diff -r litellm-gateway /tmp/infra-src/stacks/litellm-gateway --exclude=README.md && echo "in-sync with infra" || echo "note: README excluded"
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+      - name: Login to SWR
+        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+
+      - name: Build and push (ghcr + SWR)
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          docker build --build-arg "LITELLM_VERSION=${TAG}" \
+            -f Dockerfile.litellm-gateway -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
+          docker push "${{ env.IMAGE }}:${TAG}"
+          docker push "${{ env.IMAGE }}:latest"
+          for t in "${TAG}" latest; do
+            docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
+            docker push "${{ env.SWR_IMAGE }}:${t}"
+          done
+          echo "digest: $(docker inspect ${{ env.IMAGE }}:${TAG} --format '{{.RepoDigests}}')"
+
+      - name: Behavior gate（digest 即行为：透传＋黑名单＋模型表）
+        env:
+          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          IMG="${{ env.IMAGE }}:${{ steps.upstream.outputs.tag }}"
+          docker run -d --name gw-test --network host \
+            -v /dev/null:/app/override.yaml:ro \
+            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
+            -e RULES_FILE=/app/guard-rules.json \
+            "$IMG" --config /app/config.yaml --port 4001 || docker run -d --name gw-test --network host \
+            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
+            -e RULES_FILE=/app/guard-rules.json \
+            "$IMG" --config /app/config.yaml --port 4001
+          for i in $(seq 1 24); do
+            curl -sf --max-time 5 http://127.0.0.1:4001/v1/models -H "Authorization: Bearer test-only" >/dev/null 2>&1 && break
+            sleep 5
+          done
+          python3 - <<'EOF'
+          import json, urllib.request, urllib.error
+          def gw(path, payload=None, key="test-only"):
+              req = urllib.request.Request("http://127.0.0.1:4001" + path,
+                  data=json.dumps(payload).encode() if payload is not None else None,
+                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                  method="POST" if payload is not None else "GET")
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      return r.status, json.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  try: return e.code, json.loads(e.read().decode())
+                  except Exception: return e.code, {}
+          fails = []
+          st, body = gw("/v1/models")
+          ids = [m["id"] for m in body.get("data", [])]
+          print(f"models: {st} count={len(ids)}")
+          if st != 200 or not ids: fails.append("模型表空")
+          st, _ = gw("/v1/chat/completions", {"model": "kimi-k3", "messages": [{"role": "user", "content": "hi"}]})
+          print(f"denied(kimi-k3): {st}")
+          if st != 400: fails.append("黑名单未拦")
+          if fails: print("FAIL:", fails); raise SystemExit(1)
+          print("BEHAVIOR OK: 透传网关行为门通过")
+          EOF
+          docker rm -f gw-test >/dev/null 2>&1 || true

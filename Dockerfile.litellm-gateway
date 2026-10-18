@@ -1,0 +1,23 @@
+# litellm-gateway：上游 litellm 官方镜像 + 本仓 guard/配置 bake 进去，开箱即用。
+# 用法：docker build -f Dockerfile.litellm-gateway -t <镜像> .
+# 背景：之前 guard-*.py/config.yaml 靠 compose volume 挂载，部署仓和测试各维护一份影子配置，
+# 行为漂移无人发现（passthrough callback 未加载事故，2026-10-17）。bake 进镜像后行为=digest，CI 拉 digest 测的就是将要上线的字节。
+# 版本：上游 litellm pin 死（当前 1.83.9，对应 digest 见 workflow 校验门）；guard/config 来自 link-seek/infra 的 stacks/litellm-gateway（定期同步，见 README）。
+ARG LITELLM_VERSION=1.83.9
+FROM ghcr.io/berriai/litellm:${LITELLM_VERSION}
+
+USER root
+
+# guard + 配置 bake 进 /app（与生产 compose 挂载路径一致，行为一致）：
+# config/litellm_config.yaml（透明代理：user_custom_auth 全放行＋passthrough callback）
+# guard/*.py + guard/*.json（vault guard 黑名单规则）
+COPY litellm-gateway/config/litellm_config.yaml /app/config.yaml
+COPY litellm-gateway/guard/ /app/
+# 启动校验：config 合法 + guard 模块可 import（构建期拦住，不是运行时炸）
+RUN python3 -c "import yaml; d=yaml.safe_load(open('/app/config.yaml')); print('models:', len(d['model_list'])); assert 'callbacks' in d.get('litellm_settings', {})" \
+ && python3 -c "import ast; [ast.parse(open(f'/app/{m}.py').read()) for m in ('always_allow_auth','passthrough_key','vault_guard')]; print('guard syntax OK')"
+
+WORKDIR /app
+EXPOSE 4000
+# 默认命令与生产 compose 一致（deploy 侧可覆盖）；master key 只走 env 不进镜像
+CMD ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
