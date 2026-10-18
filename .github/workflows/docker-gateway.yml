@@ -27,7 +27,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/linkseed/litellm-gateway
+  IMAGE: ghcr.io/xieyucheng123/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
 
