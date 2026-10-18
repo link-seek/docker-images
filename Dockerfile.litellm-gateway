@@ -2,9 +2,9 @@
 # 用法：docker build -f Dockerfile.litellm-gateway -t <镜像> .
 # 背景：之前 guard-*.py/config.yaml 靠 compose volume 挂载，部署仓和测试各维护一份影子配置，
 # 行为漂移无人发现（passthrough callback 未加载事故，2026-10-17）。bake 进镜像后行为=digest，CI 拉 digest 测的就是将要上线的字节。
-# 版本：上游 litellm pin 死（当前 1.83.9，对应 digest 见 workflow 校验门）；guard/config 来自 link-seek/infra 的 stacks/litellm-gateway（定期同步，见 README）。
-ARG LITELLM_VERSION=1.83.9
-FROM ghcr.io/berriai/litellm:${LITELLM_VERSION}
+# 版本 pin（digest）：升级 = 改这行发 PR（跟 opencode-tools 的 pin 机制一致，禁止 tag）。
+# 上游 GHCR 无版本 tag（只有 latest），必须 digest pin；当前值与生产网关运行 digest 一致。
+FROM ghcr.io/berriai/litellm@sha256:3def0387871a732a6d18b009576c4bf4313c54d448fa938a58f51cf189d1fa33
 
 USER root
 
