@@ -71,3 +71,9 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 ## 手动触发
 
 Actions → tools-image → Run workflow，可指定 `opencode_tag` / `force`。
+
+## 铁律：打包仓 vs 部署仓分工（2026-10-18，与 infra 仓 README 同源）
+
+- **本仓对运行结果负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号。部署侧只认 digest，不认过程。
+- **部署仓（`link-seek/infra`）只对送达负责**：compose pin digest + env 引用 → `up` 即部署，无业务逻辑。
+- **测试对象是镜像**：CI 拉 digest pin 跑 e2e；**回滚 = 换 digest 发 PR**，git 历史即备份。
