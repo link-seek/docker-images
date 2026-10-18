@@ -2,7 +2,7 @@ name: gateway-image
 
 # litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
 # 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
-# 命名：ghcr.io/xieyucheng123/litellm-gateway + SWR north-9 xieyucheng123。
+# 命名：ghcr.io/linkseed/litellm-gateway + SWR north-9 linkseed（组织命名空间，linkseek 拼写沿用）。
 on:
   workflow_dispatch:
     inputs:
@@ -27,9 +27,9 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/xieyucheng123/litellm-gateway
+  IMAGE: ghcr.io/linkseed/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/litellm-gateway
+  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
 
 jobs:
   build:
