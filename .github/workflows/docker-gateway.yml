@@ -71,8 +71,8 @@ jobs:
           TAG="${{ steps.upstream.outputs.tag }}"
           docker build \
             -f Dockerfile.litellm-gateway -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
-          docker push "${{ env.IMAGE }}:${TAG}"
-          docker push "${{ env.IMAGE }}:latest"
+          docker push "${{ env.IMAGE }}:${TAG}" || echo "GHCR push skipped (org policy, SWR 为主)"
+          docker push "${{ env.IMAGE }}:latest" || echo "GHCR latest skipped"
           for t in "${TAG}" latest; do
             docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
             docker push "${{ env.SWR_IMAGE }}:${t}"
