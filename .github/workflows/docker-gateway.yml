@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: link-seek/infra
-          path: /tmp/infra-src
+          path: infra-src
           sparse-checkout: |
             stacks/litellm-gateway/config
             stacks/litellm-gateway/guard
@@ -57,7 +57,8 @@ jobs:
       - name: Stage build context
         run: |
           rm -rf litellm-gateway && mkdir -p litellm-gateway
-          cp -r /tmp/infra-src/stacks/litellm-gateway/config /tmp/infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          cp -r infra-src/stacks/litellm-gateway/config infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          rm -rf infra-src
           ls litellm-gateway/config litellm-gateway/guard
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
