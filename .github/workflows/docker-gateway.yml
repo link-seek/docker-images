@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       litellm_version:
-        description: "上游 litellm 版本（默认读 Dockerfile ARG）"
+        description: "（保留占位；版本由 Dockerfile digest pin 控制）"
         required: false
         default: ""
       force:
@@ -38,14 +38,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve litellm version
+      - name: Resolve tag（日期+shortsha；digest pin 在 Dockerfile 里）
         id: upstream
         run: |
-          PINNED="$(grep -oP '^ARG LITELLM_VERSION=\K.+' Dockerfile.litellm-gateway | head -n1)"
-          TAG="${{ inputs.litellm_version }}"
-          [ -n "$TAG" ] || TAG="$PINNED"
+          TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Resolved: $TAG (pinned: $PINNED)"
+          echo "Tag: $TAG (upstream digest pin 见 Dockerfile FROM)"
 
       - name: Sync guard/config from infra（来源唯一，不手搓）
         env:
@@ -67,7 +65,7 @@ jobs:
       - name: Build and push (ghcr + SWR)
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
-          docker build --build-arg "LITELLM_VERSION=${TAG}" \
+          docker build \
             -f Dockerfile.litellm-gateway -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
           docker push "${{ env.IMAGE }}:${TAG}"
           docker push "${{ env.IMAGE }}:latest"
