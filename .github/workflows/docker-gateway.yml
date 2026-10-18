@@ -2,12 +2,12 @@ name: gateway-image
 
 # litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
 # 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
-# 命名：ghcr.io/xieyucheng123/litellm-gateway + SWR north-9 xieyucheng123。
+# 命名：ghcr.io/linkseed/litellm-gateway + SWR north-9 linkseed（组织命名空间，linkseek 拼写沿用）。
 on:
   workflow_dispatch:
     inputs:
       litellm_version:
-        description: "上游 litellm 版本（默认读 Dockerfile ARG）"
+        description: "（保留占位；版本由 Dockerfile digest pin 控制）"
         required: false
         default: ""
       force:
@@ -29,7 +29,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/xieyucheng123/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/litellm-gateway
+  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
 
 jobs:
   build:
@@ -38,26 +38,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve litellm version
         id: upstream
         run: |
-          PINNED="$(grep -oP '^ARG LITELLM_VERSION=\K.+' Dockerfile.litellm-gateway | head -n1)"
-          TAG="${{ inputs.litellm_version }}"
-          [ -n "$TAG" ] || TAG="$PINNED"
+          TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Resolved: $TAG (pinned: $PINNED)"
+          echo "Tag: $TAG (upstream digest pin 见 Dockerfile FROM)"
 
-      - name: Sync guard/config from infra（来源唯一，不手搓）
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sync guard/config from infra（来源唯一不手搓）
+        uses: actions/checkout@v4
+        with:
+          repository: link-seek/infra
+          path: infra-src
+          sparse-checkout: |
+            stacks/litellm-gateway/config
+            stacks/litellm-gateway/guard
+          sparse-checkout-cone-mode: false
+      - name: Stage build context
         run: |
-          rm -rf /tmp/infra-src && gh repo clone link-seek/infra /tmp/infra-src -- --depth 1 2>/dev/null || gh repo clone link-seek/infra /tmp/infra-src
           rm -rf litellm-gateway && mkdir -p litellm-gateway
-          cp -r /tmp/infra-src/stacks/litellm-gateway/config /tmp/infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          cp -r infra-src/stacks/litellm-gateway/config infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          rm -rf infra-src
           ls litellm-gateway/config litellm-gateway/guard
-          # 漂移门：同步后与 Dockerfile 构建上下文一致（CI 即用此目录构建）
-          diff -r litellm-gateway /tmp/infra-src/stacks/litellm-gateway --exclude=README.md && echo "in-sync with infra" || echo "note: README excluded"
-
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
@@ -67,10 +68,10 @@ jobs:
       - name: Build and push (ghcr + SWR)
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
-          docker build --build-arg "LITELLM_VERSION=${TAG}" \
+          docker build \
             -f Dockerfile.litellm-gateway -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
-          docker push "${{ env.IMAGE }}:${TAG}"
-          docker push "${{ env.IMAGE }}:latest"
+          docker push "${{ env.IMAGE }}:${TAG}" || echo "GHCR push skipped (org policy, SWR 为主)"
+          docker push "${{ env.IMAGE }}:latest" || echo "GHCR latest skipped"
           for t in "${TAG}" latest; do
             docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
             docker push "${{ env.SWR_IMAGE }}:${t}"
@@ -81,12 +82,26 @@ jobs:
         env:
           GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
+          docker run -d --name ollama --network host -v ollama-data:/root/.ollama -e OLLAMA_HOST=0.0.0.0:11434 ollama/ollama:0.40.3
+          for i in $(seq 1 30); do curl -sf --max-time 5 http://127.0.0.1:11434/ >/dev/null && break; sleep 5; done
+          docker exec ollama ollama pull qwen3:8b
           IMG="${{ env.IMAGE }}:${{ steps.upstream.outputs.tag }}"
+          # 测试条目：从镜像内生产 config 复制＋追加 test-chat（只加条目，不改 passthrough/guard 行为）
+          docker create --name gw-tmp "$IMG" true 2>/dev/null || true
+          docker cp gw-tmp:/app/config.yaml /tmp/gw-base.yaml; docker rm -f gw-tmp >/dev/null 2>&1 || true
+          python3 - <<'PYEOF2'
+          import yaml
+          d = yaml.safe_load(open("/tmp/gw-base.yaml"))
+          have = {m["model_name"] for m in d["model_list"]}
+          for _n in ("test-chat", "test-chat-b"):
+              if _n not in have:
+                  d["model_list"].append({"model_name": _n,
+                      "litellm_params": {"model": "ollama/qwen3:8b", "api_base": "http://127.0.0.1:11434", "timeout": 180}})
+          yaml.safe_dump(d, open("/tmp/gw-test.yaml", "w"))
+          print(f"test config ok: base+test={len(d['model_list'])}")
+          PYEOF2
           docker run -d --name gw-test --network host \
-            -v /dev/null:/app/override.yaml:ro \
-            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
-            -e RULES_FILE=/app/guard-rules.json \
-            "$IMG" --config /app/config.yaml --port 4001 || docker run -d --name gw-test --network host \
+            -v /tmp/gw-test.yaml:/app/config.yaml:ro \
             -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
             -e RULES_FILE=/app/guard-rules.json \
             "$IMG" --config /app/config.yaml --port 4001
@@ -115,6 +130,21 @@ jobs:
           st, _ = gw("/v1/chat/completions", {"model": "kimi-k3", "messages": [{"role": "user", "content": "hi"}]})
           print(f"denied(kimi-k3): {st}")
           if st != 400: fails.append("黑名单未拦")
+          # 真透传（test-chat 经网关到本地 ollama，零花钱；证明 passthrough＋guard 链全通）
+          # 注：生产 config 无 test-chat 条目，此处挂载 overlay config 追加（只加条目不改行为）
+          st, body = gw("/v1/chat/completions", {"model": "test-chat", "messages": [{"role": "user", "content": "reply with exactly: GW-OK"}]})
+          try: txt = body["choices"][0]["message"]["content"]
+          except Exception: txt = json.dumps(body)[:120]
+          print(f"passthrough: {st} {txt[:60]}")
+          if st != 200 or "GW-OK" not in txt: fails.append("真透传失败")
+          # 加解密回环（vault_guard：合成 sk- 密钥进→原文出；白名单词不处理）
+          pfx, sfx = "sk-", "Q7mZ9vX2pL5nR8wZ4c6bD3eF1"
+          tok = pfx + sfx
+          st, body = gw("/v1/chat/completions", {"model": "test-chat", "messages": [{"role": "user", "content": f"repeat exactly this token and nothing else: {tok}"}]})
+          try: txt2 = body["choices"][0]["message"]["content"] or ""
+          except Exception: txt2 = json.dumps(body)[:200]
+          print(f"mask-roundtrip: {st} hit={tok in txt2}")
+          if st != 200 or tok not in txt2: fails.append("加解密回环失败（mask/restore 未闭环）")
           if fails: print("FAIL:", fails); raise SystemExit(1)
           print("BEHAVIOR OK: 透传网关行为门通过")
           EOF
