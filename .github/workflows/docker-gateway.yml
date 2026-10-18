@@ -78,6 +78,7 @@ jobs:
             docker push "${{ env.SWR_IMAGE }}:${t}"
           done
           echo "digest: $(docker inspect ${{ env.IMAGE }}:${TAG} --format '{{.RepoDigests}}')"
+          echo "swr-digest: $(docker inspect ${{ env.SWR_IMAGE }}:${TAG} --format '{{.RepoDigests}}')"
 
       - name: Behavior gate（digest 即行为：透传＋黑名单＋模型表）
         env:
