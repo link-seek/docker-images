@@ -48,6 +48,8 @@ jobs:
           echo "Resolved: $TAG (pinned: $PINNED)"
 
       - name: Sync guard/config from infra（来源唯一，不手搓）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf /tmp/infra-src && gh repo clone link-seek/infra /tmp/infra-src -- --depth 1 2>/dev/null || gh repo clone link-seek/infra /tmp/infra-src
           rm -rf litellm-gateway && mkdir -p litellm-gateway
