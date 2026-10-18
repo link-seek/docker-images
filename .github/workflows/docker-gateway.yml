@@ -38,6 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve tag（日期+shortsha；上游 digest pin 在 Dockerfile FROM）
         id: upstream
         run: |
           TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
