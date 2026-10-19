@@ -45,35 +45,23 @@ jobs:
         run: |
           echo "$SWR_P" | docker login swr.cn-north-9.myhuaweicloud.com -u "$SWR_U" --password-stdin
 
-      - name: Start ollama (CPU)
+      - name: Render test gateway config (free-tier chat, key 走 env)
+        env:
+          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
-          docker run -d --name ollama --network host \
-            -v ollama-data:/root/.ollama \
-            -e OLLAMA_HOST=0.0.0.0:11434 \
-            ollama/ollama:0.40.3
-          for i in $(seq 1 30); do
-            curl -sf --max-time 5 http://127.0.0.1:11434/ >/dev/null && break
-            sleep 5
-          done
-          docker exec ollama ollama pull nomic-embed-text
-          docker exec ollama ollama pull qwen3:8b
-
-      - name: Render test gateway config (dummy key)
-        run: |
+          [ -n "$GO_BACKEND_KEY" ] || { echo "FAIL: OPENCODE_API_KEY 未配（org secret，免费档 chat 用）"; exit 1; }
           pip install pyyaml -q 2>/dev/null || true
           python3 - <<'EOF'
           import yaml
           gw = {"model_name": "test-chat",
-                "litellm_params": {"model": "ollama/qwen3:8b",
-                                   "api_base": "http://127.0.0.1:11434", "timeout": 300}}
-          emb = {"model_name": "nomic-embed-text",
-                 "litellm_params": {"model": "ollama/nomic-embed-text",
-                                    "api_base": "http://127.0.0.1:11434", "timeout": 120}}
+                "litellm_params": {"model": "openai/deepseek-v4.1-flash-free",
+                                   "api_base": "https://opencode.ai/inference/openai/v1",
+                                   "api_key": "os.environ/GO_BACKEND_KEY", "timeout": 120}}
           cfg = {"general_settings": {"drop_params": True},
-                 "litellm_settings": {"request_timeout": 300, "num_retries": 0, "drop_params": True},
-                 "model_list": [gw, emb]}
+                 "litellm_settings": {"request_timeout": 120, "num_retries": 2, "drop_params": True},
+                 "model_list": [gw]}
           open('/tmp/litellm-memtest.yaml', 'w').write(yaml.safe_dump(cfg))
-          print("gateway config render OK")
+          print("gateway config render OK (free-tier chat, 无 ollama)")
           EOF
           mkdir -p /tmp/oc-cfg-test /tmp/ochome-mem
           cat > /tmp/oc-cfg-test/opencode.jsonc <<'EOF'
@@ -87,10 +75,10 @@ jobs:
           EOF
           cat > /tmp/oc-cfg-test/opencode-mem.jsonc <<'EOF'
           {"storagePath": "/memdata",
-           "embeddingModel": "nomic-embed-text",
-           "embeddingApiUrl": "http://127.0.0.1:4001/v1",
-           "embeddingApiKey": "test-only",
-           "embeddingDimensions": 768,
+           "embeddingModel": "@cf/baai/bge-m3",
+           "embeddingApiUrl": "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1",
+           "embeddingApiKey": "env://CF_AI_TOKEN",
+           "embeddingDimensions": 1024,
            "webServerEnabled": true, "webServerPort": 4747, "webServerHost": "127.0.0.1",
            "webServerApiToken": "ci-test-token",
            "opencodeProvider": "gw", "opencodeModel": "inherit", "opencodeTimeoutMs": 180000,
@@ -102,10 +90,14 @@ jobs:
           EOF
           echo "override configs render OK"
 
-      - name: Start litellm (test gateway, embeddings+chat 经 ollama)
+      - name: Start litellm (test gateway, chat 经免费档） + CF embeddings 直连探针
+        env:
+          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
         run: |
           docker run -d --name litellm-memtest --network host \
             -v /tmp/litellm-memtest.yaml:/app/config.yaml:ro \
+            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" \
             -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
             ghcr.io/berriai/litellm@sha256:3def0387871a732a6d18b009576c4bf4313c54d448fa938a58f51cf189d1fa33 \
             --config /app/config.yaml --port 4001
@@ -114,11 +106,11 @@ jobs:
               -H "Authorization: Bearer test-only" >/dev/null 2>&1 && break
             sleep 5
           done
-          curl -s --max-time 10 http://127.0.0.1:4001/v1/embeddings \
-            -H "Authorization: Bearer test-only" -H "Content-Type: application/json" \
-            -d '{"model":"nomic-embed-text","input":"probe"}' | \
-            python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['data'][0]['embedding'])==768, d; print('gateway embeddings OK (768)')" || \
-            (echo "FAIL: 测试网关 embeddings 不通"; exit 1)
+          curl -s --max-time 15 https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1/embeddings \
+            -H "Authorization: Bearer $CF_AI_TOKEN" -H "Content-Type: application/json" \
+            -d '{"model":"@cf/baai/bge-m3","input":"probe"}' | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['data'][0]['embedding'])==1024, list(d.keys()); print('CF embeddings OK (1024)')" || \
+            (echo "FAIL: CF embeddings 不通"; exit 1)
 
       - name: Tool parity matrix (成品镜像工具对照表）
         run: |
@@ -139,6 +131,8 @@ jobs:
           grep -q "$EXPECTED" /tmp/ver.txt && echo "OK: artifact is $EXPECTED" || (echo "FAIL: 工件版本不符，拒测"; exit 1)
 
       - name: Serve （成品镜像，插件已烘入） + sessions + asserts
+        env:
+          CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
         run: |
           # 顺序铁律（2026-10-14 verdict）：插件 lazy activation，首个会话后才起。
           # 先跑会话触发激活，再等 :4747。等插件先于会话必死等（5 连败根因）。
@@ -147,6 +141,7 @@ jobs:
             -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
             -v /tmp/ochome-mem:/memdata \
             -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
+            -e CF_AI_TOKEN="$CF_AI_TOKEN" \
             ${TOOLS_IMAGE} serve --port 4096 --hostname 127.0.0.1
           for i in $(seq 1 24); do
             curl -sf --max-time 5 http://127.0.0.1:4096/ >/dev/null 2>&1 && break
