@@ -3,7 +3,7 @@ name: tools-image
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
 # 网关样板：每次命中都打（无跳过）；behavior 门绿了才推，门红不推。
 # 触发：每周一巡检上游 tag（只采用发布超 3 天且二进制资产存在的）＋ main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动。
-# 命名：ghcr.io/xieyucheng123/opencode-tools（保留） + SWR north-9 linkseed（组织命名空间统一）。
+# 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
   schedule:
     - cron: "0 2 * * 1"
@@ -22,11 +22,11 @@ on:
 
 permissions:
   contents: write # 回写 .upstream-tools-tag
-  packages: write # push ghcr.io/xieyucheng123/opencode-tools
+  packages: write # push ghcr.io/link-seek/opencode-tools
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/xieyucheng123/opencode-tools
+  IMAGE: ghcr.io/link-seek/opencode-tools
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
 
@@ -125,15 +125,16 @@ jobs:
           echo "tools presence OK"
           [ "$fails" = "0" ] && echo "BEHAVIOR OK: tools 行为门通过" || exit 1
 
-      - name: Push (ghcr + SWR，GHCR 保留）
+      - name: Push (SWR 主＋GHCR，GHCR 保留）
         run: |
           TAG="${{ steps.build.outputs.tag }}"
-          docker push "${{ env.IMAGE }}:${TAG}"
-          docker push "${{ env.IMAGE }}:latest"
+          # SWR 为主先推（部署只认 SWR）；GHCR 硬推，红即修（用户要求保留）
           for t in "${TAG}" latest; do
             docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
             docker push "${{ env.SWR_IMAGE }}:${t}"
           done
+          docker push "${{ env.IMAGE }}:${TAG}"
+          docker push "${{ env.IMAGE }}:latest"
           # Dockerfile 里 pin 前移并回写，main 上留痕
           sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
           echo "${TAG}" > .upstream-tools-tag
