@@ -79,8 +79,7 @@ jobs:
            "embeddingApiUrl": "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1",
            "embeddingApiKey": "env://CF_AI_TOKEN",
            "embeddingDimensions": 1024,
-           "webServerEnabled": true, "webServerPort": 4747, "webServerHost": "127.0.0.1",
-           "webServerApiToken": "ci-test-token",
+           "webServerEnabled": false,
            "opencodeProvider": "gw", "opencodeModel": "inherit", "opencodeTimeoutMs": 180000,
            "memoryProvider": "openai-chat",
            "autoCaptureEnabled": false,
@@ -135,7 +134,7 @@ jobs:
           CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
         run: |
           # 顺序铁律（2026-10-14 verdict）：插件 lazy activation，首个会话后才起。
-          # 先跑会话触发激活，再等 :4747。等插件先于会话必死等（5 连败根因）。
+          # 先跑会话触发激活，再等 shard 落盘。
           docker run -d --name oc-memtest --network host \
             -v /tmp/oc-cfg-test/opencode.jsonc:/root/.config/opencode/opencode.jsonc:ro \
             -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
@@ -167,46 +166,41 @@ jobs:
           echo "== plugin state post-session0 (diagnostic, non-fatal):"
           docker exec oc-memtest ls -la /root/.opencode-mem/ 2>&1 | head -6
           docker exec oc-memtest ls /root/.local/share/opencode/log/ 2>&1 | head -4
-          # 插件 gate 在首会话之后
-          echo "waiting for plugin (post-session)"
+          # 插件 gate 在首会话之后；UI 已关，改直查库断言插件存活
+          echo "waiting for plugin (post-session, db-file gate)"
           for i in $(seq 1 20); do
-            curl -sf --max-time 5 http://127.0.0.1:4747/api/health >/dev/null 2>&1 && break
+            docker exec oc-memtest sh -c "ls /memdata/*.db /root/.opencode-mem/*.db 2>/dev/null | head -1" | grep -q db && break
             sleep 15
           done
-          curl -sf --max-time 15 http://127.0.0.1:4747/api/health >/dev/null || \
-            (echo "FAIL: 插件 5 分钟未起"; docker logs oc-memtest --tail 30; \
+          docker exec oc-memtest sh -c "ls /memdata/*.db /root/.opencode-mem/*.db 2>/dev/null | head -3" || \
+            (echo "FAIL: 插件 5 分钟未落 shard"; docker logs oc-memtest --tail 30; \
              docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -20; exit 1)
-          echo "OK: plugin live"; ls /tmp/ochome-mem/ | head -4
-          # API 鉴权：search 必须带内部 token（无 token 直接 Unauthorized 空转，之前全栽在这）
+          echo "OK: plugin live (shard on disk)"; ls /tmp/ochome-mem/ | head -4
+          # API 鉴权段已删（UI 下线）；直查库断言写入
           echo "== mem dir tree:"; docker exec oc-memtest find /root/.opencode-mem /memdata -maxdepth 2 2>/dev/null | head -20
-          echo "== plugin log auth lines:"; docker exec oc-memtest grep -aiE "token|auth|listen|web server|4747" /root/.opencode-mem/opencode-mem.log 2>/dev/null | head -10
-          TOKPATH="$(docker exec oc-memtest find /root /memdata -maxdepth 3 -name ".auth-token" 2>/dev/null | head -1 || true)"
-          echo "token path: ${TOKPATH:-(none)}"
-          MTOK="$(docker exec oc-memtest cat "$TOKPATH" 2>/dev/null || true)"
-          AUTH_HDRS=(-H "Authorization: Bearer ci-test-token")
-          if [ -n "$MTOK" ]; then AUTH_HDRS+=(-H 'x-opencode-mem-token: '"$MTOK"); echo "OK: file token too"; else echo "NOTE: 无文件 token，仅 Bearer"; fi
-          # 写入 + API 检回：弱模型（qwen3:8b）证词不可靠，agent 回执只作参考；
-          # 硬门是 API search。最多试 3 轮，任一轮 API 命中即过。
-          TAG="opencode_project_$(python3 -c "import hashlib; print(hashlib.sha256(b'path:/').hexdigest()[:16])")"
+          # 写入（A 会话）＋跨会话召回（B 会话）：硬门。B 必须新开 session（--session + 新 id），
+          # 在同一 project 下搜 A 写的内容——这才是跨会话记忆的定义。直查库复核行数。
+          MARK="CERULEAN-7"
           SEED_OK=""
           for attempt in 1 2 3; do
             timeout 280 $OEX \
-              "Call the memory tool with mode 'add' and content 'sky test word is CERULEAN-7'. Reply with exactly: STORED" \
+              "Call the memory tool with mode 'add' and content 'sky test word is $MARK'. Reply with exactly: STORED" \
               > /tmp/mem-a.txt 2>&1; tail -3 /tmp/mem-a.txt
             sleep 10
-            if curl -s --max-time 60 "${AUTH_HDRS[@]}" "http://127.0.0.1:4747/api/search?q=sky%20test%20word&tag=$TAG" | grep -q "CERULEAN-7" \
-              || curl -s --max-time 60 "${AUTH_HDRS[@]}" "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | grep -q "CERULEAN-7"; then
-              SEED_OK=1; echo "OK: api search recall (attempt $attempt)"; break
+            BSID="ci-mem-b-$GITHUB_RUN_ID-$attempt"
+            timeout 280 $OEX --session "$BSID" \
+              "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
+              > /tmp/mem-b.txt 2>&1; tail -5 /tmp/mem-b.txt
+            if grep -q "$MARK" /tmp/mem-b.txt; then
+              SEED_OK=1; echo "OK: cross-session recall sid=$BSID (attempt $attempt)"; break
             fi
-            echo "attempt $attempt: api 未见，重试"
+            echo "attempt $attempt: B 会话($BSID)未召回，重试"
           done
-          [ -n "$SEED_OK" ] || (echo "FAIL: API 未检回记忆"; echo "== raw search body:"; curl -s --max-time 60 "${AUTH_HDRS[@]}" "http://127.0.0.1:4747/api/search?q=sky%20test%20word" | head -c 800; echo; echo "== plugin log tail:"; docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -25; echo "== db tables+rows:"; docker exec oc-memtest sh -c "ls /memdata/*.db* 2>/dev/null; python3 -c \"import sqlite3,glob; [print(f, [r for r in __import__('sqlite3').connect(f'file:{f}?mode=ro', uri=True).execute(\\\"select name from sqlite_master where type='table'\\\")]) for f in glob.glob('/memdata/*.db')]\" 2>&1 | head -8"; exit 1)
-          # 会话B：跨会话召回（弱模型 → 软断言，只记 NOTE）
-          timeout 280 $OEX \
-            "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
-            > /tmp/mem-b.txt 2>&1; tail -8 /tmp/mem-b.txt
-          grep -q "CERULEAN-7" /tmp/mem-b.txt && echo "OK: cross-session recall" || \
-            echo "NOTE: 跨会话 agent 未召回（弱模型，以 API 门为准）"
+          [ -n "$SEED_OK" ] || (echo "FAIL: 跨会话未召回"; echo "== B output:"; tail -20 /tmp/mem-b.txt; echo "== plugin log tail:"; docker exec oc-memtest cat /root/.opencode-mem/opencode-mem.log 2>/dev/null | tail -25; exit 1)
+          # 直查库复核：任意 shard 的 memories 表有行即过（A 已写 B 已读回，此处只验落盘）
+          printf '%s\n' 'import sqlite3, glob' 'found = 0' 'for f in glob.glob("/memdata/*shard*.db"):' '    con = sqlite3.connect("file:" + f + "?mode=ro", uri=True)' '    n = con.execute("select count(*) from memories").fetchone()[0]' '    print(f, "rows:", n)' '    found += n' 'print("total:", found)' 'assert found >= 1' > /tmp/dbcheck.py
+          docker cp /tmp/dbcheck.py oc-memtest:/tmp/dbcheck.py
+          docker exec oc-memtest python3 /tmp/dbcheck.py || (echo "FAIL: 库复核未过"; exit 1)
           test -n "$(find /tmp/ochome-mem -name '*.db' 2>/dev/null | head -1)" && echo "OK: shards persisted" || \
             (echo "FAIL: 无 shard 文件"; ls -R /tmp/ochome-mem | head -10; exit 1)
           docker rm -f oc-memtest >/dev/null; echo "ALL GREEN"
