@@ -190,7 +190,8 @@ jobs:
             BSID="ci-mem-b-$GITHUB_RUN_ID-$attempt"
             timeout 280 $OEX --session "$BSID" \
               "Call the memory tool with mode 'search' and query 'sky test word'. Print the full results verbatim." \
-              > /tmp/mem-b.txt 2>&1; tail -5 /tmp/mem-b.txt
+              > /tmp/mem-b.txt 2>&1 || echo "NOTE: B run exit=$? (transient, check content below)"
+            tail -5 /tmp/mem-b.txt
             if grep -q "$MARK" /tmp/mem-b.txt; then
               SEED_OK=1; echo "OK: cross-session recall sid=$BSID (attempt $attempt)"; break
             fi
