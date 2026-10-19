@@ -87,6 +87,13 @@ jobs:
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
           PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
+          # 定时巡检无新上游时跳过： digest pin 指向即稳定版，周一重打只会制造无人引用的悬空 digest
+          # （SWR 会 GC 未被 tag 引用的 manifest，旧 pin 当场腐坏）。push/dispatch 恒打（代码变了必须验）。
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ]; then
+            echo "schedule: upstream 无变化（$TAG），跳过重打，pin 保持有效"
+            echo "skip=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
           # 取较新者：手动 bump 超前时不降级（网关式每次都打 + 不开倒车）
           NEWER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | tail -n1)"
           if [ "$NEWER" != "$TAG" ]; then echo "pin $PINNED ahead of resolved $TAG, build pin instead"; TAG="$NEWER"; fi
@@ -96,6 +103,7 @@ jobs:
           echo "built ${TAG}"
 
       - name: Behavior gate（成品字节：版本＋插件＋起服＋工具，全绿才推）
+        if: env.skip != 'true'
         run: |
           IMG="${{ env.IMAGE }}:${{ steps.build.outputs.tag }}"
           TAG="${{ steps.build.outputs.tag }}"
@@ -126,6 +134,7 @@ jobs:
           [ "$fails" = "0" ] && echo "BEHAVIOR OK: tools 行为门通过" || exit 1
 
       - name: Push (SWR 主＋GHCR，GHCR 保留）
+        if: env.skip != 'true'
         run: |
           TAG="${{ steps.build.outputs.tag }}"
           # SWR 为主先推（部署只认 SWR）；GHCR 硬推，红即修（用户要求保留）
@@ -140,6 +149,7 @@ jobs:
           echo "${TAG}" > .upstream-tools-tag
 
       - name: Commit pin
+        if: env.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
