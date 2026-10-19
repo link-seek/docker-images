@@ -7,7 +7,9 @@
 # 版本 pin：OPENCODE_TAG（默认）+ opencode-mem（MEM_* 与 docker/opencode-tools/opencode.jsonc 同值，
 # workflow 有一致性检查）。
 ARG OPENCODE_TAG=2.0.29
-FROM ubuntu:24.04
+# 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
+# 行为=digest：重打即刷新底座；bump=改这行发 PR。
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 USER root
 SHELL ["/bin/bash", "-c"]

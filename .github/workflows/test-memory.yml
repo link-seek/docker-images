@@ -32,8 +32,18 @@ jobs:
   memory-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # 集成测试测最新成品（release 门在 docker-tools.yml 的 behavior gate，不在这里）
+      TOOLS_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools:latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Login to SWR
+        env:
+          SWR_U: ${{ secrets.SWR_LOGIN_USER }}
+          SWR_P: ${{ secrets.SWR_LOGIN_PASS }}
+        run: |
+          echo "$SWR_P" | docker login swr.cn-north-9.myhuaweicloud.com -u "$SWR_U" --password-stdin
 
       - name: Start ollama (CPU)
         run: |
@@ -116,16 +126,17 @@ jobs:
                    "tailscale version" "terraform version" "wrangler --version" \
                    "agent-browser --version" "markitdown --version" "git --version" \
                    "node --version" "python3 --version" "msmtp --version" "opencode --version" "send-mail --help"; do
-            echo "== $t"; docker run --rm --entrypoint sh swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 -c "$t" 2>&1 | head -2 || \
+            echo "== $t"; docker run --rm --entrypoint sh ${TOOLS_IMAGE} -c "$t" 2>&1 | head -2 || \
               (echo "FAIL: $t 缺失"; exit 1)
           done
           echo "OK: tool parity matrix"
 
       - name: 工件版本门（拒测旧镜像）
         run: |
-          docker pull -q swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5
-          docker run --rm --entrypoint sh swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 -c "opencode --version" | tee /tmp/ver.txt
-          grep -q "2.0.29" /tmp/ver.txt && echo "OK: artifact is 2.0.29" || (echo "FAIL: 工件版本不符，拒测"; exit 1)
+          docker pull -q ${TOOLS_IMAGE}
+          docker run --rm --entrypoint sh ${TOOLS_IMAGE} -c "opencode --version" | tee /tmp/ver.txt
+          EXPECTED="$(cat .upstream-tools-tag)"
+          grep -q "$EXPECTED" /tmp/ver.txt && echo "OK: artifact is $EXPECTED" || (echo "FAIL: 工件版本不符，拒测"; exit 1)
 
       - name: Serve （成品镜像，插件已烘入） + sessions + asserts
         run: |
@@ -136,7 +147,7 @@ jobs:
             -v /tmp/oc-cfg-test/opencode-mem.jsonc:/root/.config/opencode/opencode-mem.jsonc:ro \
             -v /tmp/ochome-mem:/memdata \
             -e OPENCODE_SERVER_PASSWORD=test-srv-pw \
-            swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:0961bee013b5443da271195ca0deba85a7adac19dc1eee65f9fbbcd4da62f7d5 serve --port 4096 --hostname 127.0.0.1
+            ${TOOLS_IMAGE} serve --port 4096 --hostname 127.0.0.1
           for i in $(seq 1 24); do
             curl -sf --max-time 5 http://127.0.0.1:4096/ >/dev/null 2>&1 && break
             sleep 5
