@@ -14,15 +14,14 @@
 
   // Embedding：本地默认 Xenova/nomic-embed-text-v1（768 维，多语言）。
   // 首启从 HuggingFace 下约 500MB 模型，缓存进 {storagePath}/.cache（在卷上，只下一次）。
-  // Embedding：远端（网关 Ollama nomic-embed-text，768 维）。本地块留作回退。
+  // Embedding：远端（Cloudflare Workers AI bge-m3，1024 维，直连，不经网关）。本地块留作断网回退。
   // "embeddingModel": "Xenova/nomic-embed-text-v1",
 
-  // 远端 embedding（网关 Ollama 已 live，见 Discussions #11；切回本地时注释掉下面四行即可）：
-  // 注意 bridge 下容器 localhost 不是宿主机，必须写 host.docker.internal，不能写 127.0.0.1。
-  "embeddingApiUrl": "http://host.docker.internal:4000/v1",
-  "embeddingApiKey": "env://LITELLM_API_KEY",
-  "embeddingModel": "nomic-embed-text",
-  "embeddingDimensions": 768,
+  // 远端 embedding（CF 直连；Account ID 非涉密直接写 URL，key 走 env）：
+  "embeddingApiUrl": "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1",
+  "embeddingApiKey": "env://CF_AI_TOKEN",
+  "embeddingModel": "@cf/baai/bge-m3",
+  "embeddingDimensions": 1024,
 
   // Web UI：只绑容器回环，宿主机经 compose 的 127.0.0.1:4747:4747 映射调试，不暴露 LAN。
   // 绑 0.0.0.0 之前必须先配 webServerApiToken。
