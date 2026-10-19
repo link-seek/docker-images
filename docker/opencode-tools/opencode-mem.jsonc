@@ -23,9 +23,9 @@
   "embeddingModel": "@cf/baai/bge-m3",
   "embeddingDimensions": 1024,
 
-  // Web UI：只绑容器回环，宿主机经 compose 的 127.0.0.1:4747:4747 映射调试，不暴露 LAN。
-  // 绑 0.0.0.0 之前必须先配 webServerApiToken。
-  "webServerEnabled": true,
+  // Web UI：已关闭（2026-10：日常无人看，排障走 docker exec 直查库；插件主链路不受影响）。
+  // 需临时排障时改回 true 重打镜像，或 docker exec 进容器手动启。
+  "webServerEnabled": false,
   "webServerPort": 4747,
   "webServerHost": "127.0.0.1",
 
