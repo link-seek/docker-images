@@ -204,7 +204,7 @@ jobs:
           if st1 != 200 or b1 != b2: fails.append("模型表非确定性（两次调用不一致）")
           else: print(f"models-deterministic OK count={len(b1.get('data', []))}")
           # 通配路由：model list 里没有的模型应透传到上游，不是网关 400 Invalid model name
-          for wm in ("gpt-6-luna", "glm-5.3-flash", "muse-spark-1.3-contributor"):
+          for wm in ("glm-5.3-flash", "muse-spark-1.3-contributor", "qwen3.8-flash"):
               wst, wbody = gw("/v1/chat/completions", {"model": wm, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, "sk-dummy-wildcard")
               wtxt = json.dumps(wbody)[:120]
               print(f"wildcard({wm}): {wst} {wtxt}")
