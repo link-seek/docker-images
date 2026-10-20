@@ -54,7 +54,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/glm-5.2
+          model: opencode/beam-free
           use_github_token: true
 
       - name: Run OpenCode for assigned issue
@@ -64,7 +64,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/glm-5.2
+          model: opencode/beam-free
           use_github_token: true
           prompt: |
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
