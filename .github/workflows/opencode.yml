@@ -1,10 +1,10 @@
 name: opencode
 
 # 评论/指派触发 opencode 改文件开 PR，只动文本，不碰构建密钥。
-# 身份：link-seek-bot App token（app-id 4365765 + org secret LINK_SEEK_BOT_KEY），PAT 已退役。
-# 指派即开工：assignee 在 AI_ASSIGNEES 变量名单里（逗号分隔，由 infra onboard-account
-# 流水线维护）；/oc 评论触发保留。注：普通 App bot 不能当 assignee（平台限制），
-# 名单里只放真人号/机器号。
+# 身份：Xyc123y 长期 PAT（org secret AGENT_GITHUB_TOKEN，classic repo+workflow）。
+# App 路线已废（见 master#65）：App 不能被指派，一律真人号。
+# 指派即开工：assignee 在 AI_ASSIGNEES 变量名单里（逗号分隔）；/oc 评论触发保留，
+# 评论门只认 OWNER/MEMBER（组织外 collaborator 喊不动）。
 # 注：issues.assigned 发起人调 API 时平台已要求 push 权限，故不验 sender association。
 # 构建流水线全是 schedule/手动触发，合 PR 不会自动打镜像。
 # 前提：repo settings 需有 OPENCODE_API_KEY（Go 订阅 key）。
@@ -24,8 +24,7 @@ jobs:
        (contains(github.event.comment.body, '/oc') ||
         contains(github.event.comment.body, '/opencode')) &&
        (github.event.comment.author_association == 'OWNER' ||
-        github.event.comment.author_association == 'MEMBER' ||
-        github.event.comment.author_association == 'COLLABORATOR')) ||
+        github.event.comment.author_association == 'MEMBER')) ||
       (github.event_name == 'issues' &&
        github.event.action == 'assigned' &&
        contains(format(',{0},', vars.AI_ASSIGNEES), format(',{0},', github.event.assignee.login)))
@@ -35,32 +34,25 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - name: Generate App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: "4365765"
-          private-key: ${{ secrets.LINK_SEEK_BOT_KEY }}
-
       - name: Checkout repository
-        # push 改 workflow 文件的分支走 App token（带 workflows:write，
-        # GITHUB_TOKEN 推会被拒，且文件里声明不了 workflows 权），API 调用同样走它。
+        # push 改 workflow 文件的分支走 Xyc PAT（classic repo+workflow，带 workflows 写权；
+        # GITHUB_TOKEN 推会被拒，且文件里声明不了 workflows 权）。
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.AGENT_GITHUB_TOKEN }}
 
       - name: Set git identity for opencode commits
         run: |
-          git config --global user.name "link-seek-bot[bot]"
-          git config --global user.email "link-seek-bot[bot]@users.noreply.github.com"
+          git config --global user.name "Xyc123y"
+          git config --global user.email "46583439+Xyc123y@users.noreply.github.com"
 
       - name: Run OpenCode
         if: github.event_name != 'issues'
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
           model: opencode/muse-spark-1.3-contributor-free
           use_github_token: true
@@ -70,7 +62,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
           model: opencode/muse-spark-1.3-contributor-free
           use_github_token: true
