@@ -9,13 +9,14 @@ FROM ghcr.io/berriai/litellm@sha256:3def0387871a732a6d18b009576c4bf4313c54d448fa
 USER root
 
 # guard + 配置 bake 进 /app（与生产 compose 挂载路径一致，行为一致）：
-# config/litellm_config.yaml（透明代理：user_custom_auth 全放行＋passthrough callback）
+# config/litellm_config.yaml（透明代理：custom_auth 全放行＋passthrough callback；官方键名 custom_auth，user_custom_auth 无人读取）
 # guard/*.py + guard/*.json（vault guard 黑名单规则）
 COPY litellm-gateway/config/litellm_config.yaml /app/config.yaml
 COPY litellm-gateway/guard/ /app/
 # 启动校验：config 合法 + guard 模块可 import（构建期拦住，不是运行时炸）
-RUN python3 -c "import yaml; d=yaml.safe_load(open('/app/config.yaml')); print('models:', len(d['model_list'])); assert 'callbacks' in d.get('litellm_settings', {})" \
- && python3 -c "import ast; [ast.parse(open(f'/app/{m}.py').read()) for m in ('always_allow_auth','passthrough_key','vault_guard')]; print('guard syntax OK')"
+RUN python3 -c "import yaml; d=yaml.safe_load(open('/app/config.yaml')); print('models:', len(d['model_list'])); assert 'callbacks' in d.get('litellm_settings', {}); g=d.get('general_settings', {}); assert g.get('custom_auth')=='always_allow_auth.always_allow', 'custom_auth hook 缺失'; assert 'user_custom_auth' not in g, 'user_custom_auth 是无人读取的错键名'" \
+ && python3 -c "import ast; [ast.parse(open(f'/app/{m}.py').read()) for m in ('always_allow_auth','passthrough_key','vault_guard')]; print('guard syntax OK')" \
+ && python3 -c "import sys; sys.path.insert(0, '/app'); from litellm.proxy.auth.user_api_key_auth import UserAPIKeyAuth; src=open('/app/always_allow_auth.py').read(); assert '\"INTERNAL_USER\"' not in src and \"'INTERNAL_USER'\" not in src, 'user_role 必须小写 internal_user'; UserAPIKeyAuth(api_key='ci-probe', user_role='internal_user'); print('auth role OK（枚举校验过）')"
 
 WORKDIR /app
 EXPOSE 4000

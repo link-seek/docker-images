@@ -93,6 +93,10 @@ jobs:
           python3 - <<'PYEOF2'
           import yaml
           d = yaml.safe_load(open("/tmp/gw-base.yaml"))
+          g = d.get("general_settings", {})
+          assert g.get("custom_auth") == "always_allow_auth.always_allow", f"custom_auth hook 缺失（官方键名）：{sorted(g)}"
+          assert "user_custom_auth" not in g, "user_custom_auth 是无人读取的错键名"
+          print("auth-config OK: custom_auth 在位，错键名不在位")
           have = {m["model_name"] for m in d["model_list"]}
           for _n in ("test-chat", "test-chat-b"):
               if _n not in have:
@@ -111,23 +115,48 @@ jobs:
             sleep 5
           done
           python3 - <<'EOF'
-          import json, urllib.request, urllib.error
-          def gw(path, payload=None, key="test-only"):
-              req = urllib.request.Request("http://127.0.0.1:4001" + path,
+          import json, os, urllib.request, urllib.error
+          UPSTREAM = "https://opencode.ai/zen/go/v1"
+          VALID_KEY = os.environ.get("GO_BACKEND_KEY", "")
+          assert VALID_KEY, "GO_BACKEND_KEY 缺失，无法做直调等价断言"
+          def call(base, path, payload=None, key="test-only", timeout=60):
+              req = urllib.request.Request(base + path,
                   data=json.dumps(payload).encode() if payload is not None else None,
                   headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                   method="POST" if payload is not None else "GET")
               try:
-                  with urllib.request.urlopen(req, timeout=60) as r:
+                  with urllib.request.urlopen(req, timeout=timeout) as r:
                       return r.status, json.loads(r.read().decode())
               except urllib.error.HTTPError as e:
                   try: return e.code, json.loads(e.read().decode())
                   except Exception: return e.code, {}
+          def gw(path, payload=None, key="test-only"):
+              return call("http://127.0.0.1:4001", path, payload, key)
+          def direct(path, payload=None, key=None):
+              return call(UPSTREAM, path, payload, key or VALID_KEY, timeout=90)
           fails = []
+          def no_db(body):
+              return "no connected db" in json.dumps(body).lower().replace("_", " ")
           st, body = gw("/v1/models")
           ids = [m["id"] for m in body.get("data", [])]
           print(f"models: {st} count={len(ids)}")
           if st != 200 or not ids: fails.append("模型表空")
+          # 认证矩阵：无 key 401；随机 opencode key 与 master 都应过网关这门（models 不碰上游）
+          import urllib.request as _u, urllib.error as _e
+          def raw_models(key=None):
+              h = {"Content-Type": "application/json"}
+              if key is not None: h["Authorization"] = f"Bearer {key}"
+              try:
+                  with _u.urlopen(_u.Request("http://127.0.0.1:4001/v1/models", headers=h), timeout=30) as r:
+                      return r.status
+              except _e.HTTPError as e: return e.code
+              except Exception: return -1
+          s_nokey, s_rand, s_master = raw_models(None), raw_models("sk-rand-invalid-0000"), raw_models("test-only")
+          print(f"auth-matrix models: nokey={s_nokey} rand={s_rand} master={s_master}")
+          if s_nokey != 401: fails.append(f"无 key 应 401，实得 {s_nokey}")
+          if s_rand != 200: fails.append(f"随机 key 过网关这门应 200，实得 {s_rand}")
+          if s_master != 200: fails.append(f"master 应 200，实得 {s_master}")
+          if no_db(body): fails.append("模型表透出 No connected db")
           st, _ = gw("/v1/chat/completions", {"model": "kimi-k3", "messages": [{"role": "user", "content": "hi"}]})
           print(f"denied(kimi-k3): {st}")
           if st != 400: fails.append("黑名单未拦")
@@ -146,7 +175,70 @@ jobs:
           except Exception: txt2 = json.dumps(body)[:200]
           print(f"mask-roundtrip: {st} hit={tok in txt2}")
           if st != 200 or tok not in txt2: fails.append("加解密回环失败（mask/restore 未闭环）")
+          # 等价性：opencode key 经网关必须拿到上游 verdict（200 或上游形错误），绝不能是网关 400 No connected db；
+          # chat 只验状态码+结构不逐字比（AI 回复每次不同）。master 轮换覆盖见下一阶段（重启换 master 重测）。
+          def upstream_shaped(st, body):
+              if st == 200:
+                  try:
+                      assert isinstance(body["choices"][0]["message"]["content"], str) and body.get("model")
+                      return True
+                  except Exception: return False
+              txt = json.dumps(body)
+              return ("Upstream request failed" in txt or (body.get("error") or {}).get("type") in
+                  ("authentication_error", "permission_error", "invalid_request_error")) and not no_db(body)
+          for label, ckey in (("valid-opencode-key", VALID_KEY), ("random-invalid-key", "sk-rand-invalid-0000")):
+              payload = {"model": "muse-spark-1.3-contributor", "messages": [{"role": "user", "content": "reply with exactly: EQ-OK"}], "max_tokens": 8}
+              gst, gbody = gw("/v1/chat/completions", {"model": "muse-spark-1.3-contributor", "messages": payload["messages"], "max_tokens": 8}, ckey)
+              ok = upstream_shaped(gst, gbody)
+              print(f"equiv[{label}]: gateway={gst} upstream-shaped={ok}")
+              if not ok: fails.append(f"等价性[{label}] 网关未透回上游 verdict：{gst} {json.dumps(gbody)[:150]}")
+          # 确定性：网关模型表两次调用逐字一致
+          st1, b1 = gw("/v1/models", key=VALID_KEY)
+          st2, b2 = gw("/v1/models", key=VALID_KEY)
+          if st1 != 200 or b1 != b2: fails.append("模型表非确定性（两次调用不一致）")
+          else: print(f"models-deterministic OK count={len(b1.get('data', []))}")
           if fails: print("FAIL:", fails); raise SystemExit(1)
-          print("BEHAVIOR OK: 透传网关行为门通过")
+          print("BEHAVIOR OK: 透传网关行为门通过（含 master/opencode key 等价性）")
+          EOF
+          # master 轮换阶段：重启换一个 master，核心矩阵语义必须不变（master 随便换不影响透传）
+          docker rm -f gw-test >/dev/null 2>&1 || true
+          docker run -d --name gw-test --network host \
+            -v /tmp/gw-test.yaml:/app/config.yaml:ro \
+            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=sk-rotated-probe2 -e DISABLE_ADMIN_UI=True \
+            -e RULES_FILE=/app/guard-rules.json \
+            "$IMG" --config /app/config.yaml --port 4001
+          for i in $(seq 1 24); do
+            curl -sf --max-time 5 http://127.0.0.1:4001/v1/models -H "Authorization: Bearer sk-rotated-probe2" >/dev/null 2>&1 && break
+            sleep 5
+          done
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+          def gw(path, payload=None, key=None):
+              h = {"Content-Type": "application/json"}
+              if key is not None: h["Authorization"] = f"Bearer {key}"
+              req = urllib.request.Request("http://127.0.0.1:4001" + path,
+                  data=json.dumps(payload).encode() if payload is not None else None,
+                  headers=h, method="POST" if payload is not None else "GET")
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      return r.status, json.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  try: return e.code, json.loads(e.read().decode())
+                  except Exception: return e.code, {}
+          fails = []
+          def no_db(b): return "no connected db" in json.dumps(b).lower().replace("_", " ")
+          s0, _ = gw("/v1/models")
+          s1, b1 = gw("/v1/models", key="sk-rotated-probe2")
+          s2, b2 = gw("/v1/models", key=os.environ["GO_BACKEND_KEY"])
+          s3, b3 = gw("/v1/models", key="sk-rand-invalid-0000")
+          print(f"rotated-master matrix: nokey={s0} newmaster={s1} validkey={s2} randkey={s3}")
+          if (s0, s1, s2, s3) != (401, 200, 200, 200): fails.append("轮换 master 后认证矩阵语义变了")
+          if any(no_db(b) for b in (b1, b2, b3)): fails.append("轮换后透出 No connected db")
+          st, gb = gw("/v1/chat/completions", {"model": "muse-spark-1.3-contributor", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, os.environ["GO_BACKEND_KEY"])
+          if no_db(gb) or st == 400 and (gb.get("error") or {}).get("type") == "no_db_connection":
+              fails.append("轮换后 chat 透出 No connected db")
+          print(f"rotated-master chat: {st}")
+          if fails: print("FAIL:", fails); raise SystemExit(1)
+          print("ROTATED-MASTER OK: master 轮换不影响透传")
           EOF
           docker rm -f gw-test >/dev/null 2>&1 || true
