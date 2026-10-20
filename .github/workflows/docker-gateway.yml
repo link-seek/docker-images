@@ -141,7 +141,7 @@ jobs:
           ids = [m["id"] for m in body.get("data", [])]
           print(f"models: {st} count={len(ids)}")
           if st != 200 or not ids: fails.append("模型表空")
-          # 认证矩阵：无 key 401；随机 opencode key 与 master 都应过网关这门（models 不碰上游）
+          # 认证矩阵：无 key 200（对齐上游 models 无 key 可读）；随机 opencode key 与 master 都应过网关这门（models 不碰上游）
           import urllib.request as _u, urllib.error as _e
           def raw_models(key=None):
               h = {"Content-Type": "application/json"}
@@ -153,7 +153,8 @@ jobs:
               except Exception: return -1
           s_nokey, s_rand, s_master = raw_models(None), raw_models("sk-rand-invalid-0000"), raw_models("test-only")
           print(f"auth-matrix models: nokey={s_nokey} rand={s_rand} master={s_master}")
-          if s_nokey != 401: fails.append(f"无 key 应 401，实得 {s_nokey}")
+          # 透明等价：上游 models 无 key 可读（200），网关保持一致；坏镜像（hook 未加载）此处回 401
+          if s_nokey != 200: fails.append(f"无 key 应 200（对齐上游），实得 {s_nokey}")
           if s_rand != 200: fails.append(f"随机 key 过网关这门应 200，实得 {s_rand}")
           if s_master != 200: fails.append(f"master 应 200，实得 {s_master}")
           if no_db(body): fails.append("模型表透出 No connected db")
@@ -232,7 +233,7 @@ jobs:
           s2, b2 = gw("/v1/models", key=os.environ["GO_BACKEND_KEY"])
           s3, b3 = gw("/v1/models", key="sk-rand-invalid-0000")
           print(f"rotated-master matrix: nokey={s0} newmaster={s1} validkey={s2} randkey={s3}")
-          if (s0, s1, s2, s3) != (401, 200, 200, 200): fails.append("轮换 master 后认证矩阵语义变了")
+          if (s0, s1, s2, s3) != (200, 200, 200, 200): fails.append("轮换 master 后认证矩阵语义变了")
           if any(no_db(b) for b in (b1, b2, b3)): fails.append("轮换后透出 No connected db")
           st, gb = gw("/v1/chat/completions", {"model": "muse-spark-1.3-contributor", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, os.environ["GO_BACKEND_KEY"])
           if no_db(gb) or st == 400 and (gb.get("error") or {}).get("type") == "no_db_connection":
