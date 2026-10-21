@@ -2,6 +2,7 @@ name: gateway-image
 
 # litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
 # 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
+# 三段同 run：build（记 digest 不发正式版）→ img 预检（infra 侧 img-preflight，同一套部署脚本）→ push（temp tag 转正式版，旧 digest 退役）。
 # 命名：ghcr.io/linkseed/litellm-gateway + SWR north-9 linkseed（组织命名空间，linkseek 拼写沿用）。
 on:
   workflow_dispatch:
@@ -35,6 +36,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.push_temp.outputs.digest }}
+      tag: ${{ steps.upstream.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -66,201 +70,70 @@ jobs:
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
 
-      - name: Build and push (ghcr + SWR)
+      - name: Build + push temp tag（只发 ci-<run号>，正式版等预检绿了再转）
+        id: push_temp
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
-          docker build \
-            -f Dockerfile.litellm-gateway -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
-          docker push "${{ env.IMAGE }}:${TAG}" || echo "GHCR push skipped (org policy, SWR 为主)"
-          docker push "${{ env.IMAGE }}:latest" || echo "GHCR latest skipped"
-          for t in "${TAG}" latest; do
-            docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
-            docker push "${{ env.SWR_IMAGE }}:${t}"
-          done
-          echo "digest: $(docker inspect ${{ env.IMAGE }}:${TAG} --format '{{.RepoDigests}}')"
+          TEMP="ci-$GITHUB_RUN_ID"
+          docker build -f Dockerfile.litellm-gateway -t "${{ env.SWR_IMAGE }}:$TEMP" .
+          docker push "${{ env.SWR_IMAGE }}:$TEMP"
+          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          echo "temp tag $TEMP -> $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
-      - name: Behavior gate（digest 即行为：透传＋黑名单＋模型表）
-        env:
-          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
+  preflight:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+    steps:
+      - name: 触发 infra 侧 img 预检（部署给自己，同一套部署脚本）
         run: |
-          docker run -d --name ollama --network host -v ollama-data:/root/.ollama -e OLLAMA_HOST=0.0.0.0:11434 ollama/ollama:0.40.3
-          for i in $(seq 1 30); do curl -sf --max-time 5 http://127.0.0.1:11434/ >/dev/null && break; sleep 5; done
-          docker exec ollama ollama pull qwen3:8b
-          IMG="${{ env.IMAGE }}:${{ steps.upstream.outputs.tag }}"
-          # 测试条目：从镜像内生产 config 复制＋追加 test-chat（只加条目，不改 passthrough/guard 行为）
-          docker create --name gw-tmp "$IMG" true 2>/dev/null || true
-          docker cp gw-tmp:/app/config.yaml /tmp/gw-base.yaml; docker rm -f gw-tmp >/dev/null 2>&1 || true
-          python3 - <<'PYEOF2'
-          import yaml
-          d = yaml.safe_load(open("/tmp/gw-base.yaml"))
-          g = d.get("general_settings", {})
-          assert g.get("custom_auth") == "always_allow_auth.always_allow", f"custom_auth hook 缺失（官方键名）：{sorted(g)}"
-          assert "user_custom_auth" not in g, "user_custom_auth 是无人读取的错键名"
-          print("auth-config OK: custom_auth 在位，错键名不在位")
-          have = {m["model_name"] for m in d["model_list"]}
-          for _n in ("test-chat", "test-chat-b"):
-              if _n not in have:
-                  d["model_list"].append({"model_name": _n,
-                      "litellm_params": {"model": "ollama/qwen3:8b", "api_base": "http://127.0.0.1:11434", "timeout": 180}})
-          yaml.safe_dump(d, open("/tmp/gw-test.yaml", "w"))
-          print(f"test config ok: base+test={len(d['model_list'])}")
-          PYEOF2
-          docker run -d --name gw-test --network host \
-            -v /tmp/gw-test.yaml:/app/config.yaml:ro \
-            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=test-only -e DISABLE_ADMIN_UI=True \
-            -e RULES_FILE=/app/guard-rules.json \
-            "$IMG" --config /app/config.yaml --port 4001
-          for i in $(seq 1 24); do
-            curl -sf --max-time 5 http://127.0.0.1:4001/v1/models -H "Authorization: Bearer test-only" >/dev/null 2>&1 && break
-            sleep 5
+          set -euo pipefail
+          START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "START=$START" >> "$GITHUB_ENV"
+          gh workflow run img-preflight.yml -R link-seek/infra \
+            -f digest_or_tag="${{ needs.build.outputs.digest }}" \
+            -f stack_dir=stacks/litellm-gateway \
+            -f img_tag="img-$GITHUB_RUN_ID"
+
+      - name: 轮询 img 预检结论（fail-closed：等不到绿就不发版）
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 30); do
+            sleep 60
+            RUN_ID="$(gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=10" \
+              -q "[.workflow_runs | sort_by(.created_at) | reverse[] | select(.created_at >= \"$START\") | .id] | first // empty")"
+            [ -n "$RUN_ID" ] || { echo "预检 run 尚未出现（$i/30）"; continue; }
+            ST="$(gh api "repos/link-seek/infra/actions/runs/$RUN_ID" -q '{s: .status, c: .conclusion} | "\(.s)/\(.c)"')"
+            echo "preflight run $RUN_ID: $ST"
+            case "$ST" in
+              completed/success) echo PREFLIGHT-GREEN; exit 0 ;;
+              completed/*) echo "PREFLIGHT-RED ($ST)"; exit 1 ;;
+            esac
           done
-          python3 - <<'EOF'
-          import json, os, urllib.request, urllib.error
-          UPSTREAM = "https://opencode.ai/zen/go/v1"
-          VALID_KEY = os.environ.get("GO_BACKEND_KEY", "")
-          assert VALID_KEY, "GO_BACKEND_KEY 缺失，无法做直调等价断言"
-          def call(base, path, payload=None, key="test-only", timeout=60):
-              req = urllib.request.Request(base + path,
-                  data=json.dumps(payload).encode() if payload is not None else None,
-                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                  method="POST" if payload is not None else "GET")
-              try:
-                  with urllib.request.urlopen(req, timeout=timeout) as r:
-                      return r.status, json.loads(r.read().decode())
-              except urllib.error.HTTPError as e:
-                  try: return e.code, json.loads(e.read().decode())
-                  except Exception: return e.code, {}
-          def gw(path, payload=None, key="test-only"):
-              return call("http://127.0.0.1:4001", path, payload, key)
-          def direct(path, payload=None, key=None):
-              return call(UPSTREAM, path, payload, key or VALID_KEY, timeout=90)
-          fails = []
-          def no_db(body):
-              return "no connected db" in json.dumps(body).lower().replace("_", " ")
-          st, body = gw("/v1/models")
-          ids = [m["id"] for m in body.get("data", [])]
-          print(f"models: {st} count={len(ids)}")
-          if st != 200 or not ids: fails.append("模型表空")
-          # 认证矩阵：无 key 200（对齐上游 models 无 key 可读）；随机 opencode key 与 master 都应过网关这门（models 不碰上游）
-          import urllib.request as _u, urllib.error as _e
-          def raw_models(key=None):
-              h = {"Content-Type": "application/json"}
-              if key is not None: h["Authorization"] = f"Bearer {key}"
-              try:
-                  with _u.urlopen(_u.Request("http://127.0.0.1:4001/v1/models", headers=h), timeout=30) as r:
-                      return r.status
-              except _e.HTTPError as e: return e.code
-              except Exception: return -1
-          s_nokey, s_rand, s_master = raw_models(None), raw_models("sk-rand-invalid-0000"), raw_models("test-only")
-          print(f"auth-matrix models: nokey={s_nokey} rand={s_rand} master={s_master}")
-          # 透明等价：上游 models 无 key 可读（200），网关保持一致；坏镜像（hook 未加载）此处回 401
-          if s_nokey != 200: fails.append(f"无 key 应 200（对齐上游），实得 {s_nokey}")
-          if s_rand != 200: fails.append(f"随机 key 过网关这门应 200，实得 {s_rand}")
-          if s_master != 200: fails.append(f"master 应 200，实得 {s_master}")
-          if no_db(body): fails.append("模型表透出 No connected db")
-          st, _ = gw("/v1/chat/completions", {"model": "kimi-k3", "messages": [{"role": "user", "content": "hi"}]})
-          print(f"denied(kimi-k3): {st}")
-          if st != 400: fails.append("黑名单未拦")
-          # 真透传（test-chat 经网关到本地 ollama，零花钱；证明 passthrough＋guard 链全通）
-          # 注：生产 config 无 test-chat 条目，此处挂载 overlay config 追加（只加条目不改行为）
-          st, body = gw("/v1/chat/completions", {"model": "test-chat", "messages": [{"role": "user", "content": "reply with exactly: GW-OK"}]})
-          try: txt = body["choices"][0]["message"]["content"]
-          except Exception: txt = json.dumps(body)[:120]
-          print(f"passthrough: {st} {txt[:60]}")
-          if st != 200 or "GW-OK" not in txt: fails.append("真透传失败")
-          # 加解密回环（vault_guard：合成 sk- 密钥进→原文出；白名单词不处理）
-          pfx, sfx = "sk-", "Q7mZ9vX2pL5nR8wZ4c6bD3eF1"
-          tok = pfx + sfx
-          st, body = gw("/v1/chat/completions", {"model": "test-chat", "messages": [{"role": "user", "content": f"repeat exactly this token and nothing else: {tok}"}]})
-          try: txt2 = body["choices"][0]["message"]["content"] or ""
-          except Exception: txt2 = json.dumps(body)[:200]
-          print(f"mask-roundtrip: {st} hit={tok in txt2}")
-          if st != 200 or tok not in txt2: fails.append("加解密回环失败（mask/restore 未闭环）")
-          # 等价性：opencode key 经网关必须拿到上游 verdict（200 或任何上游形错误；hw21 已证
-          # “Model does not support this protocol”不在 LiteLLM 源码、系上游原话），绝不能是网关 400 No connected db；
-          # chat 只验状态码+结构不逐字比（AI 回复每次不同）。master 轮换覆盖见下一阶段（重启换 master 重测）。
-          def upstream_shaped(st, body):
-              if no_db(body):
-                  return False
-              if st == 200:
-                  try:
-                      assert isinstance(body["choices"][0]["message"]["content"], str) and body.get("model")
-                      return True
-                  except Exception: return False
-              txt = json.dumps(body)
-              return ("Upstream request failed" in txt or "does not support this protocol" in txt
-                  or (body.get("error") or {}).get("type") in
-                  ("authentication_error", "permission_error", "invalid_request_error")
-                  or "BadRequestError" in (body.get("error") or {}).get("message", ""))
-          for label, ckey in (("valid-opencode-key", VALID_KEY), ("random-invalid-key", "sk-rand-invalid-0000")):
-              payload = {"model": "muse-spark-1.3-contributor", "messages": [{"role": "user", "content": "reply with exactly: EQ-OK"}], "max_tokens": 8}
-              gst, gbody = gw("/v1/chat/completions", {"model": "muse-spark-1.3-contributor", "messages": payload["messages"], "max_tokens": 8}, ckey)
-              ok = upstream_shaped(gst, gbody)
-              print(f"equiv[{label}]: gateway={gst} upstream-shaped={ok}")
-              if not ok: fails.append(f"等价性[{label}] 网关未透回上游 verdict：{gst} {json.dumps(gbody)[:150]}")
-          # 确定性：网关模型表两次调用逐字一致
-          st1, b1 = gw("/v1/models", key=VALID_KEY)
-          st2, b2 = gw("/v1/models", key=VALID_KEY)
-          if st1 != 200 or b1 != b2: fails.append("模型表非确定性（两次调用不一致）")
-          else: print(f"models-deterministic OK count={len(b1.get('data', []))}")
-          # 通配路由：model list 里没有的模型应透传到上游，不是网关 400 Invalid model name
-          for wm in ("glm-5.3-flash", "muse-spark-1.3-contributor", "qwen3.8-flash"):
-              wst, wbody = gw("/v1/chat/completions", {"model": wm, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, "sk-dummy-wildcard")
-              wtxt = json.dumps(wbody)[:120]
-              print(f"wildcard({wm}): {wst} {wtxt}")
-              if wst == 400 and "Invalid model name" in wtxt:
-                  fails.append(f"通配未生效：{wm} 被网关拒为 Invalid model name（应透传到上游）")
-              if no_db(wbody):
-                  fails.append(f"通配({wm}) 透出 No connected db")
-          # 通配 + 真 key：glm-5.3-flash 和 muse-spark 应拿到上游 verdict
-          for wm in ("glm-5.3-flash", "muse-spark-1.3-contributor"):
-              vst, vbody = gw("/v1/chat/completions", {"model": wm, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, VALID_KEY)
-              vok = upstream_shaped(vst, vbody)
-              print(f"wildcard-valid({wm}): {vst} upstream-shaped={vok}")
-              if not vok:
-                  fails.append(f"通配真 key({wm}) 未透回上游 verdict：{vst} {json.dumps(vbody)[:150]}")
-          if fails: print("FAIL:", fails); raise SystemExit(1)
-          print("BEHAVIOR OK: 透传网关行为门通过（含 master/opencode key 等价性）")
-          EOF
-          # master 轮换阶段：重启换一个 master，核心矩阵语义必须不变（master 随便换不影响透传）
-          docker rm -f gw-test >/dev/null 2>&1 || true
-          docker run -d --name gw-test --network host \
-            -v /tmp/gw-test.yaml:/app/config.yaml:ro \
-            -e GO_BACKEND_KEY="$GO_BACKEND_KEY" -e LITELLM_MASTER_KEY=sk-rotated-probe2 -e DISABLE_ADMIN_UI=True \
-            -e RULES_FILE=/app/guard-rules.json \
-            "$IMG" --config /app/config.yaml --port 4001
-          for i in $(seq 1 24); do
-            curl -sf --max-time 5 http://127.0.0.1:4001/v1/models -H "Authorization: Bearer sk-rotated-probe2" >/dev/null 2>&1 && break
-            sleep 5
-          done
-          python3 - <<'EOF'
-          import json, os, urllib.request, urllib.error
-          def gw(path, payload=None, key=None):
-              h = {"Content-Type": "application/json"}
-              if key is not None: h["Authorization"] = f"Bearer {key}"
-              req = urllib.request.Request("http://127.0.0.1:4001" + path,
-                  data=json.dumps(payload).encode() if payload is not None else None,
-                  headers=h, method="POST" if payload is not None else "GET")
-              try:
-                  with urllib.request.urlopen(req, timeout=60) as r:
-                      return r.status, json.loads(r.read().decode())
-              except urllib.error.HTTPError as e:
-                  try: return e.code, json.loads(e.read().decode())
-                  except Exception: return e.code, {}
-          fails = []
-          def no_db(b): return "no connected db" in json.dumps(b).lower().replace("_", " ")
-          s0, _ = gw("/v1/models")
-          s1, b1 = gw("/v1/models", key="sk-rotated-probe2")
-          s2, b2 = gw("/v1/models", key=os.environ["GO_BACKEND_KEY"])
-          s3, b3 = gw("/v1/models", key="sk-rand-invalid-0000")
-          print(f"rotated-master matrix: nokey={s0} newmaster={s1} validkey={s2} randkey={s3}")
-          if (s0, s1, s2, s3) != (200, 200, 200, 200): fails.append("轮换 master 后认证矩阵语义变了")
-          if any(no_db(b) for b in (b1, b2, b3)): fails.append("轮换后透出 No connected db")
-          st, gb = gw("/v1/chat/completions", {"model": "muse-spark-1.3-contributor", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}, os.environ["GO_BACKEND_KEY"])
-          if no_db(gb) or st == 400 and (gb.get("error") or {}).get("type") == "no_db_connection":
-              fails.append("轮换后 chat 透出 No connected db")
-          print(f"rotated-master chat: {st}")
-          if fails: print("FAIL:", fails); raise SystemExit(1)
-          print("ROTATED-MASTER OK: master 轮换不影响透传")
-          EOF
-          docker rm -f gw-test >/dev/null 2>&1 || true
+          echo "FAIL: 预检 30 分钟未完成"; exit 1
+
+  push:
+    needs: [build, preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+      - name: Login to SWR
+        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+      - name: temp digest 转正式版（retag 不 rebuild；旧 digest 退役靠 compose pin 前进）
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.build.outputs.tag }}"
+          DIGEST="${{ needs.build.outputs.digest }}"
+          docker buildx imagetools create \
+            -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
+            "${{ env.SWR_IMAGE }}@$DIGEST"
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE }}:$TAG" -t "${{ env.IMAGE }}:latest" \
+            "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
+          echo "released $TAG $DIGEST"

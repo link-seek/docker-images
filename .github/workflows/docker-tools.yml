@@ -1,7 +1,7 @@
 name: tools-image
 
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
-# 网关样板：每次命中都打（无跳过）；behavior 门绿了才推，门红不推。
+# 三段同 run：build（记 digest，只推 temp tag）→ img 预检（infra 侧 img-preflight，opencode 栈，同一套部署脚本+drain）→ push（temp 转正式版，旧 digest 退役）。
 # 触发：每周一巡检上游 tag（只采用发布超 3 天且二进制资产存在的）＋ main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动。
 # 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
@@ -34,6 +34,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      digest: ${{ steps.push_temp.outputs.digest }}
+      tag: ${{ steps.build.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,7 +105,7 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
 
-      - name: Behavior gate（成品字节：版本＋插件＋起服＋工具，全绿才推）
+      - name: 成品自检（本地字节，不碰上游：版本＋插件＋起服＋工具）
         if: env.skip != 'true'
         run: |
           IMG="${{ env.IMAGE }}:${{ steps.build.outputs.tag }}"
@@ -126,33 +129,86 @@ jobs:
           done
           [ -n "$ok" ] || { echo "FAIL: serve 未起"; docker logs tools-gate --tail 20; fails=1; }
           docker rm -f tools-gate >/dev/null 2>&1 || true
-          # 4. 工具 presence（parity 子集；全矩阵在 test-memory）
+          # 4. 工具 presence（parity 子集）
           for t in "node --version" "gh --version" "agent-browser --version" "tailscale version" "terraform version" "send-mail --help" "msmtp --version"; do
             docker run --rm --entrypoint sh "$IMG" -c "$t" >/dev/null 2>&1 || { echo "FAIL: $t 缺失"; fails=1; }
           done
           echo "tools presence OK"
-          [ "$fails" = "0" ] && echo "BEHAVIOR OK: tools 行为门通过" || exit 1
+          [ "$fails" = "0" ] && echo "SELFCHECK OK: tools 成品自检通过" || exit 1
 
-      - name: Push (SWR 主＋GHCR，GHCR 保留）
+      - name: Push temp tag（只发 ci-<run号>，正式版等预检绿了再转）
+        id: push_temp
         if: env.skip != 'true'
         run: |
           TAG="${{ steps.build.outputs.tag }}"
+          TEMP="ci-$GITHUB_RUN_ID"
+          docker tag "${{ env.IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
+          docker push "${{ env.SWR_IMAGE }}:$TEMP"
+          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          echo "temp tag $TEMP -> $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+  preflight:
+    needs: build
+    if: needs.build.outputs.digest != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+    steps:
+      - name: 触发 infra 侧 img 预检（opencode 栈，同一套部署脚本+drain）
+        run: |
+          set -euo pipefail
+          START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "START=$START" >> "$GITHUB_ENV"
+          gh workflow run img-preflight.yml -R link-seek/infra \
+            -f digest_or_tag="${{ needs.build.outputs.digest }}" \
+            -f stack_dir=stacks/opencode-prod \
+            -f img_tag="img-$GITHUB_RUN_ID"
+
+      - name: 轮询 img 预检结论（fail-closed：等不到绿就不发版）
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 30); do
+            sleep 60
+            RUN_ID="$(gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=10" \
+              -q "[.workflow_runs | sort_by(.created_at) | reverse[] | select(.created_at >= \"$START\") | .id] | first // empty")"
+            [ -n "$RUN_ID" ] || { echo "预检 run 尚未出现（$i/30）"; continue; }
+            ST="$(gh api "repos/link-seek/infra/actions/runs/$RUN_ID" -q '{s: .status, c: .conclusion} | "\(.s)/\(.c)"')"
+            echo "preflight run $RUN_ID: $ST"
+            case "$ST" in
+              completed/success) echo PREFLIGHT-GREEN; exit 0 ;;
+              completed/*) echo "PREFLIGHT-RED ($ST)"; exit 1 ;;
+            esac
+          done
+          echo "FAIL: 预检 30 分钟未完成"; exit 1
+
+  push:
+    needs: [build, preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+      - name: Login to SWR
+        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+      - name: temp digest 转正式版（retag 不 rebuild）
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.build.outputs.tag }}"
+          DIGEST="${{ needs.build.outputs.digest }}"
           # SWR 为主先推（部署只认 SWR）；GHCR 硬推，红即修（用户要求保留）
           for t in "${TAG}" latest; do
-            docker tag "${{ env.IMAGE }}:${t}" "${{ env.SWR_IMAGE }}:${t}"
-            docker push "${{ env.SWR_IMAGE }}:${t}"
+            docker buildx imagetools create -t "${{ env.SWR_IMAGE }}:${t}" "${{ env.SWR_IMAGE }}@$DIGEST"
           done
-          docker push "${{ env.IMAGE }}:${TAG}"
-          docker push "${{ env.IMAGE }}:latest"
-          # Dockerfile 里 pin 前移并回写，main 上留痕
-          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
-          echo "${TAG}" > .upstream-tools-tag
+          docker buildx imagetools create -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" "${{ env.SWR_IMAGE }}@$DIGEST"
+          echo "released $TAG $DIGEST"
 
       - name: Commit pin
-        if: env.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Dockerfile.opencode-tools .upstream-tools-tag
-          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.upstream.outputs.tag }}"
+          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ needs.build.outputs.tag }}"
           git push
