@@ -94,11 +94,18 @@ jobs:
           TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
-            MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
-              -d "{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}" \
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
+            MINTED="$(curl -fsS -m 30 -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
+              -d "$MINT_BODY" \
               https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
               | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
-            [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 不是 API token？原话）："; head -c 300 /tmp/mint.err; echo; }
+            if [ -z "$MINTED" ]; then
+              MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
+                -d "$MINT_BODY" \
+                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
+                | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+            fi
+            [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 既不是 Bearer API token 也不是 Basic 可用凭证？原话）："; head -c 300 /tmp/mint.err; echo; }
           fi
           if [ -n "$MINTED" ]; then
             echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
