@@ -172,6 +172,7 @@ jobs:
                 https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
                 | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
             fi
+            [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
             [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 既不是 Bearer API token 也不是 Basic 可用凭证？原话）："; head -c 300 /tmp/mint.err; echo; }
           fi
           if [ -n "$MINTED" ]; then
@@ -180,11 +181,11 @@ jobs:
           elif [ -n "$TSKEY" ]; then
             echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
+            : NEED_LOGOUT 退役（logout 已无条件）
           elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
             echo "mint 不可用，回退直连 key（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
+            : NEED_LOGOUT 退役（logout 已无条件）
           else
             echo "FAIL: docker-images 取不到 TS_API_KEY（mint/直连）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
             exit 1
@@ -302,10 +303,12 @@ jobs:
           docker buildx imagetools create -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" "${{ env.SWR_IMAGE }}@$DIGEST"
           echo "released $TAG $DIGEST"
 
-      - name: 下线收尾（直连回退才有残留节点；ephemeral/mint 路径无害）
+      - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
         if: always() && env.skip != 'true'
         run: |
-          if [ "${{ env.NEED_LOGOUT }}" = "1" ]; then sudo tailscale logout || true; echo logged-out; else echo "no-logout-needed"; fi
+          sudo tailscale logout || true
+          docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
+          echo logged-out
 
       - name: Commit pin
         if: env.skip != 'true'

@@ -100,17 +100,23 @@ jobs:
             MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
               https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-            echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
             if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
+              echo "mint-bearer: HTTP $MINT_CODE（包体已遮蔽，内含 key）"
               MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
+            else
+              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
             fi
             if [ -z "$MINTED" ]; then
               MINT_CODE2="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -u "$TSKEY:" -H 'Content-Type: application/json' \
                 -d "$MINT_BODY" \
                 https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-              echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
               if [ "$MINT_CODE2" = "200" ] || [ "$MINT_CODE2" = "201" ]; then
+                echo "mint-basic: HTTP $MINT_CODE2（包体已遮蔽，内含 key）"
                 MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+                [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
+              else
+                echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
               fi
             fi
             rm -f "$MINT_RESP"
@@ -122,11 +128,11 @@ jobs:
           elif [ -n "$TSKEY" ]; then
             echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
+            : NEED_LOGOUT 退役（logout 已无条件）
           elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
             echo "mint 不可用，回退直连 key（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
+            : NEED_LOGOUT 退役（logout 已无条件）
           else
             echo "FAIL: docker-images 取不到 TS_API_KEY（mint/直连）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
             exit 1
@@ -250,7 +256,9 @@ jobs:
             "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
           echo "released $TAG $DIGEST"
 
-      - name: 下线收尾（直连回退才有残留节点；ephemeral/mint 路径无害）
+      - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
         if: always()
         run: |
-          if [ "${{ env.NEED_LOGOUT }}" = "1" ]; then sudo tailscale logout || true; echo logged-out; else echo "no-logout-needed"; fi
+          sudo tailscale logout || true
+          docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
+          echo logged-out
