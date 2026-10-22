@@ -158,8 +158,9 @@ jobs:
           IMG_TAG="img-$GITHUB_RUN_ID"
           echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
           MINTED=""
-          if [ -n "${{ secrets.TS_API_KEY }}" ]; then
-            MINTED="$(curl -fsS -m 30 -u "${{ secrets.TS_API_KEY }}:" -H 'Content-Type: application/json' \
+          TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
+          if [ -n "$TSKEY" ]; then
+            MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
               -d "{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}" \
               https://api.tailscale.com/api/v2/tailnet/-/keys 2>/dev/null \
               | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
