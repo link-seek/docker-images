@@ -129,7 +129,9 @@ jobs:
           sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
           sudo chmod 600 /root/.ssh/authorized_keys
           sudo mkdir -p /run/sshd
-          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "PermitRootLogin prohibit-password" \
+          TSIP="$(tailscale ip -4)"; [ -n "$TSIP" ] || { echo "FAIL: 取不到本机 TS 地址"; exit 1; }
+          echo "本机 TS 地址: $TSIP（sshd 加绑该地址，只听回环+TS，不碰公网）"
+          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "ListenAddress $TSIP" "PermitRootLogin prohibit-password" \
             "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
             "AuthorizedKeysFile /root/.ssh/authorized_keys" \
             "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
@@ -141,8 +143,9 @@ jobs:
           B64="$(base64 -w0 /tmp/img_key)"
           echo "::add-mask::$B64"
           echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
-          echo "自连抽查："
+          echo "自连抽查（回环 + TS 地址，后者证明 infra 部署连得进来）："
           ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@$TSIP "echo TSIP-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         run: |
