@@ -95,17 +95,26 @@ jobs:
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
             MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            MINTED="$(curl -fsS -m 30 -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
+            # 留包体：400 真因（缺 scope / tag 不许 / tailnet 不对）只写在回包里，-f 会吞掉
+            MINT_RESP="$(mktemp)"
+            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
-              | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
-            if [ -z "$MINTED" ]; then
-              MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
-                -d "$MINT_BODY" \
-                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
-                | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
+            echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
+            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
+              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
             fi
-            [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 既不是 Bearer API token 也不是 Basic 可用凭证？原话）："; head -c 300 /tmp/mint.err; echo; }
+            if [ -z "$MINTED" ]; then
+              MINT_CODE2="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -u "$TSKEY:" -H 'Content-Type: application/json' \
+                -d "$MINT_BODY" \
+                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
+              echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
+              if [ "$MINT_CODE2" = "200" ] || [ "$MINT_CODE2" = "201" ]; then
+                MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+              fi
+            fi
+            rm -f "$MINT_RESP"
+            [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双 400，见上两行包体）"; }
           fi
           if [ -n "$MINTED" ]; then
             echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
