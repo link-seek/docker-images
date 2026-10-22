@@ -94,8 +94,8 @@ jobs:
           TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            # 留包体：400 真因（缺 scope / tag 不许 / tailnet 不对）只写在回包里，-f 会吞掉
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
+            # 无 tag 版：tag:img 在该 tailnet 从未定义（ACL tagOwners 为空），带 tag 必 400；preauthorized 照样免审批，寻址走 host:
             MINT_RESP="$(mktemp)"
             MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
@@ -117,8 +117,8 @@ jobs:
             [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双 400，见上两行包体）"; }
           fi
           if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --advertise-tags=tag:img --accept-routes=false --accept-dns=false
+            echo "ephemeral key minted（无 tag + preauthorized，有效期 ${{ env.IMG_KEY_TTL }}s）"
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
           elif [ -n "$TSKEY" ]; then
             echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
