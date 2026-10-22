@@ -1,7 +1,8 @@
 name: tools-image
 
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
-# 三段同 run：build（记 digest，只推 temp tag）→ img 预检（infra 侧 img-preflight，opencode 栈，同一套部署脚本+drain）→ push（temp 转正式版，旧 digest 退役）。
+# 单 runner 全链：build（记 digest，只推 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
+#   → 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机跳过，prod 全量覆盖）→ 绿才 push 正式版 + pin 回写。
 # 触发：每周一巡检上游 tag（只采用发布超 3 天且二进制资产存在的）＋ main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动。
 # 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
@@ -29,14 +30,14 @@ env:
   IMAGE: ghcr.io/link-seek/opencode-tools
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
+  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；只授 tag:img，用完即废
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    outputs:
-      digest: ${{ steps.push_temp.outputs.digest }}
-      tag: ${{ steps.build.outputs.tag }}
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +137,7 @@ jobs:
           echo "tools presence OK"
           [ "$fails" = "0" ] && echo "SELFCHECK OK: tools 成品自检通过" || exit 1
 
-      - name: Push temp tag（只发 ci-<run号>，正式版等预检绿了再转）
+      - name: Push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
         id: push_temp
         if: env.skip != 'true'
         run: |
@@ -147,26 +148,75 @@ jobs:
           DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
           echo "temp tag $TEMP -> $DIGEST"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
 
-  preflight:
-    needs: build
-    if: needs.build.outputs.digest != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
-    steps:
-      - name: 触发 infra 侧 img 预检（opencode 栈，同一套部署脚本+drain）
+      - name: 本机加网（临 key 只授 tag:img；mint 失败回退直连 key）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tailscale.com/install.sh | sh
+          IMG_TAG="img-$GITHUB_RUN_ID"
+          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
+          MINTED=""
+          if [ -n "${{ secrets.TS_API_KEY }}" ]; then
+            MINTED="$(curl -fsS -m 30 -u "${{ secrets.TS_API_KEY }}:" -H 'Content-Type: application/json' \
+              -d "{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}" \
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/dev/null \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+          fi
+          if [ -n "$MINTED" ]; then
+            echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --advertise-tags=tag:img --accept-routes=false --accept-dns=false
+          elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
+            echo "mint 不可用，回退直连 key（不 advertise-tags）"
+            timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+          else
+            echo "FAIL: docker-images 取不到 TS_API_KEY（mint 临 key）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
+            exit 1
+          fi
+          set -x
+          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'), d.get('Self',{}).get('Tags'))"
+
+      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          trap 'echo "FAILED-CMD: $BASH_COMMAND"' ERR
+          sudo apt-get install -y -q openssh-server
+          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+          rm -f /tmp/img_key /tmp/img_key.pub
+          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
+          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
+          sudo chmod 600 /root/.ssh/authorized_keys
+          sudo mkdir -p /run/sshd
+          printf '%s\n' "Port 2222" "ListenAddress 127.0.0.1" "PermitRootLogin prohibit-password" \
+            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
+            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
+            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
+          ls /usr/lib/openssh/sftp-server || { echo "缺 sftp-server"; exit 1; }
+          sudo sshd -t -f /tmp/img_sshd_config || { echo "sshd_config 非法"; exit 1; }
+          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
+          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null && break || sleep 1; done
+          (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null || { echo "2222 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
+          B64="$(base64 -w0 /tmp/img_key)"
+          echo "::add-mask::$B64"
+          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+
+      - name: 触发 infra 部署到本机标签（opencode 栈，只装+启动自测）
+        if: env.skip != 'true'
         run: |
           set -euo pipefail
           START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "START=$START" >> "$GITHUB_ENV"
           gh workflow run img-preflight.yml -R link-seek/infra \
-            -f digest_or_tag="${{ needs.build.outputs.digest }}" \
+            -f digest_or_tag="$DIGEST" \
             -f stack_dir=stacks/opencode-prod \
-            -f img_tag="img-$GITHUB_RUN_ID"
+            -f node_tag="$IMG_TAG" \
+            -f ssh_key_b64="$SSH_KEY_B64"
 
-      - name: 轮询 img 预检结论（fail-closed：等不到绿就不发版）
+      - name: 轮询 infra 部署结论（fail-closed）
+        if: env.skip != 'true'
         run: |
           set -euo pipefail
           RUN_ID=""
@@ -184,20 +234,20 @@ jobs:
           done
           echo "FAIL: 预检 30 分钟未完成"; exit 1
 
-  push:
-    needs: [build, preflight]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-      - name: Login to SWR
-        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
-      - name: temp digest 转正式版（retag 不 rebuild）
+      - name: 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机由脚本自判跳过）
+        if: env.skip != 'true'
         run: |
           set -euo pipefail
-          TAG="${{ needs.build.outputs.tag }}"
-          DIGEST="${{ needs.build.outputs.digest }}"
+          # canary 由 infra 装在本机 /root/stacks/opencode-prod（root 归属，sudo 跑）
+          RDIR=/root/stacks/opencode-prod
+          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" bash "$RDIR/canary-probe.sh"
+          echo "DETAIL OK: 细测通过（drain 在 img 机无网关则跳过，prod 全量覆盖）"
+
+      - name: temp digest 转正式版（retag 不 rebuild）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
           # SWR 为主先推（部署只认 SWR）；GHCR 硬推，红即修（用户要求保留）
           for t in "${TAG}" latest; do
             docker buildx imagetools create -t "${{ env.SWR_IMAGE }}:${t}" "${{ env.SWR_IMAGE }}@$DIGEST"
@@ -206,9 +256,10 @@ jobs:
           echo "released $TAG $DIGEST"
 
       - name: Commit pin
+        if: env.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Dockerfile.opencode-tools .upstream-tools-tag
-          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ needs.build.outputs.tag }}"
+          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }}"
           git push

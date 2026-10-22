@@ -2,7 +2,9 @@ name: gateway-image
 
 # litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
 # 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
-# 三段同 run：build（记 digest 不发正式版）→ img 预检（infra 侧 img-preflight，同一套部署脚本）→ push（temp tag 转正式版，旧 digest 退役）。
+# 单 runner 全链：build（记 digest 只发 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
+#   → 本地细测（直连 canary：认证矩阵+真假 key verdict+黑名单+轮换重测）→ 绿才 push 正式版。
+# 责任界面：部署线只管装上去（红就失败 runner 删除无后果）；判好坏的是本线的本地细测；生产部署只做轻链路。
 # 命名：ghcr.io/linkseed/litellm-gateway + SWR north-9 linkseed（组织命名空间，linkseek 拼写沿用）。
 on:
   workflow_dispatch:
@@ -23,7 +25,7 @@ on:
       - .github/workflows/docker-gateway.yml
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 env:
@@ -31,14 +33,14 @@ env:
   IMAGE: ghcr.io/xieyucheng123/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
+  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；只授 tag:img，用完即废
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      digest: ${{ steps.push_temp.outputs.digest }}
-      tag: ${{ steps.upstream.outputs.tag }}
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,7 +72,7 @@ jobs:
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
 
-      - name: Build + push temp tag（只发 ci-<run号>，正式版等预检绿了再转）
+      - name: Build + push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
         id: push_temp
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
@@ -80,25 +82,72 @@ jobs:
           DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
           echo "temp tag $TEMP -> $DIGEST"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
 
-  preflight:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
-    steps:
-      - name: 触发 infra 侧 img 预检（部署给自己，同一套部署脚本）
+      - name: 本机加网（临 key 只授 tag:img；mint 失败回退直连 key）
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tailscale.com/install.sh | sh
+          IMG_TAG="img-$GITHUB_RUN_ID"
+          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
+          MINTED=""
+          if [ -n "${{ secrets.TS_API_KEY }}" ]; then
+            MINTED="$(curl -fsS -m 30 -u "${{ secrets.TS_API_KEY }}:" -H 'Content-Type: application/json' \
+              -d "{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}" \
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/dev/null \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+          fi
+          if [ -n "$MINTED" ]; then
+            echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --advertise-tags=tag:img --accept-routes=false --accept-dns=false
+          elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
+            echo "mint 不可用，回退直连 key（不 advertise-tags）"
+            timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+          else
+            echo "FAIL: docker-images 取不到 TS_API_KEY（mint 临 key）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
+            exit 1
+          fi
+          set -x
+          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'), d.get('Self',{}).get('Tags'))"
+
+      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
+        run: |
+          set -euo pipefail
+          trap 'echo "FAILED-CMD: $BASH_COMMAND"' ERR
+          sudo apt-get install -y -q openssh-server
+          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+          rm -f /tmp/img_key /tmp/img_key.pub
+          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
+          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
+          sudo chmod 600 /root/.ssh/authorized_keys
+          sudo mkdir -p /run/sshd
+          printf '%s\n' "Port 2222" "ListenAddress 127.0.0.1" "PermitRootLogin prohibit-password" \
+            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
+            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
+            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
+          ls /usr/lib/openssh/sftp-server || { echo "缺 sftp-server"; exit 1; }
+          sudo sshd -t -f /tmp/img_sshd_config || { echo "sshd_config 非法"; exit 1; }
+          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
+          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null && break || sleep 1; done
+          (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null || { echo "2222 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
+          B64="$(base64 -w0 /tmp/img_key)"
+          echo "::add-mask::$B64"
+          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
+          echo "自连抽查："
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+
+      - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         run: |
           set -euo pipefail
           START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "START=$START" >> "$GITHUB_ENV"
           gh workflow run img-preflight.yml -R link-seek/infra \
-            -f digest_or_tag="${{ needs.build.outputs.digest }}" \
+            -f digest_or_tag="$DIGEST" \
             -f stack_dir=stacks/litellm-gateway \
-            -f img_tag="img-$GITHUB_RUN_ID"
+            -f node_tag="$IMG_TAG" \
+            -f ssh_key_b64="$SSH_KEY_B64"
 
-      - name: 轮询 img 预检结论（fail-closed：等不到绿就不发版）
+      - name: 轮询 infra 部署结论（fail-closed）
         run: |
           set -euo pipefail
           RUN_ID=""
@@ -116,20 +165,28 @@ jobs:
           done
           echo "FAIL: 预检 30 分钟未完成"; exit 1
 
-  push:
-    needs: [build, preflight]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-      - name: Login to SWR
-        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+      - name: 本地细测（直连 canary：矩阵+真假 key verdict+黑名单+轮换重测）
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          # canary 由 infra 装在本机 /root/stacks/litellm-gateway（root 归属，sudo 跑；canary 在本机 docker，直连桥内 IP）
+          RDIR=/root/stacks/litellm-gateway
+          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" \
+            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "$RDIR/canary-probe.sh"
+          echo "DETAIL OK: 细测通过"
+          # 轮换重测：重起 canary（新随机 master），轻链路语义必须不变（master 随便换不影响透传）
+          sudo -E REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" \
+            SWR_USER="${{ secrets.SWR_LOGIN_USER }}" SWR_PASS="${{ secrets.SWR_LOGIN_PASS }}" \
+            bash "$RDIR/canary-run.sh"
+          sudo -E PROBE_LEVEL=boot REMOTE_DIR="$RDIR" \
+            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "$RDIR/canary-probe.sh"
+          echo "ROTATE OK: master 轮换不影响透传"
+
       - name: temp digest 转正式版（retag 不 rebuild；旧 digest 退役靠 compose pin 前进）
         run: |
           set -euo pipefail
-          TAG="${{ needs.build.outputs.tag }}"
-          DIGEST="${{ needs.build.outputs.digest }}"
+          TAG="${{ steps.upstream.outputs.tag }}"
           docker buildx imagetools create \
             -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
             "${{ env.SWR_IMAGE }}@$DIGEST"
