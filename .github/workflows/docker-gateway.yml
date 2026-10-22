@@ -158,6 +158,34 @@ jobs:
             -f node_tag="host:$IMG_TAG" \
             -f ssh_key_b64="$SSH_KEY_B64"
 
+      - name: 跨机可达性取证（非门：只记录，给 infra 连不进来定因用）
+        run: |
+          set -uo pipefail
+          echo "== netcheck（UDP/DERP 出向） =="
+          tailscale netcheck --format=json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print('UDP:',d.get('UDP')); print('DERP_latency:', dict(list((d.get('DERPRegionLatency') or {}).items())[:6]))" || echo "netcheck 失败"
+          echo "== 等 infra 节点出现并反向 ping（最多 8 分钟） =="
+          PEER=""
+          for i in $(seq 1 16); do
+            sleep 30
+            PEER="$(tailscale status --json 2>/dev/null | python3 -c "
+          import json,sys
+          try:
+              ps = json.load(sys.stdin).get('Peer', {})
+              for p in ps.values():
+                  hn = p.get('HostName') or ''
+                  if hn.startswith('ci-deploy-'):
+                      print(hn + '=' + (p.get('TailscaleIPs') or ['?'])[0]); break
+              else: print('')
+          except Exception: print('')" || true)"
+            [ -n "$PEER" ] && { echo "infra peer: $PEER"; break; }
+            echo "infra 节点未出现（$i/16）"
+          done
+          [ -n "$PEER" ] || { echo "结论：infra 节点始终没进 tailnet 可见范围（控制面/审批嫌疑）"; exit 0; }
+          IP="${PEER##*=}"
+          tailscale ping -c 3 "$IP" 2>&1 | tail -n 5 || true
+          (echo >/dev/tcp/$IP/2244) 2>/dev/null && echo "反向 2244 通" || echo "反向 2244 不通"
+          exit 0
+
       - name: 轮询 infra 部署结论（fail-closed）
         run: |
           set -euo pipefail
