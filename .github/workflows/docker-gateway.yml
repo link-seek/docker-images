@@ -33,7 +33,7 @@ env:
   IMAGE: ghcr.io/xieyucheng123/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
-  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；只授 tag:img，用完即废
+  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；无 tag + preauthorized，用完即废
 
 jobs:
   release:
@@ -84,7 +84,7 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
 
-      - name: 本机加网（临 key 只授 tag:img；mint 失败回退直连 key）
+      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
         run: |
           set -euo pipefail
           curl -fsSL https://tailscale.com/install.sh | sh
@@ -125,16 +125,8 @@ jobs:
           if [ -n "$MINTED" ]; then
             echo "ephemeral key minted（无 tag + preauthorized，有效期 ${{ env.IMG_KEY_TTL }}s）"
             timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-          elif [ -n "$TSKEY" ]; then
-            echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
-            timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            : NEED_LOGOUT 退役（logout 已无条件）
-          elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
-            echo "mint 不可用，回退直连 key（不 advertise-tags；结束 logout 清节点）"
-            timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            : NEED_LOGOUT 退役（logout 已无条件）
           else
-            echo "FAIL: docker-images 取不到 TS_API_KEY（mint/直连）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
+            echo "FAIL: 现场 mint 未成功（无 TS_API_KEY 或 Bearer/Basic 双试皆拒，见上）；本线 mint-only，不回退任何直连 key（含已退役的 TS_AUTHKEY）"
             exit 1
           fi
           set -x

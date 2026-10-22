@@ -30,7 +30,7 @@ env:
   IMAGE: ghcr.io/link-seek/opencode-tools
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
-  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；只授 tag:img，用完即废
+  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；无 tag + preauthorized，用完即废
 
 jobs:
   release:
@@ -150,7 +150,7 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
 
-      - name: 本机加网（临 key 只授 tag:img；mint 失败回退直连 key）
+      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
         if: env.skip != 'true'
         run: |
           set -euo pipefail
@@ -161,33 +161,39 @@ jobs:
           TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            MINTED="$(curl -fsS -m 30 -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
+            # 无 tag 版：tag:img 在该 tailnet 从未定义（ACL tagOwners 为空），带 tag 必 400；preauthorized 照样免审批，寻址走 host:
+            MINT_RESP="$(mktemp)"
+            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
-              | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
-            if [ -z "$MINTED" ]; then
-              MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
-                -d "$MINT_BODY" \
-                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
-                | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
+            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
+              echo "mint-bearer: HTTP $MINT_CODE（包体已遮蔽，内含 key）"
+              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
+            else
+              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
             fi
-            [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-            [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 既不是 Bearer API token 也不是 Basic 可用凭证？原话）："; head -c 300 /tmp/mint.err; echo; }
+            if [ -z "$MINTED" ]; then
+              MINT_CODE2="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -u "$TSKEY:" -H 'Content-Type: application/json' \
+                -d "$MINT_BODY" \
+                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
+              if [ "$MINT_CODE2" = "200" ] || [ "$MINT_CODE2" = "201" ]; then
+                echo "mint-basic: HTTP $MINT_CODE2（包体已遮蔽，内含 key）"
+                MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+                [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
+              else
+                echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
+              fi
+            fi
+            rm -f "$MINT_RESP"
+            [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双试，见上两行包体）"; }
           fi
           if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --advertise-tags=tag:img --accept-routes=false --accept-dns=false
-          elif [ -n "$TSKEY" ]; then
-            echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
-            timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            : NEED_LOGOUT 退役（logout 已无条件）
-          elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
-            echo "mint 不可用，回退直连 key（不 advertise-tags；结束 logout 清节点）"
-            timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-            : NEED_LOGOUT 退役（logout 已无条件）
+            echo "ephemeral key minted（无 tag + preauthorized，有效期 ${{ env.IMG_KEY_TTL }}s）"
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
           else
-            echo "FAIL: docker-images 取不到 TS_API_KEY（mint/直连）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
+            echo "FAIL: 现场 mint 未成功（无 TS_API_KEY 或 Bearer/Basic 双试皆拒，见上）；本线 mint-only，不回退任何直连 key（含已退役的 TS_AUTHKEY）"
             exit 1
           fi
           set -x
