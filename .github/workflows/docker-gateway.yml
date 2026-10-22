@@ -129,20 +129,20 @@ jobs:
           sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
           sudo chmod 600 /root/.ssh/authorized_keys
           sudo mkdir -p /run/sshd
-          printf '%s\n' "Port 2222" "ListenAddress 127.0.0.1" "PermitRootLogin prohibit-password" \
+          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "PermitRootLogin prohibit-password" \
             "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
             "AuthorizedKeysFile /root/.ssh/authorized_keys" \
             "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
           ls /usr/lib/openssh/sftp-server || { echo "缺 sftp-server"; exit 1; }
           sudo sshd -t -f /tmp/img_sshd_config || { echo "sshd_config 非法"; exit 1; }
           sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
-          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null && break || sleep 1; done
-          (echo >/dev/tcp/127.0.0.1/2222) 2>/dev/null || { echo "2222 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
+          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null && break || sleep 1; done
+          (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null || { echo "2244 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
           B64="$(base64 -w0 /tmp/img_key)"
           echo "::add-mask::$B64"
           echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
           echo "自连抽查："
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         run: |
