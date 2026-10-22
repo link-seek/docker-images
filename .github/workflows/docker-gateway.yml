@@ -161,6 +161,27 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
           ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@$TSIP "echo TSIP-SSH-OK"
 
+      - name: 双侧证据①：本机网络面转储（只记录不判死）
+        run: |
+          set -uo pipefail
+          echo "=== SELF+PEERS ==="
+          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); s=d.get('Self',{}); print('self:', s.get('HostName'), s.get('TailscaleIPs'), s.get('Tags')); print('peers:', [(p.get('HostName'), p.get('TailscaleIPs')) for p in d.get('Peer',{}).values()])" || true
+          echo "=== NETCHECK FULL ==="
+          tailscale netcheck --format=json > /tmp/img_netcheck.json 2>/tmp/img_netcheck.err || echo "netcheck rc=$?"
+          python3 - <<'EOF' || true
+          import json
+          try:
+              d = json.load(open('/tmp/img_netcheck.json'))
+          except Exception as e:
+              print('netcheck 无 JSON:', e); raise SystemExit(0)
+          print('UDP:', d.get('UDP'), 'MappingVariesByDestIP:', d.get('MappingVariesByDestIP'))
+          print('DERP_latency:', json.dumps(d.get('DERP_latency', {})))
+          print('PreferredDERP:', d.get('PreferredDERP'))
+          EOF
+          echo "=== DERP 443 直探（取自 DERPMap） ==="
+          python3 -c "import json; d=json.load(open('/tmp/img_netcheck.json')); print('\n'.join(sorted({v.get('Hostname','') for r in d.get('DERPMap',{}).get('Regions',{}).values() for v in r.get('Nodes',[])}) - {''}))" 2>/dev/null | head -n 8 | while read -r h; do (timeout 10 bash -c "</dev/tcp/$h/443" && echo "DERP-OK $h" || echo "DERP-FAIL $h"); done || true
+          echo "EVIDENCE-IMG-OK"
+
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         run: |
           set -euo pipefail
