@@ -142,7 +142,7 @@ jobs:
           echo "::add-mask::$B64"
           echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
           echo "自连抽查："
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         run: |

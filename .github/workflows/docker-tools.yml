@@ -209,7 +209,7 @@ jobs:
           B64="$(base64 -w0 /tmp/img_key)"
           echo "::add-mask::$B64"
           echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（opencode 栈，只装+启动自测）
         if: env.skip != 'true'
