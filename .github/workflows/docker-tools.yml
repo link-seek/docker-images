@@ -159,20 +159,27 @@ jobs:
           echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
           MINTED=""
           TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
+          [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
             MINTED="$(curl -fsS -m 30 -u "$TSKEY:" -H 'Content-Type: application/json' \
               -d "{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:img\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/dev/null \
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err \
               | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',''))" || true)"
+            [ -n "$MINTED" ] || { echo "mint 被拒（TS_API_KEY 不是 API token？原话）："; head -c 300 /tmp/mint.err; echo; }
           fi
           if [ -n "$MINTED" ]; then
             echo "ephemeral key minted（只授 tag:img，有效期 ${{ env.IMG_KEY_TTL }}s）"
             timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --advertise-tags=tag:img --accept-routes=false --accept-dns=false
+          elif [ -n "$TSKEY" ]; then
+            echo "mint 不可用，把 TS_API_KEY 当 authkey 直连（不 advertise-tags；结束 logout 清节点）"
+            timeout 120 sudo tailscale up --authkey="$TSKEY" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
           elif [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
-            echo "mint 不可用，回退直连 key（不 advertise-tags）"
+            echo "mint 不可用，回退直连 key（不 advertise-tags；结束 logout 清节点）"
             timeout 120 sudo tailscale up --authkey="${{ secrets.TS_AUTHKEY }}" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+            echo "NEED_LOGOUT=1" >> "$GITHUB_ENV"
           else
-            echo "FAIL: docker-images 取不到 TS_API_KEY（mint 临 key）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
+            echo "FAIL: docker-images 取不到 TS_API_KEY（mint/直连）也没有 TS_AUTHKEY（回退直连）；请给本仓授权其中之一"
             exit 1
           fi
           set -x
@@ -213,7 +220,7 @@ jobs:
           gh workflow run img-preflight.yml -R link-seek/infra \
             -f digest_or_tag="$DIGEST" \
             -f stack_dir=stacks/opencode-prod \
-            -f node_tag="$IMG_TAG" \
+            -f node_tag="host:$IMG_TAG" \
             -f ssh_key_b64="$SSH_KEY_B64"
 
       - name: 轮询 infra 部署结论（fail-closed）
@@ -255,6 +262,11 @@ jobs:
           done
           docker buildx imagetools create -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" "${{ env.SWR_IMAGE }}@$DIGEST"
           echo "released $TAG $DIGEST"
+
+      - name: 下线收尾（直连回退才有残留节点；ephemeral/mint 路径无害）
+        if: always() && env.skip != 'true'
+        run: |
+          if [ "${{ env.NEED_LOGOUT }}" = "1" ]; then sudo tailscale logout || true; echo logged-out; else echo "no-logout-needed"; fi
 
       - name: Commit pin
         if: env.skip != 'true'
