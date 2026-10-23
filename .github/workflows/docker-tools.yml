@@ -292,9 +292,9 @@ jobs:
         if: env.skip != 'true'
         run: |
           set -euo pipefail
-          # canary 由 infra 装在本机 /root/stacks/opencode-prod（root 归属，sudo 跑）
+          # canary 由 infra 装在本机（脚本在目标机 /tmp/ 下，core 每次部署都 scp；canary 跑在本地 docker，直接打桥上 IP）
           RDIR=/root/stacks/opencode-prod
-          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" bash "$RDIR/canary-probe.sh"
+          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" bash /tmp/canary-probe.sh
           echo "DETAIL OK: 细测通过（drain 在 img 机无网关则跳过，prod 全量覆盖）"
 
       - name: temp digest 转正式版（retag 不 rebuild）

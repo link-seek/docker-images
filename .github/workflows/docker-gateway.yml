@@ -244,17 +244,17 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           set -euo pipefail
-          # canary 由 infra 装在本机 /root/stacks/litellm-gateway（root 归属，sudo 跑；canary 在本机 docker，直连桥内 IP）
+          # canary 由 infra 装在本机（REMOTE_DIR 归 root，sudo 跑；脚本在目标机 /tmp/ 下由 core 每次部署 scp；canary 在本机 docker，直连桥内 IP）
           RDIR=/root/stacks/litellm-gateway
           sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" \
-            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "$RDIR/canary-probe.sh"
+            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "/tmp/canary-probe.sh"
           echo "DETAIL OK: 细测通过"
           # 轮换重测：重起 canary（新随机 master），轻链路语义必须不变（master 随便换不影响透传）
           sudo -E REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" \
             SWR_USER="${{ secrets.SWR_LOGIN_USER }}" SWR_PASS="${{ secrets.SWR_LOGIN_PASS }}" \
-            bash "$RDIR/canary-run.sh"
+            bash "/tmp/canary-run.sh"
           sudo -E PROBE_LEVEL=boot REMOTE_DIR="$RDIR" \
-            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "$RDIR/canary-probe.sh"
+            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "/tmp/canary-probe.sh"
           echo "ROTATE OK: master 轮换不影响透传"
 
       - name: temp digest 转正式版（retag 不 rebuild；旧 digest 退役靠 compose pin 前进）
