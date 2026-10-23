@@ -248,9 +248,9 @@ jobs:
           set -euo pipefail
           # 固定函数契约：实现随镜像同 digest（从 $DIGEST 现场 extract），部署盲调读 verdict；
           # 网关断言细节住镜像里，本线不感知。canary 由 infra preflight 起在本机 docker（不映射宿主端口）。
-          rm -rf /tmp/hc && mkdir -p /tmp/hc
-          CID=$(docker create "$DIGEST") && docker cp "$CID:/app/healthcheck" /tmp/hc/ && docker cp "$CID:/app/models-denied.json" /tmp/hc/ && docker rm "$CID" >/dev/null && chmod +x /tmp/hc/healthcheck
-          probe() { # $1=level
+          probe() { # $1=level（实现从被测 canary 本体现场取：零 pull，测的正是运行中的字节；rotation 后重取）
+            rm -rf /tmp/hc && mkdir -p /tmp/hc
+            docker cp litellm-guard-canary:/app/healthcheck /tmp/hc/ && docker cp litellm-guard-canary:/app/models-denied.json /tmp/hc/ && chmod +x /tmp/hc/healthcheck
             ENDPOINT="http://$(docker inspect litellm-guard-canary --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):4000"
             sudo /tmp/hc/healthcheck --base-url "$ENDPOINT" --api-key "$OPENCODE_API_KEY" --level "$1" --container litellm-guard-canary
           }
