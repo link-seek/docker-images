@@ -1,283 +1,44 @@
 name: bake-gateway
-# 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
-# litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
-# 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
-# 单 runner 全链：build（记 digest 只发 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
-#   → 本地细测（直连 canary：认证矩阵+真假 key verdict+黑名单+轮换重测）→ 绿才 push 正式版。
-# 责任界面：部署线只管装上去（红就失败 runner 删除无后果）；判好坏的是本线的本地细测；生产部署只做轻链路。
-# 命名：ghcr.io/linkseed/litellm-gateway + SWR north-9 linkseed（组织命名空间，linkseek 拼写沿用）。
+# 薄调用：网关镜像只声明参数，逻辑全在 bake-stack.yml（共用骨架）。
+# 骨架变更验证：从分支手动 dispatch 本 workflow（非 main 只试不发正式 tag）。
+
 on:
   workflow_dispatch:
-    inputs:
-      litellm_version:
-        description: "（保留占位；版本由 Dockerfile digest pin 控制）"
-        required: false
-        default: ""
-      force:
-        description: "强制重打（true/false）"
-        required: false
-        default: "false"
   push:
     branches: [main]
     paths:
       - Dockerfile.litellm-gateway
       - litellm-gateway/**
+      - docker/litellm-gateway/**
       - .github/workflows/bake-gateway.yml
+      - .github/workflows/bake-stack.yml
 
 permissions:
-  contents: read
+  contents: write # sync-back 回写（网关暂无 pin 文件，骨架统一要写权限）
   packages: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/link-seek/litellm-gateway
-  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
-  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；无 tag + preauthorized，用完即废
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    env:
-      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Resolve tag（日期+shortsha；上游 digest pin 在 Dockerfile FROM）
-        id: upstream
-        run: |
-          TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Tag: $TAG (upstream digest pin 见 Dockerfile FROM)"
-
-      - name: Sync guard/config from infra（来源唯一不手搓）
-        uses: actions/checkout@v4
-        with:
-          repository: link-seek/infra
-          path: infra-src
-          sparse-checkout: |
-            stacks/litellm-gateway/config
-            stacks/litellm-gateway/guard
-            stacks/litellm-gateway/healthcheck
-          sparse-checkout-cone-mode: false
-      - name: Stage build context
-        run: |
-          rm -rf litellm-gateway && mkdir -p litellm-gateway
-          cp -r infra-src/stacks/litellm-gateway/config infra-src/stacks/litellm-gateway/guard litellm-gateway/
-          cp infra-src/stacks/litellm-gateway/healthcheck litellm-gateway/
-          rm -rf infra-src
-          ls litellm-gateway/config litellm-gateway/guard litellm-gateway/healthcheck
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-
-      - name: Login to SWR
-        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
-
-      - name: Build + push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
-        id: push_temp
-        run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          TEMP="ci-$GITHUB_RUN_ID"
-          docker build -f Dockerfile.litellm-gateway -t "${{ env.SWR_IMAGE }}:$TEMP" .
-          docker push "${{ env.SWR_IMAGE }}:$TEMP"
-          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
-          echo "temp tag $TEMP -> $DIGEST"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
-
-      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
-        run: |
-          set -euo pipefail
-          curl -fsSL https://tailscale.com/install.sh | sh
-          IMG_TAG="img-$GITHUB_RUN_ID"
-          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
-          MINTED=""
-          TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
-          [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
-          if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            # 无 tag 版：tag:img 在该 tailnet 从未定义（ACL tagOwners 为空），带 tag 必 400；preauthorized 照样免审批，寻址走 host:
-            MINT_RESP="$(mktemp)"
-            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
-              -d "$MINT_BODY" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
-              echo "mint-bearer: HTTP $MINT_CODE（包体已遮蔽，内含 key）"
-              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
-              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-            else
-              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
-            fi
-            if [ -z "$MINTED" ]; then
-              MINT_CODE2="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -u "$TSKEY:" -H 'Content-Type: application/json' \
-                -d "$MINT_BODY" \
-                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-              if [ "$MINT_CODE2" = "200" ] || [ "$MINT_CODE2" = "201" ]; then
-                echo "mint-basic: HTTP $MINT_CODE2（包体已遮蔽，内含 key）"
-                MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
-                [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-              else
-                echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
-              fi
-            fi
-            rm -f "$MINT_RESP"
-            [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双 400，见上两行包体）"; }
-          fi
-          if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（无 tag + preauthorized，有效期 ${{ env.IMG_KEY_TTL }}s）"
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
-          else
-            echo "FAIL: 现场 mint 未成功（无 TS_API_KEY 或 Bearer/Basic 双试皆拒，见上）；本线 mint-only，不回退任何直连 key（含已退役的 TS_AUTHKEY）"
-            exit 1
-          fi
-          set -x
-          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'), d.get('Self',{}).get('Tags'))"
-
-      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
-        run: |
-          set -euo pipefail
-          trap 'echo "FAILED-CMD: $BASH_COMMAND"' ERR
-          sudo apt-get install -y -q openssh-server
-          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
-          rm -f /tmp/img_key /tmp/img_key.pub
-          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
-          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
-          sudo chmod 600 /root/.ssh/authorized_keys
-          sudo mkdir -p /run/sshd
-          TSIP="$(tailscale ip -4)"; [ -n "$TSIP" ] || { echo "FAIL: 取不到本机 TS 地址"; exit 1; }
-          echo "本机 TS 地址: $TSIP（sshd 加绑该地址，只听回环+TS，不碰公网）"
-          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "ListenAddress $TSIP" "PermitRootLogin prohibit-password" \
-            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
-            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
-            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
-          ls /usr/lib/openssh/sftp-server || { echo "缺 sftp-server"; exit 1; }
-          sudo sshd -t -f /tmp/img_sshd_config || { echo "sshd_config 非法"; exit 1; }
-          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
-          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null && break || sleep 1; done
-          (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null || { echo "2244 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
-          B64="$(base64 -w0 /tmp/img_key)"
-          echo "::add-mask::$B64"
-          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
-          echo "自连抽查（回环 + TS 地址，后者证明 infra 部署连得进来）："
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@$TSIP "echo TSIP-SSH-OK"
-
-      - name: 双侧证据①：本机网络面转储（只记录不判死）
-        run: |
-          set -uo pipefail
-          echo "=== SELF+PEERS ==="
-          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); s=d.get('Self',{}); print('self:', s.get('HostName'), s.get('TailscaleIPs'), s.get('Tags')); print('peers:', [(p.get('HostName'), p.get('TailscaleIPs')) for p in d.get('Peer',{}).values()])" || true
-          echo "=== NETCHECK FULL ==="
-          tailscale netcheck --format=json > /tmp/img_netcheck.json 2>/tmp/img_netcheck.err || echo "netcheck rc=$?"
-          python3 - <<'EOF' || true
-          import json
-          try:
-              d = json.load(open('/tmp/img_netcheck.json'))
-          except Exception as e:
-              print('netcheck 无 JSON:', e); raise SystemExit(0)
-          print('UDP:', d.get('UDP'), 'MappingVariesByDestIP:', d.get('MappingVariesByDestIP'))
-          print('DERP_latency:', json.dumps(d.get('DERP_latency', {})))
-          print('PreferredDERP:', d.get('PreferredDERP'))
-          EOF
-          echo "=== DERP 443 直探（取自 DERPMap） ==="
-          python3 -c "import json; d=json.load(open('/tmp/img_netcheck.json')); print('\n'.join(sorted({v.get('Hostname','') for r in d.get('DERPMap',{}).get('Regions',{}).values() for v in r.get('Nodes',[])}) - {''}))" 2>/dev/null | head -n 8 | while read -r h; do (timeout 10 bash -c "</dev/tcp/$h/443" && echo "DERP-OK $h" || echo "DERP-FAIL $h"); done || true
-          echo "EVIDENCE-IMG-OK"
-
-      - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
-        run: |
-          set -euo pipefail
-          START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
-          echo "START=$START" >> "$GITHUB_ENV"
-          gh workflow run img-preflight.yml -R link-seek/infra \
-            -f digest_or_tag="$DIGEST" \
-            -f stack_dir=stacks/litellm-gateway \
-            -f node_tag="host:$IMG_TAG" \
-            -f ssh_key_b64="$SSH_KEY_B64"
-
-      - name: 跨机可达性取证（非门：只记录，给 infra 连不进来定因用）
-        run: |
-          set -uo pipefail
-          echo "== netcheck（UDP/DERP 出向） =="
-          tailscale netcheck --format=json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print('UDP:',d.get('UDP')); print('DERP_latency:', dict(list((d.get('DERPRegionLatency') or {}).items())[:6]))" || echo "netcheck 失败"
-          echo "== 等 infra 节点出现并反向 ping（最多 8 分钟） =="
-          PEER=""
-          for i in $(seq 1 16); do
-            sleep 30
-            PEER="$(tailscale status --json 2>/dev/null | python3 -c "
-          import json,sys
-          try:
-              ps = json.load(sys.stdin).get('Peer', {})
-              for p in ps.values():
-                  hn = p.get('HostName') or ''
-                  if hn.startswith('ci-deploy-'):
-                      print(hn + '=' + (p.get('TailscaleIPs') or ['?'])[0]); break
-              else: print('')
-          except Exception: print('')" || true)"
-            [ -n "$PEER" ] && { echo "infra peer: $PEER"; break; }
-            echo "infra 节点未出现（$i/16）"
-          done
-          [ -n "$PEER" ] || { echo "结论：infra 节点始终没进 tailnet 可见范围（控制面/审批嫌疑）"; exit 0; }
-          IP="${PEER##*=}"
-          tailscale ping -c 3 "$IP" 2>&1 | tail -n 5 || true
-          (echo >/dev/tcp/$IP/2244) 2>/dev/null && echo "反向 2244 通" || echo "反向 2244 不通"
-          exit 0
-
-      - name: 轮询 infra 部署结论（fail-closed）
-        run: |
-          set -euo pipefail
-          RUN_ID=""
-          for i in $(seq 1 30); do
-            sleep 60
-            RUN_ID="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=10" \
-              -q "[.workflow_runs | sort_by(.created_at) | reverse[] | select(.created_at >= \"$START\") | .id] | first // empty" 2>/dev/null || true)"
-            [ -n "$RUN_ID" ] && break
-          done
-          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现"; exit 1; }
-          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID"
-          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 20 --exit-status \
-            || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
-          echo PREFLIGHT-GREEN
-
-      - name: 本地细测（固定函数契约：extract 镜像自带实现+盲调）
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-        run: |
-          set -euo pipefail
-          # 固定函数契约：实现随镜像同 digest（从 $DIGEST 现场 extract），部署盲调读 verdict；
-          # 网关断言细节住镜像里，本线不感知。canary 由 infra preflight 起在本机 docker（不映射宿主端口）。
-          probe() { # $1=level（实现从被测 canary 本体现场取：零 pull，测的正是运行中的字节；rotation 后重取）
-            rm -rf /tmp/hc && mkdir -p /tmp/hc
-            docker cp litellm-guard-canary:/app/healthcheck /tmp/hc/ && docker cp litellm-guard-canary:/app/models-denied.json /tmp/hc/ && chmod +x /tmp/hc/healthcheck
-            ENDPOINT="http://$(docker inspect litellm-guard-canary --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):4000"
-            sudo /tmp/hc/healthcheck --base-url "$ENDPOINT" --api-key "$OPENCODE_API_KEY" --level "$1" --container litellm-guard-canary
-          }
-          probe full
-          echo "DETAIL OK: 细测通过"
-          # 轮换重测：重起 canary（新随机 master），轻链路语义必须不变（master 随便换不影响透传）
-          # canary-run.sh 仍由 core 每次部署 scp 到目标机 /tmp/（lifecycle 脚本，与探针解耦）
-          sudo -E REMOTE_DIR=/root/stacks/litellm-gateway CANDIDATE_DIGEST="$DIGEST" \
-            SWR_USER="${{ secrets.SWR_LOGIN_USER }}" SWR_PASS="${{ secrets.SWR_LOGIN_PASS }}" \
-            bash "/tmp/canary-run.sh"
-          probe boot
-          echo "ROTATE OK: master 轮换不影响透传"
-
-      - name: temp digest 转正式版（retag 不 rebuild；旧 digest 退役靠 compose pin 前进）
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.upstream.outputs.tag }}"
-          docker buildx imagetools create \
-            -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
-            "${{ env.SWR_IMAGE }}@$DIGEST"
-          docker buildx imagetools create \
-            -t "${{ env.IMAGE }}:$TAG" -t "${{ env.IMAGE }}:latest" \
-            "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
-          echo "released $TAG $DIGEST"
-
-      - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
-        if: always()
-        run: |
-          sudo tailscale logout || true
-          docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
-          echo logged-out
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: litellm-gateway
+      dockerfile: Dockerfile.litellm-gateway
+      ghcr_image: ghcr.io/link-seek/litellm-gateway
+      swr_image: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
+      tag_mode: date-sha
+      infra_stack_dir: stacks/litellm-gateway
+      canary_name: litellm-guard-canary
+      fine_test_hook: docker/litellm-gateway/fine-test.sh
+      sync_from_repo: link-seek/infra # 过渡：正本迁回商家后删
+      sync_paths: |
+        stacks/litellm-gateway/config
+        stacks/litellm-gateway/guard
+        stacks/litellm-gateway/healthcheck
+      sync_dest: litellm-gateway
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
