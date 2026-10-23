@@ -1,0 +1,348 @@
+# bake-stack.yml — 商家共用烘焙骨架（可复用 workflow，唯一真相）。
+#
+# 【接口（写死）】薄调用只传参，不写逻辑；各镜像按接口实现 hook。
+# inputs:
+#   image_slug      短名（temp tag/TS hostname 用，如 litellm-gateway）
+#   dockerfile      Dockerfile 路径（如 Dockerfile.litellm-gateway）
+#   ghcr_image      GHCR 仓库（如 ghcr.io/link-seek/litellm-gateway）
+#   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../linkseed/litellm-gateway）
+#   tag_mode        date-sha | upstream
+#     date-sha      TAG=日期-shortsha（网关：上游 digest pin 在 Dockerfile FROM，手动 bump）
+#     upstream      跟上游 tag（tools/od）：upstream_repo + pattern + 最小年龄 + 资产检查
+#   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
+#   pin_file        tag 落账文件（如 .upstream-tools-tag），空=不落账（网关）
+#   pin_arg         Dockerfile 里跟随的 ARG 名（如 ARG OPENCODE_TAG），空=不比对不回写（网关）
+#   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标
+#   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
+#   sync_paths      取的子目录（空格分隔，如 "stacks/litellm-gateway/config stacks/litellm-gateway/guard"）
+#   sync_dest       落到本仓的目录（取之前清空，如 litellm-gateway）
+#   fine_test_hook  细测 hook 脚本路径（仓内），空=只到预检（od 过渡态）
+#                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY，
+#                   exit 0 + 打印 PASS 行即过，非零即红。
+#   img_key_ttl     临 key 有效期秒（默认 21600）
+# secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、TS_API_KEY（mint）
+#
+# 固定四拍：build（temp tag）→ img 预检（infra 部署到本机标签，只装+启动自测）
+#           → 本地细测（hook）→ 转正（retag 不 rebuild）。
+# 安全门：只有 main 分支才转正式 tag；分支 dispatch 只跑到细测（TRIAL-ONLY），合前可验骨架本身。
+# 不做的事：dispatch 参数只当信使，正本是 git 里的 pin（sync-back 在转正后回写）。
+
+on:
+  workflow_call:
+    inputs:
+      image_slug:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
+      ghcr_image:
+        required: true
+        type: string
+      swr_image:
+        required: true
+        type: string
+      tag_mode:
+        required: true
+        type: string
+      upstream_repo:
+        required: false
+        type: string
+        default: ""
+      upstream_pattern:
+        required: false
+        type: string
+        default: ""
+      upstream_min_age_days:
+        required: false
+        type: string
+        default: "3"
+      upstream_asset_url:
+        required: false
+        type: string
+        default: ""
+      pin_file:
+        required: false
+        type: string
+        default: ""
+      pin_arg:
+        required: false
+        type: string
+        default: ""
+      infra_stack_dir:
+        required: true
+        type: string
+      fine_test_hook:
+        required: false
+        type: string
+        default: ""
+      canary_name:
+        required: false
+        type: string
+        default: ""
+      sync_from_repo:
+        required: false
+        type: string
+        default: ""
+      sync_paths:
+        required: false
+        type: string
+        default: ""
+      sync_dest:
+        required: false
+        type: string
+        default: ""
+      img_key_ttl:
+        required: false
+        type: string
+        default: "21600"
+    secrets:
+      gh_token:
+        required: true
+      OPENCODE_API_KEY:
+        required: false
+      SWR_LOGIN_USER:
+        required: false
+      SWR_LOGIN_PASS:
+        required: false
+      TS_API_KEY:
+        required: true
+
+permissions:
+  contents: write # sync-back 回写 pin
+  packages: write # push 镜像
+
+env:
+  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.gh_token }}
+      SWR_IMAGE: ${{ inputs.swr_image }}
+      GHCR_IMAGE: ${{ inputs.ghcr_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync 来源（正本在他仓时过渡用；商家正本到位后删）
+        if: inputs.sync_from_repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.sync_from_repo }}
+          path: infra-src
+          sparse-checkout: |
+            ${{ inputs.sync_paths }}
+          sparse-checkout-cone-mode: false
+      - name: Stage build context
+        if: inputs.sync_from_repo != ''
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # sync_paths  multi-line：先装变量再分词（直接 for 会撑断脚本）
+          SYNC_PATHS="${{ inputs.sync_paths }}"
+          rm -rf "${{ inputs.sync_dest }}" && mkdir -p "${{ inputs.sync_dest }}"
+          for p in $SYNC_PATHS; do cp -r "infra-src/$p" "${{ inputs.sync_dest }}/"; done
+          rm -rf infra-src
+          ls "${{ inputs.sync_dest }}"
+
+      - name: Resolve tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.gh_token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.tag_mode }}" = "date-sha" ]; then
+            TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
+            echo "Tag: $TAG（上游 digest pin 见 Dockerfile FROM）"
+          elif [ "${{ inputs.tag_mode }}" = "upstream" ]; then
+            normalize() { echo "${1#v}"; }
+            TAG=""
+            CUTOFF="$(date -u -d "${{ inputs.upstream_min_age_days }} days ago" +%Y-%m-%dT%H:%M:%SZ)"
+            while read -r T S; do
+              D="$(gh api "repos/${{ inputs.upstream_repo }}/commits/$S" --jq '.commit.committer.date' 2>/dev/null || true)"
+              [ -z "$D" ] && continue
+              if [[ "$D" < "$CUTOFF" ]]; then TAG="$T"; break; fi
+              echo "skip $T ($D, too fresh)"
+            done < <(gh api "repos/${{ inputs.upstream_repo }}/tags?per_page=20" \
+              --jq "[.[] | {tag: .name | ltrimstr(\"v\"), sha: .commit.sha} | select(.tag | test(\"${{ inputs.upstream_pattern }}\"))] | sort_by(.tag | split(\".\") | map(tonumber)) | reverse | .[] | \"\\(.tag) \\(.sha)\"" | head -5)
+            [ -z "$TAG" ] && { echo "no tag older than ${{ inputs.upstream_min_age_days }} days."; exit 1; }
+            if [ -n "${{ inputs.upstream_asset_url }}" ]; then
+              ASSET_URL="${{ inputs.upstream_asset_url }}"
+              ASSET_URL="${ASSET_URL//\{TAG\}/$TAG}"
+              curl -fsSL -o /dev/null "$ASSET_URL" \
+                || { echo "binary asset missing for ${TAG}"; exit 1; }
+            fi
+          else
+            echo "FAIL: 未知 tag_mode ${{ inputs.tag_mode }}"; exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: ${TAG}"
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+      - name: Login to SWR
+        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
+
+      - name: Build（本地 tag，不推；pin 超前不降级）
+        id: build
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.upstream.outputs.tag }}"
+          if [ -n "${{ inputs.pin_file }}" ] && [ -n "${{ inputs.pin_arg }}" ]; then
+            PINNED="$(grep -oP "^${{ inputs.pin_arg }}=\K.+" "${{ inputs.dockerfile }}" | head -n1 || true)"
+            if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ]; then
+              echo "schedule: upstream 无变化（$TAG），跳过重打"
+              echo "skip=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            NEWER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | tail -n1)"
+            if [ "$NEWER" != "$TAG" ]; then echo "pin $PINNED ahead of resolved $TAG, build pin instead"; TAG="$NEWER"; fi
+          fi
+          docker build -f "${{ inputs.dockerfile }}" -t "${{ env.SWR_IMAGE }}:${TAG}" .
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "built ${TAG}"
+
+      - name: Push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
+        if: env.skip != 'true'
+        id: push_temp
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          TEMP="ci-$GITHUB_RUN_ID"
+          docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
+          docker push "${{ env.SWR_IMAGE }}:$TEMP"
+          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          echo "temp tag $TEMP -> $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+
+      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tailscale.com/install.sh | sh
+          IMG_TAG="img-$GITHUB_RUN_ID"
+          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
+          MINTED=""
+          TSKEY="${{ secrets.TS_API_KEY }}"
+          [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
+          if [ -n "$TSKEY" ]; then
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ inputs.img_key_ttl }}}"
+            MINT_RESP="$(mktemp)"
+            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
+              -d "$MINT_BODY" \
+              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
+            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
+              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
+              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
+            else
+              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
+            fi
+            rm -f "$MINT_RESP"
+          fi
+          if [ -n "$MINTED" ]; then
+            echo "ephemeral key minted（有效期 ${{ inputs.img_key_ttl }}s）"
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+          else
+            echo "FAIL: 现场 mint 未成功；本线 mint-only，不回退任何直连 key"; exit 1
+          fi
+          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'))"
+
+      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq openssh-server
+          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+          rm -f /tmp/img_key /tmp/img_key.pub
+          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
+          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
+          sudo chmod 600 /root/.ssh/authorized_keys
+          sudo mkdir -p /run/sshd
+          TSIP="$(tailscale ip -4)"; [ -n "$TSIP" ] || { echo "FAIL: 取不到本机 TS 地址"; exit 1; }
+          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "ListenAddress $TSIP" "PermitRootLogin prohibit-password" \
+            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
+            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
+            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
+          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
+          sleep 2
+          (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null || { echo "2244 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
+          B64="$(base64 -w0 /tmp/img_key)"
+          echo "::add-mask::$B64"
+          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
+
+      - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
+          echo "START=$START" >> "$GITHUB_ENV"
+          gh workflow run img-preflight.yml -R link-seek/infra \
+            -f digest_or_tag="$DIGEST" \
+            -f stack_dir="${{ inputs.infra_stack_dir }}" \
+            -f node_tag="host:$IMG_TAG" \
+            -f ssh_key_b64="$SSH_KEY_B64"
+
+      - name: 轮询 infra 部署结论（fail-closed）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 30); do
+            sleep 60
+            RUN_ID="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=10" \
+              -q "[.workflow_runs | sort_by(.created_at) | reverse[] | select(.created_at >= \"$START\") | .id] | first // empty" 2>/dev/null || true)"
+            [ -n "$RUN_ID" ] && break
+          done
+          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现"; exit 1; }
+          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID"
+          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 20 --exit-status \
+            || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
+          echo PREFLIGHT-GREEN
+
+      - name: 本地细测（hook；实现按接口自带 verdict）
+        if: env.skip != 'true' && inputs.fine_test_hook != ''
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          SWR_USER: ${{ secrets.SWR_LOGIN_USER }}
+          SWR_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+        run: |
+          set -euo pipefail
+          export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}"
+          bash "${{ inputs.fine_test_hook }}"
+
+      - name: temp digest 转正式版（retag 不 rebuild；非 main 分支只试不发）
+        if: env.skip != 'true' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          docker buildx imagetools create \
+            -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
+            "${{ env.SWR_IMAGE }}@$DIGEST"
+          docker buildx imagetools create \
+            -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
+            "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
+          echo "released $TAG $DIGEST"
+
+      - name: sync-back 落账（正本回写；dispatch 只当信使）
+        if: env.skip != 'true' && github.ref == 'refs/heads/main' && inputs.pin_file != '' && inputs.pin_arg != ''
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          sed -i "s/^${{ inputs.pin_arg }}=.*/${{ inputs.pin_arg }}=${TAG}/" "${{ inputs.dockerfile }}"
+          echo "${TAG}" > "${{ inputs.pin_file }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.dockerfile }}" "${{ inputs.pin_file }}"
+          git diff --cached --quiet || git commit -m "chore(${{ inputs.image_slug }}): 跟进 ${TAG}"
+          git push
+
+      - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
+        if: always() && env.skip != 'true'
+        run: |
+          sudo tailscale logout || true
+          docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
+          echo logged-out
