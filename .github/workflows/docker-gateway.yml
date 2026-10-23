@@ -30,7 +30,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/xieyucheng123/litellm-gateway
+  IMAGE: ghcr.io/link-seek/litellm-gateway
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
   IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；无 tag + preauthorized，用完即废
