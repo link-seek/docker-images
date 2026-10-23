@@ -139,8 +139,10 @@ jobs:
         if: inputs.sync_from_repo != ''
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2086 # sync_paths  multi-line：先装变量再分词（直接 for 会撑断脚本）
+          SYNC_PATHS="${{ inputs.sync_paths }}"
           rm -rf "${{ inputs.sync_dest }}" && mkdir -p "${{ inputs.sync_dest }}"
-          for p in ${{ inputs.sync_paths }}; do cp -r "infra-src/$p" "${{ inputs.sync_dest }}/"; done
+          for p in $SYNC_PATHS; do cp -r "infra-src/$p" "${{ inputs.sync_dest }}/"; done
           rm -rf infra-src
           ls "${{ inputs.sync_dest }}"
 
