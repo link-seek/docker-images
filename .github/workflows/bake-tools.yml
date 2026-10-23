@@ -1,4 +1,5 @@
-name: tools-image
+name: bake-tools
+# 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
 # 单 runner 全链：build（记 digest，只推 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
@@ -13,7 +14,7 @@ on:
     paths:
       - Dockerfile.opencode-tools
       - docker/opencode-tools/**
-      - .github/workflows/docker-tools.yml
+      - .github/workflows/bake-tools.yml
   workflow_dispatch:
     inputs:
       opencode_tag:
