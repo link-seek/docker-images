@@ -59,13 +59,15 @@ jobs:
           sparse-checkout: |
             stacks/litellm-gateway/config
             stacks/litellm-gateway/guard
+            stacks/litellm-gateway/healthcheck
           sparse-checkout-cone-mode: false
       - name: Stage build context
         run: |
           rm -rf litellm-gateway && mkdir -p litellm-gateway
           cp -r infra-src/stacks/litellm-gateway/config infra-src/stacks/litellm-gateway/guard litellm-gateway/
+          cp infra-src/stacks/litellm-gateway/healthcheck litellm-gateway/
           rm -rf infra-src
-          ls litellm-gateway/config litellm-gateway/guard
+          ls litellm-gateway/config litellm-gateway/guard litellm-gateway/healthcheck
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
@@ -239,22 +241,27 @@ jobs:
           done
           echo "FAIL: 预检 30 分钟未完成"; exit 1
 
-      - name: 本地细测（直连 canary：矩阵+真假 key verdict+黑名单+轮换重测）
+      - name: 本地细测（固定函数契约：extract 镜像自带实现+盲调）
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           set -euo pipefail
-          # canary 由 infra 装在本机（REMOTE_DIR 归 root，sudo 跑；脚本在目标机 /tmp/ 下由 core 每次部署 scp；canary 在本机 docker，直连桥内 IP）
-          RDIR=/root/stacks/litellm-gateway
-          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" \
-            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "/tmp/canary-probe.sh"
+          # 固定函数契约：实现随镜像同 digest（从 $DIGEST 现场 extract），部署盲调读 verdict；
+          # 网关断言细节住镜像里，本线不感知。canary 由 infra preflight 起在本机 docker（不映射宿主端口）。
+          rm -rf /tmp/hc && mkdir -p /tmp/hc
+          CID=$(docker create "$DIGEST") && docker cp "$CID:/app/healthcheck" /tmp/hc/ && docker cp "$CID:/app/models-denied.json" /tmp/hc/ && docker rm "$CID" >/dev/null && chmod +x /tmp/hc/healthcheck
+          probe() { # $1=level
+            ENDPOINT="http://$(docker inspect litellm-guard-canary --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):4000"
+            sudo /tmp/hc/healthcheck --base-url "$ENDPOINT" --api-key "$OPENCODE_API_KEY" --level "$1" --container litellm-guard-canary
+          }
+          probe full
           echo "DETAIL OK: 细测通过"
           # 轮换重测：重起 canary（新随机 master），轻链路语义必须不变（master 随便换不影响透传）
-          sudo -E REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" \
+          # canary-run.sh 仍由 core 每次部署 scp 到目标机 /tmp/（lifecycle 脚本，与探针解耦）
+          sudo -E REMOTE_DIR=/root/stacks/litellm-gateway CANDIDATE_DIGEST="$DIGEST" \
             SWR_USER="${{ secrets.SWR_LOGIN_USER }}" SWR_PASS="${{ secrets.SWR_LOGIN_PASS }}" \
             bash "/tmp/canary-run.sh"
-          sudo -E PROBE_LEVEL=boot REMOTE_DIR="$RDIR" \
-            OPENCODE_API_KEY="$OPENCODE_API_KEY" bash "/tmp/canary-probe.sh"
+          probe boot
           echo "ROTATE OK: master 轮换不影响透传"
 
       - name: temp digest 转正式版（retag 不 rebuild；旧 digest 退役靠 compose pin 前进）
