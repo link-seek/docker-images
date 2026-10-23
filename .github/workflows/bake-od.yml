@@ -1,4 +1,5 @@
-name: od-image
+name: bake-od
+# 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
 # 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+push。
 # 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，

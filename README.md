@@ -43,12 +43,12 @@ services:
 
 ## 手动触发
 
-Actions → od-image → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
+Actions → bake-od → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
 外部巡检可用 `repository_dispatch`（event type `upstream-od-image`，payload `{"tag": "0.25.0"}`）。
 
 ## opencode-tools（glibc 线）
 
-第二条流水线：`Dockerfile.opencode-tools` + `docker-tools.yml` + `test-memory.yml`。
+第二条流水线：`Dockerfile.opencode-tools` + `bake-tools.yml` + `test-memory.yml`。
 
 ```text
 opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
@@ -70,10 +70,11 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 
 ## 手动触发
 
-Actions → tools-image → Run workflow，可指定 `opencode_tag` / `force`。
+Actions → bake-tools → Run workflow，可指定 `opencode_tag` / `force`。
 
-## 铁律：打包仓 vs 部署仓分工（2026-10-18，与 infra 仓 README 同源）
+## 分工：商家 vs 快递（2026-10-18，与 infra 仓 README 同源）
 
-- **本仓对运行结果负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号。部署侧只认 digest，不认过程。
-- **部署仓（`link-seek/infra`）只对送达负责**：compose pin digest + env 引用 → `up` 即部署，无业务逻辑。
+- **商家（本仓 `bake-*`）对产品负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号。
+- **快递（`link-seek/infra` 的 `deliver-*`）只对运输负责**：compose pin digest + env 引用 → `up` 即部署，无业务逻辑，不碰内容。
+- **门（`secret-hygiene` / `render-check` 等）只验货**：核密钥卫生与键集合，不碰值。
 - **测试对象是镜像**：CI 拉 digest pin 跑 e2e；**回滚 = 换 digest 发 PR**，git 历史即备份。

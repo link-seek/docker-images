@@ -1,4 +1,5 @@
-name: gateway-image
+name: bake-gateway
+# 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
 # litellm-gateway 构建与发布：上游 litellm pin + guard/配置 bake。
 # 无需巡检上游（litellm 版本手动 bump）；guard/config 来源 infra 仓 stacks/litellm-gateway（手动同步，见 README）。
@@ -22,7 +23,7 @@ on:
     paths:
       - Dockerfile.litellm-gateway
       - litellm-gateway/**
-      - .github/workflows/docker-gateway.yml
+      - .github/workflows/bake-gateway.yml
 
 permissions:
   contents: read
