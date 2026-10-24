@@ -6,9 +6,10 @@ set -euo pipefail
 # 固定函数契约：实现随镜像同 digest（从 $DIGEST 现场 extract），部署盲调读 verdict；
 # 网关断言细节住镜像里，本线不感知。
 identity() { # $1=容器名：货对单——跑的必须是刚打出来的 digest（verdict 验行为，这个验身份）
-  local rd
-  rd="$(docker inspect "$1" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')"
-  [ "$rd" = "$DIGEST" ] || { echo "FAIL: $1 跑的是 $rd，不是刚打出来的 $DIGEST"; exit 1; }
+  # 注：查容器用 .Config.Image（创建时的原始引用）；.RepoDigests 只存在于镜像对象上，查容器必空
+  local ref
+  ref="$(docker inspect "$1" --format '{{.Config.Image}}')"
+  [ "${ref##*@}" = "$DIGEST" ] || { echo "FAIL: $1 创建自 $ref，不是刚打出来的 $DIGEST"; exit 1; }
   echo "IDENTITY OK: $1 == $DIGEST"
 }
 probe() { # $1=level（实现从被测 canary 本体现场取：零 pull，测的是运行中的字节；rotation 后重取）
