@@ -18,9 +18,21 @@ on:
   workflow_dispatch:
     inputs:
       opencode_tag:
-        description: "官方 tag（空则自动取最新，如 2.0.29，无 v 前缀也行）"
+        description: "官方 tag（信使参数：空则自动取最新，如 2.0.29，无 v 前缀也行；构建成功后回写 Dockerfile pin + .upstream-tools-tag）"
         required: false
+        type: string
         default: ""
+      opencode_mem_version:
+        description: "记忆插件版本（信使参数：空则用 Dockerfile 里 ARG OPENCODE_MEM_VERSION 的 pin 值；成功后回写 Dockerfile + opencode.jsonc plugins）"
+        required: false
+        type: string
+        default: ""
+      force:
+        description: "强制重打（true 则跳过 schedule 的“无变化跳过”检查；只影响本次构建，不改 pin）"
+        required: false
+        type: choice
+        options: ["false", "true"]
+        default: "false"
 
 permissions:
   contents: write # 回写 .upstream-tools-tag
@@ -68,18 +80,33 @@ jobs:
           # 二进制资产必须存在（x64 baseline；tag 无 release 资产就地报错，不静默）
           curl -fsSL -o /dev/null "https://opencode.ai/files/bin/${TAG}/opencode-linux-x64-baseline.tar.gz" \
             || { echo "binary asset missing for ${TAG}"; exit 1; }
+          # 记忆插件版本：dispatch 只当信使，空则读 git 里 Dockerfile 的 pin 正本
+          if [ -n "${{ inputs.opencode_mem_version }}" ]; then
+            MEM_VERSION="${{ inputs.opencode_mem_version }}"
+            MEM_VERSION="${MEM_VERSION#v}"
+          else
+            MEM_VERSION="$(grep -oP '^ARG OPENCODE_MEM_VERSION=\K.+' Dockerfile.opencode-tools | head -n1)"
+          fi
+          [ -n "$MEM_VERSION" ] || { echo "cannot resolve opencode-mem version"; exit 1; }
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Resolved: ${TAG}"
+          echo "mem_version=${MEM_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: ${TAG} + opencode-mem@${MEM_VERSION}"
 
       - name: Plugin/config 版本一致性检查
         run: |
           MEM_DOCKER="$(grep -oP 'ARG OPENCODE_MEM_VERSION=\K.+' Dockerfile.opencode-tools | head -n1)"
           MEM_JSONC="$(grep -oP '"plugins": \["opencode-mem@\K[0-9.]+' docker/opencode-tools/opencode.jsonc | head -n1)"
-          [ -n "$MEM_DOCKER" ] && [ "$MEM_DOCKER" = "$MEM_JSONC" ] || \
-            { echo "version drift: Dockerfile=$MEM_DOCKER jsonc=$MEM_JSONC"; exit 1; }
+          MEM_WANT="${{ steps.upstream.outputs.mem_version }}"
+          if [ -n "${{ inputs.opencode_mem_version }}" ] && [ "$MEM_WANT" != "$MEM_JSONC" ]; then
+            # dispatch 信使值与正本不一致：本次构建用信使值，成功后 sync-back 对齐，不在此报错
+            echo "dispatch override: mem ${MEM_WANT} (pin: docker=${MEM_DOCKER} jsonc=${MEM_JSONC}), will sync-back after green build"
+          else
+            [ -n "$MEM_DOCKER" ] && [ "$MEM_DOCKER" = "$MEM_JSONC" ] || \
+              { echo "version drift: Dockerfile=$MEM_DOCKER jsonc=$MEM_JSONC"; exit 1; }
+          fi
           grep -q '"autoUpdate": false' docker/opencode-tools/opencode-mem.jsonc || \
             { echo "autoUpdate must be false"; exit 1; }
-          echo "versions pinned: opencode-mem@$MEM_DOCKER"
+          echo "versions pinned: opencode-mem@${{ steps.upstream.outputs.mem_version }}"
 
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
@@ -94,7 +121,7 @@ jobs:
           PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
           # 定时巡检无新上游时跳过： digest pin 指向即稳定版，周一重打只会制造无人引用的悬空 digest
           # （SWR 会 GC 未被 tag 引用的 manifest，旧 pin 当场腐坏）。push/dispatch 恒打（代码变了必须验）。
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ] && [ "${{ inputs.force }}" != "true" ]; then
             echo "schedule: upstream 无变化（$TAG），跳过重打，pin 保持有效"
             echo "skip=true" >> "$GITHUB_ENV"
             exit 0
@@ -102,10 +129,16 @@ jobs:
           # 取较新者：手动 bump 超前时不降级（网关式每次都打 + 不开倒车）
           NEWER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | tail -n1)"
           if [ "$NEWER" != "$TAG" ]; then echo "pin $PINNED ahead of resolved $TAG, build pin instead"; TAG="$NEWER"; fi
-          docker build --build-arg "OPENCODE_TAG=${TAG}" \
+          MEM_VERSION="${{ steps.upstream.outputs.mem_version }}"
+          docker build --build-arg "OPENCODE_TAG=${TAG}" --build-arg "OPENCODE_MEM_VERSION=${MEM_VERSION}" \
             -f Dockerfile.opencode-tools -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "built ${TAG}"
+          echo "built ${TAG} + opencode-mem@${MEM_VERSION}"
+          # sync-back 落账：本次实际采用的 tag 回写 git 正本（dispatch 只当信使）
+          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
+          sed -i "s/^ARG OPENCODE_MEM_VERSION=.*/ARG OPENCODE_MEM_VERSION=${MEM_VERSION}/" Dockerfile.opencode-tools
+          sed -i -E "s/\"plugins\": \[\"opencode-mem@[0-9.]+\"\]/\"plugins\": [\"opencode-mem@${MEM_VERSION}\"]/" docker/opencode-tools/opencode.jsonc
+          echo "${TAG}" > .upstream-tools-tag
 
       - name: 成品自检（本地字节，不碰上游：版本＋插件＋起服＋工具）
         if: env.skip != 'true'
@@ -320,6 +353,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile.opencode-tools .upstream-tools-tag
-          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }}"
+          git add Dockerfile.opencode-tools .upstream-tools-tag docker/opencode-tools/opencode.jsonc
+          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}"
           git push
