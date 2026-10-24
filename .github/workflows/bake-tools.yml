@@ -82,7 +82,7 @@ jobs:
           echo "versions pinned: opencode-mem@$MEM_DOCKER"
 
       - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
 
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
