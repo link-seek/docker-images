@@ -54,7 +54,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/beam-free
+          model: ${{ vars.OPENCODE_REVIEW_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           use_github_token: true
 
       - name: Run OpenCode for assigned issue
@@ -64,7 +64,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/beam-free
+          model: ${{ vars.OPENCODE_REVIEW_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           use_github_token: true
           prompt: |
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
