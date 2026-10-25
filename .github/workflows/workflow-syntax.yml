@@ -1,0 +1,46 @@
+name: workflow-syntax
+
+# 本仓的流水线全是 YAML，改坏一个字符就是整条线不点火。
+# 这道门只做一件确定性的事：所有 workflow 能被 YAML 解析，且必需键（on/jobs）在。
+# 不判风格、不判逻辑——逻辑归评审门。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析所有 workflow
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, sys, yaml
+
+          fails = 0
+          for path in sorted(glob.glob(".github/workflows/*.yml")):
+              try:
+                  doc = yaml.safe_load(open(path))
+              except Exception as e:
+                  print(f"FAIL {path}: YAML 解析失败: {e}")
+                  fails += 1
+                  continue
+              if not isinstance(doc, dict):
+                  print(f"FAIL {path}: 顶层不是映射")
+                  fails += 1
+                  continue
+              # PyYAML 把裸 on: 解析成 True，两种都接受
+              if not any(k in doc for k in ("on", True)):
+                  print(f"FAIL {path}: 缺 on 触发器")
+                  fails += 1
+              if "jobs" not in doc or not isinstance(doc.get("jobs"), dict):
+                  print(f"FAIL {path}: 缺 jobs")
+                  fails += 1
+          print("OK: all workflows parsed" if fails == 0 else f"FAIL: {fails} issue(s)")
+          sys.exit(1 if fails else 0)
+          PY
