@@ -1,7 +1,7 @@
 name: opencode
 
 # 评论/指派触发 opencode 改文件开 PR，只动文本，不碰构建密钥。
-# 身份：Xyc123y 长期 PAT（org secret AGENT_GITHUB_TOKEN，classic repo+workflow）。
+# 身份：jennifer95929-svgs 长期 PAT（org secret AGENT_GITHUB_TOKEN，classic repo+workflow）。
 # App 路线已废（见 master#65）：App 不能被指派，一律真人号。
 # 指派即开工：assignee 在 AI_ASSIGNEES 变量名单里（逗号分隔）；/oc 评论触发保留，
 # 评论门只认 OWNER/MEMBER（组织外 collaborator 喊不动）。
@@ -44,8 +44,8 @@ jobs:
 
       - name: Set git identity for opencode commits
         run: |
-          git config --global user.name "Xyc123y"
-          git config --global user.email "46583439+Xyc123y@users.noreply.github.com"
+          git config --global user.name "jennifer95929-svgs"
+          git config --global user.email "272089793+jennifer95929-svgs@users.noreply.github.com"
 
       - name: Run OpenCode
         if: github.event_name != 'issues'
@@ -54,7 +54,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/beam-free
+          model: ${{ vars.OPENCODE_REVIEW_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           use_github_token: true
 
       - name: Run OpenCode for assigned issue
@@ -64,7 +64,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
         with:
-          model: opencode/beam-free
+          model: ${{ vars.OPENCODE_REVIEW_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           use_github_token: true
           prompt: |
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
