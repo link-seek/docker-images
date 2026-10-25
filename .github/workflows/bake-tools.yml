@@ -156,8 +156,8 @@ jobs:
           TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            # 无 tag 版：tag:img 在该 tailnet 从未定义（ACL tagOwners 为空），带 tag 必 400；preauthorized 照样免审批，寻址走 host:
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:ci\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
+            # tag:ci：与部署方同一身份（ACL 里 tagOwners 已定义）；寻址仍走 host:
             MINT_RESP="$(mktemp)"
             MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
@@ -185,43 +185,15 @@ jobs:
             [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双试，见上两行包体）"; }
           fi
           if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（无 tag + preauthorized，有效期 ${{ env.IMG_KEY_TTL }}s）"
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+            echo "ephemeral key minted（tag:ci，有效期 ${{ env.IMG_KEY_TTL }}s）"
+            # --ssh：infra 部署方（同为 tag:ci）直接 tailscale ssh 进来，不需要单次钥匙/sshd
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --ssh --accept-routes=false --accept-dns=false
           else
             echo "FAIL: 现场 mint 未成功（无 TS_API_KEY 或 Bearer/Basic 双试皆拒，见上）；本线 mint-only，不回退任何直连 key（含已退役的 TS_AUTHKEY）"
             exit 1
           fi
           set -x
           tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'), d.get('Self',{}).get('Tags'))"
-
-      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          trap 'echo "FAILED-CMD: $BASH_COMMAND"' ERR
-          sudo apt-get install -y -q openssh-server
-          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
-          rm -f /tmp/img_key /tmp/img_key.pub
-          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
-          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
-          sudo chmod 600 /root/.ssh/authorized_keys
-          sudo mkdir -p /run/sshd
-          TSIP="$(tailscale ip -4)"; [ -n "$TSIP" ] || { echo "FAIL: 取不到本机 TS 地址"; exit 1; }
-          echo "本机 TS 地址: $TSIP（sshd 加绑该地址，只听回环+TS，不碰公网）"
-          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "ListenAddress $TSIP" "PermitRootLogin prohibit-password" \
-            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
-            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
-            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
-          ls /usr/lib/openssh/sftp-server || { echo "缺 sftp-server"; exit 1; }
-          sudo sshd -t -f /tmp/img_sshd_config || { echo "sshd_config 非法"; exit 1; }
-          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
-          for i in $(seq 1 15); do (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null && break || sleep 1; done
-          (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null || { echo "2244 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
-          B64="$(base64 -w0 /tmp/img_key)"
-          echo "::add-mask::$B64"
-          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@$TSIP "echo TSIP-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（opencode 栈，只装+启动自测）
         if: env.skip != 'true'
@@ -233,7 +205,7 @@ jobs:
             -f digest_or_tag="$DIGEST" \
             -f stack_dir=stacks/opencode-prod \
             -f node_tag="host:$IMG_TAG" \
-            -f ssh_key_b64="$SSH_KEY_B64"
+            -f ssh_transport="tailscale"
 
       - name: 跨机可达性取证（非门：只记录，给 infra 连不进来定因用）
         if: env.skip != 'true'
@@ -261,7 +233,7 @@ jobs:
           [ -n "$PEER" ] || { echo "结论：infra 节点始终没进 tailnet 可见范围（控制面/审批嫌疑）"; exit 0; }
           IP="${PEER##*=}"
           tailscale ping -c 3 "$IP" 2>&1 | tail -n 5 || true
-          (echo >/dev/tcp/$IP/2244) 2>/dev/null && echo "反向 2244 通" || echo "反向 2244 不通"
+          (echo >/dev/tcp/$IP/22) 2>/dev/null && echo "反向 22 通（TS SSH）" || echo "反向 22 不通"
           exit 0
 
       - name: 轮询 infra 部署结论（fail-closed）
