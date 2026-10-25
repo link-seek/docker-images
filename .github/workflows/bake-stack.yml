@@ -229,7 +229,7 @@ jobs:
           TSKEY="${{ secrets.TS_API_KEY }}"
           [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
           if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true}}},\"expirySeconds\":${{ inputs.img_key_ttl }}}"
+            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:ci\"]}}},\"expirySeconds\":${{ inputs.img_key_ttl }}}"
             MINT_RESP="$(mktemp)"
             MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
               -d "$MINT_BODY" \
@@ -243,41 +243,13 @@ jobs:
             rm -f "$MINT_RESP"
           fi
           if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（有效期 ${{ inputs.img_key_ttl }}s）"
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --accept-routes=false --accept-dns=false
+            echo "ephemeral key minted（tag:ci，有效期 ${{ inputs.img_key_ttl }}s）"
+            # --ssh：infra 部署方（同为 tag:ci）直接 tailscale ssh 进来，不需要单次钥匙/sshd
+            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --ssh --accept-routes=false --accept-dns=false
           else
             echo "FAIL: 现场 mint 未成功；本线 mint-only，不回退任何直连 key"; exit 1
           fi
           tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'))"
-
-      - name: 本机 sshd（给 infra 部署用；单次钥匙，run 结束随 VM 消失）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          for i in 1 2 3; do
-            sudo apt-get update -qq && sudo apt-get install -y -qq openssh-server && break
-            echo "apt retry $i/3"; sleep 15
-            [ "$i" = 3 ] && { echo "FAIL: openssh-server 3 次没装上"; exit 1; }
-          done
-          test -x /usr/sbin/sshd || { echo "FAIL: openssh-server 未装上"; exit 1; }
-          sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
-          rm -f /tmp/img_key /tmp/img_key.pub
-          ssh-keygen -t ed25519 -N "" -f /tmp/img_key -q
-          sudo tee /root/.ssh/authorized_keys < /tmp/img_key.pub >/dev/null
-          sudo chmod 600 /root/.ssh/authorized_keys
-          sudo mkdir -p /run/sshd
-          TSIP="$(tailscale ip -4)"; [ -n "$TSIP" ] || { echo "FAIL: 取不到本机 TS 地址"; exit 1; }
-          printf '%s\n' "Port 2244" "ListenAddress 127.0.0.1" "ListenAddress $TSIP" "PermitRootLogin prohibit-password" \
-            "PasswordAuthentication no" "PubkeyAuthentication yes" "PidFile /tmp/img_sshd.pid" \
-            "AuthorizedKeysFile /root/.ssh/authorized_keys" \
-            "Subsystem sftp /usr/lib/openssh/sftp-server" | sudo tee /tmp/img_sshd_config >/dev/null
-          sudo /usr/sbin/sshd -f /tmp/img_sshd_config -E /tmp/img_sshd.log
-          sleep 2
-          (echo >/dev/tcp/127.0.0.1/2244) 2>/dev/null || { echo "2244 未监听"; sudo cat /tmp/img_sshd.log || true; exit 1; }
-          B64="$(base64 -w0 /tmp/img_key)"
-          echo "::add-mask::$B64"
-          echo "SSH_KEY_B64=$B64" >> "$GITHUB_ENV"
-          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2244 -i /tmp/img_key root@127.0.0.1 "echo SELF-SSH-OK"
 
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
         if: env.skip != 'true'
@@ -289,7 +261,7 @@ jobs:
             -f digest_or_tag="$DIGEST" \
             -f stack_dir="${{ inputs.infra_stack_dir }}" \
             -f node_tag="host:$IMG_TAG" \
-            -f ssh_key_b64="$SSH_KEY_B64"
+            -f ssh_transport="tailscale"
 
       - name: 轮询 infra 部署结论（fail-closed）
         if: env.skip != 'true'
