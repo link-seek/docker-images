@@ -71,16 +71,6 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved: ${TAG}"
 
-      - name: Plugin/config 版本一致性检查
-        run: |
-          MEM_DOCKER="$(grep -oP 'ARG OPENCODE_MEM_VERSION=\K.+' Dockerfile.opencode-tools | head -n1)"
-          MEM_JSONC="$(grep -oP '"plugins": \["opencode-mem@\K[0-9.]+' docker/opencode-tools/opencode.jsonc | head -n1)"
-          [ -n "$MEM_DOCKER" ] && [ "$MEM_DOCKER" = "$MEM_JSONC" ] || \
-            { echo "version drift: Dockerfile=$MEM_DOCKER jsonc=$MEM_JSONC"; exit 1; }
-          grep -q '"autoUpdate": false' docker/opencode-tools/opencode-mem.jsonc || \
-            { echo "autoUpdate must be false"; exit 1; }
-          echo "versions pinned: opencode-mem@$MEM_DOCKER"
-
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
 
@@ -122,6 +112,10 @@ jobs:
           PLUG="$(docker run --rm --entrypoint sh "$IMG" -c "grep -o 'opencode-mem@[0-9.]*' /root/.config/opencode/opencode.jsonc | head -n1")"
           echo "plugin: $PLUG"
           [ "$PLUG" = "opencode-mem@${MEM_PIN}" ] || { echo "FAIL: 插件非 opencode-mem@${MEM_PIN}"; fails=1; }
+          # 2b. autoUpdate 必须关（验镜像内生效值，digest pin 流程不允许自更新）
+          AU="$(docker run --rm --entrypoint sh "$IMG" -c "grep -o '\"autoUpdate\": *[a-z]*' /root/.config/opencode/opencode-mem.jsonc | head -n1")"
+          echo "autoUpdate: $AU"
+          echo "$AU" | grep -q 'false' || { echo "FAIL: autoUpdate 未关（$AU）"; fails=1; }
           # 3. serve 能起（4096，dummy 口令；通即过）
           docker run -d --name tools-gate --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy "$IMG" serve --port 4096 --hostname 127.0.0.1
           ok=""
