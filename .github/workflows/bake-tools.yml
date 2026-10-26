@@ -236,19 +236,41 @@ jobs:
           (echo >/dev/tcp/$IP/22) 2>/dev/null && echo "反向 22 通（TS SSH）" || echo "反向 22 不通"
           exit 0
 
-      - name: 轮询 infra 部署结论（fail-closed）
+      - name: 轮询 infra 部署结论（按 node_tag 核对，fail-closed）
         if: env.skip != 'true'
         run: |
           set -euo pipefail
+          EXPECTED_NODE_TAG="host:${IMG_TAG:?IMG_TAG 未设置，无法核对预检 run}"
+          EXPECTED_DIGEST="${DIGEST:?DIGEST 未设置，无法核对预检 run}"
           RUN_ID=""
+          REJECTED="$(mktemp)"
+          LOG="$(mktemp)"
+          trap 'rm -f "$REJECTED" "$LOG"' EXIT
           for i in $(seq 1 30); do
             sleep 60
-            RUN_ID="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=10" \
-              -q "[.workflow_runs | sort_by(.created_at) | reverse[] | select(.created_at >= \"$START\") | .id] | first // empty" 2>/dev/null || true)"
-            [ -n "$RUN_ID" ] && break
+            CANDIDATES="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=100" \
+              -q "[.workflow_runs[] | select(.created_at >= \"$START\")] | sort_by(.created_at) | reverse | .[] | \"\(.id) \(.status)\"" 2>/dev/null || true)"
+            while read -r RUN_CANDIDATE RUN_STATUS; do
+              if [ -z "$RUN_CANDIDATE" ] || [ "$RUN_STATUS" != "completed" ]; then
+                continue
+              fi
+              if grep -qxF "$RUN_CANDIDATE" "$REJECTED"; then
+                continue
+              fi
+              if timeout 180 gh run view "$RUN_CANDIDATE" -R link-seek/infra --log >"$LOG" 2>/dev/null; then
+                if grep -qE -- "${EXPECTED_NODE_TAG}([^0-9]|$)" "$LOG" && grep -qF -- "$EXPECTED_DIGEST" "$LOG"; then
+                  RUN_ID="$RUN_CANDIDATE"
+                  break
+                fi
+                echo "$RUN_CANDIDATE" >> "$REJECTED"
+              fi
+            done <<< "$CANDIDATES"
+            if [ -n "$RUN_ID" ]; then
+              break
+            fi
           done
-          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现"; exit 1; }
-          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID"
+          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现，或无 node_tag=$EXPECTED_NODE_TAG + digest=$EXPECTED_DIGEST 的可核对 run（fail-closed）"; exit 1; }
+          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID (node_tag=$EXPECTED_NODE_TAG, digest=$EXPECTED_DIGEST)"
           timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 20 --exit-status \
             || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
           echo PREFLIGHT-GREEN
