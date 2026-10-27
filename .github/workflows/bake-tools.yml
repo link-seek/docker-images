@@ -126,7 +126,7 @@ jobs:
           [ -n "$ok" ] || { echo "FAIL: serve 未起"; docker logs tools-gate --tail 20; fails=1; }
           docker rm -f tools-gate >/dev/null 2>&1 || true
           # 4. 工具 presence（parity 子集）
-          for t in "node --version" "gh --version" "agent-browser --version" "tailscale version" "terraform version" "send-mail --help" "msmtp --version"; do
+          for t in "node --version" "gh --version" "agent-browser --version" "tailscale version" "tailscaled --version" "terraform version" "send-mail --help" "msmtp --version"; do
             docker run --rm --entrypoint sh "$IMG" -c "$t" >/dev/null 2>&1 || { echo "FAIL: $t 缺失"; fails=1; }
           done
           echo "tools presence OK"
