@@ -19,6 +19,11 @@ on:
 
 jobs:
   opencode:
+    # 非交互 CI：等人点允许会挂到 6h 默认超时（infra #108 实锤）。
+    # 一次性 runner，操作面全放，40 分钟硬超时；secret 面保持最小，毒代码由 PR 人审拦。
+    timeout-minutes: 40
+    env:
+      OPENCODE_CONFIG_CONTENT: '{"permission":"allow"}'
     if: |
       ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
        (contains(github.event.comment.body, '/oc') ||
