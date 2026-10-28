@@ -4,6 +4,8 @@ name: bake-od
 # 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+push。
 # 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，
 # 如 --dir/--pure flag 差异）；升 opencode 只走手动 workflow_dispatch，见 README。
+# sync-back：手动 dispatch 传的 tag 只当信使，正本是 git 里的 pin 值；
+# 构建成功后实际采用的 tag 自动回写 .upstream-od-tag + Dockerfile ARG pin，有变化才提交。
 on:
   schedule:
     # 每周一 02:00 UTC 巡检一次（OD 发版不算频繁，不值得天天跟）
@@ -13,16 +15,20 @@ on:
   workflow_dispatch:
     inputs:
       od_tag:
-        description: "上游 OD tag（空则自动取最新，形如 0.24.1，无 v 前缀）"
+        description: "上游 OD tag（信使参数：空则自动取最新；形如 0.24.1，无 v 前缀。构建成功后回写 .upstream-od-tag + Dockerfile pin）"
         required: false
+        type: string
         default: ""
       opencode_tag:
-        description: "OpenCode 版本（默认用 Dockerfile 里的 pin，只在 OD 要求时手动 bump）"
+        description: "OpenCode 版本（信使参数：空则用 Dockerfile.opendesign 里 ARG OPENCODE_TAG 的 pin 值；只在 OD 要求时手动 bump，成功后回写 pin）"
         required: false
+        type: string
         default: ""
       force:
-        description: "强制重打（true/false）"
+        description: "强制重打（true 则跳过“无变化跳过”检查；只影响本次构建，不改 pin）"
         required: false
+        type: choice
+        options: ["false", "true"]
         default: "false"
 
 permissions:
@@ -133,11 +139,18 @@ jobs:
           sbom: false
 
       - name: Record upstream tag
+        # sync-back 落账：本次实际采用的 tag 在构建成功后回写 git（正本），
+        # dispatch 参数只当信使。有变化才提交，无变化不空提交。
         if: steps.check.outputs.skip != 'true'
         run: |
+          OD_TAG="${{ steps.upstream.outputs.od_tag }}"
+          OPENCODE_TAG="${{ steps.upstream.outputs.opencode_tag }}"
           echo -n "${{ steps.upstream.outputs.combo }}" > .upstream-od-tag
+          # Dockerfile pin 前移：只改 ARG 默认值行，不动其他内容
+          sed -i "s/^ARG OD_TAG=.*/ARG OD_TAG=${OD_TAG}/" Dockerfile.opendesign
+          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${OPENCODE_TAG}/" Dockerfile.opendesign
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .upstream-od-tag
+          git add .upstream-od-tag Dockerfile.opendesign
           git diff --staged --quiet || git commit -m "chore: track upstream ${{ steps.upstream.outputs.combo }}"
           git push
