@@ -101,8 +101,8 @@ jobs:
       - name: Login to SWR via token
         if: steps.check.outputs.skip != 'true'
         env:
-          HCLOUD_AK: ${{ secrets.HCLOUD_AK }}
-          HCLOUD_SK: ${{ secrets.HCLOUD_SK }}
+          HCLOUD_AK: ${{ secrets.PROD_HCLOUD_AK }}
+          HCLOUD_SK: ${{ secrets.PROD_HCLOUD_SK }}
         run: |
           mkdir -p ~/.docker
           curl -fsSL -o /tmp/hcloud.tgz "https://ap-southeast-3-hwcloudcli.obs.ap-southeast-3.myhuaweicloud.com/cli/latest/huaweicloud-cli-linux-amd64.tar.gz"

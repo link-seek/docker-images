@@ -1,3 +1,4 @@
 
 # litellm-gateway 同步目录：来源 link-seek/infra stacks/litellm-gateway，workflow 每次重新拉，不进仓
-litellm-gateway/
+# 注：锚定根目录，docker/litellm-gateway/ 下的 hook 脚本正常进仓
+/litellm-gateway/
