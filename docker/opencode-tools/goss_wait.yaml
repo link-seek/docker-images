@@ -1,0 +1,6 @@
+# serve 就绪门：dgoss 跑主测试前先 validate 本文件。
+# retry 由 GOSS_WAIT_OPTS 提供（bake-tools.yml 设 -r 60s -s 5s），等价旧 12×5s 手搓循环。
+command:
+  serve-ready:
+    exec: "curl -sf --max-time 5 http://127.0.0.1:4096/"
+    exit-status: 0
