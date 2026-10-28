@@ -35,7 +35,8 @@ on:
         default: "false"
 
 permissions:
-  contents: write # 回写 .upstream-tools-tag
+  contents: write # 回写分支（sync-back 开 PR，不直推 main）
+  pull-requests: write # sync-back 开 pin PR
   packages: write # push ghcr.io/link-seek/opencode-tools
 
 env:
@@ -365,11 +366,22 @@ jobs:
           docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
           echo logged-out
 
-      - name: Commit pin
+      - name: Commit pin（sync-back 开 PR，不直推 main）
         if: env.skip != 'true'
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Dockerfile.opencode-tools .upstream-tools-tag docker/opencode-tools/opencode.jsonc
-          git diff --cached --quiet || git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}"
-          git push
+          if git diff --cached --quiet; then
+            echo "pin 无变化，无需提交"
+            exit 0
+          fi
+          BRANCH="sync-back/tools-${{ steps.build.outputs.tag }}-mem-${{ steps.upstream.outputs.mem_version }}"
+          git checkout -b "$BRANCH"
+          git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}"
+          git push -u origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}" \
+            --body "sync-back 落账（bake run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} 全绿）。合入后 pin 生效。" \
+          || echo "PR 创建失败（同名分支已存在时请人工看一眼）"
