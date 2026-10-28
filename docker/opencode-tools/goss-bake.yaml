@@ -51,7 +51,7 @@ file:
   /root/.config/opencode/opencode-mem.jsonc:
     exists: true
     contents:
-      - '/"autoUpdate": *false/'
+      - '"autoUpdate": *false'
 
   /proc/1/cmdline:
     exists: true
