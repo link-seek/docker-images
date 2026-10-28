@@ -100,7 +100,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH
  && rm -f /tmp/terraform.zip \
  && terraform version
 
-# tailscale：官方静态二进制（容器运行时需 --device=/dev/net/tun 并 tailscale up）
+# tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
  && curl -fsSL -o /tmp/tailscale.tgz \
       "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
