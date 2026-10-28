@@ -46,6 +46,12 @@ services:
 Actions → bake-od → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
 外部巡检可用 `repository_dispatch`（event type `upstream-od-image`，payload `{"tag": "0.25.0"}`）。
 
+* 行为门：构建后自调 `docker/opendesign/e2e.sh`（GHCR 同版存活 → litellm 免费档 byok 后端 →
+  建 project→run→轮询断言：单聊/切模型/多轮/免费档）。
+* 放行：e2e 绿 + 候选 digest 可拉取（缺 SWR 凭证则跳过）才把 `ci-<run>` temp digest 转正式 tag
+  并回写 pin；红则只留临时 tag，不推 `latest`/正式 tag。
+* 产品行为门在商家侧闭环；infra 快递侧只剩运单 schema + 送达探针（见 #37）。
+
 ## opencode-tools（glibc 线）
 
 第二条流水线：`Dockerfile.opencode-tools` + `bake-tools.yml` + `test-memory.yml`。

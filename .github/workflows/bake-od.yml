@@ -1,7 +1,8 @@
 name: bake-od
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
-# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+push。
+# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build，
+# 先推 ci-<run> temp tag；产品 e2e + 可拉取性绿后才转正式 tag/latest（红不转）。
 # 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，
 # 如 --dir/--pure flag 差异）；升 opencode 只走手动 workflow_dispatch，见 README。
 # sync-back：手动 dispatch 传的 tag 只当信使，正本是 git 里的 pin 值；
@@ -40,10 +41,13 @@ env:
   IMAGE: ghcr.io/link-seek/opendesign
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
   SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign
+  # e2e 的 byok 后端：商家已发布的 litellm 网关（无业务断言，只负责免费档上游转发）。
+  LITELLM_IMAGE: ghcr.io/link-seek/litellm-gateway:latest
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -118,7 +122,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push temp tag（正式版等产品 e2e 绿了再转）
         if: steps.check.outputs.skip != 'true'
         uses: docker/build-push-action@v6
         with:
@@ -129,14 +133,67 @@ jobs:
             OD_TAG=${{ steps.upstream.outputs.od_tag }}
             OPENCODE_TAG=${{ steps.upstream.outputs.opencode_tag }}
           tags: |
-            ${{ env.IMAGE }}:${{ steps.upstream.outputs.combo }}
-            ${{ env.IMAGE }}:latest
-            ${{ env.SWR_IMAGE }}:${{ steps.upstream.outputs.combo }}
-            ${{ env.SWR_IMAGE }}:latest
+            ${{ env.IMAGE }}:ci-${{ github.run_id }}
+            ${{ env.SWR_IMAGE }}:ci-${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+
+      - name: Resolve candidate digest（以 GHCR 同版构建为准，e2e/转正都用这一份）
+        id: candidate
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          CANDIDATE="${{ env.IMAGE }}:ci-${{ github.run_id }}"
+          DIGEST="$(docker buildx imagetools inspect "$CANDIDATE" --format '{{json .Manifest}}' \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "candidate $CANDIDATE -> $DIGEST"
+
+      - name: 产品 e2e（GHCR 同版存活＋免费档 byok＋对话三件套；红不转正式 tag）
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          E2E_IMAGE: ${{ steps.candidate.outputs.candidate }}
+          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
+          LITELLM_IMAGE: ${{ env.LITELLM_IMAGE }}
+        run: bash docker/opendesign/e2e.sh
+
+      - name: Pin 可拉取性（候选 digest；缺 SWR 凭证则跳过，沿用旧逻辑）
+        if: steps.check.outputs.skip != 'true'
+        env:
+          SWR_U: ${{ secrets.SWR_LOGIN_USER }}
+          SWR_P: ${{ secrets.SWR_LOGIN_PASS }}
+          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SWR_U" ] || [ -z "$SWR_P" ]; then
+            echo "SKIP: SWR 凭证未配；GHCR 存活已由 e2e 验，SWR 侧 pin 可拉取性留待凭证补齐"
+            exit 0
+          fi
+          echo "$SWR_P" | docker login "${{ env.SWR_REGISTRY }}" -u "$SWR_U" --password-stdin
+          CANDIDATE="${{ env.SWR_IMAGE }}:ci-${{ github.run_id }}"
+          docker pull -q "$CANDIDATE"
+          GOT="$(docker image inspect "$CANDIDATE" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')"
+          if [ "$GOT" != "$CANDIDATE_DIGEST" ]; then
+            echo "FAIL: SWR 候选 digest=$GOT，与刚构建的 $CANDIDATE_DIGEST 不一致"; exit 1
+          fi
+          echo "OK: 候选 pin 精确可拉取（$CANDIDATE == $CANDIDATE_DIGEST）"
+
+      - name: temp digest 转正式版（retag 不 rebuild；e2e＋可拉取性绿才到这一步）
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          COMBO="${{ steps.upstream.outputs.combo }}"
+          DIGEST="${{ steps.candidate.outputs.digest }}"
+          SOURCE="${{ env.IMAGE }}@${DIGEST}"
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE }}:${COMBO}" -t "${{ env.IMAGE }}:latest" \
+            -t "${{ env.SWR_IMAGE }}:${COMBO}" -t "${{ env.SWR_IMAGE }}:latest" \
+            "$SOURCE"
+          echo "released ${COMBO} ${DIGEST}"
 
       - name: Record upstream tag
         # sync-back 落账：本次实际采用的 tag 在构建成功后回写 git（正本），
