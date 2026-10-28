@@ -1,0 +1,60 @@
+# opencode-tools 成品自检（dgoss，pin v0.4.10）。
+# 用法：GOSS_FILE=goss-bake.yaml GOSS_VARS=<vars> dgoss run ... <image> serve ...
+# TAG / MEM_PIN 由 bake-tools.yml 经 --vars 注入，避免版本号在仓内两处手抄。
+# entrypoint/cmd 验 /proc/1/cmdline（PID 1 = 镜像入口，dgoss 起的 serve 进程）。
+
+command:
+  opencode-version:
+    exec: "opencode --version"
+    exit-status: 0
+    stdout:
+      - '{{ .Vars.TAG }}'
+
+  node:
+    exec: "node --version"
+    exit-status: 0
+
+  gh:
+    exec: "gh --version"
+    exit-status: 0
+
+  agent-browser:
+    exec: "agent-browser --version"
+    exit-status: 0
+
+  tailscale:
+    exec: "tailscale version"
+    exit-status: 0
+
+  tailscaled:
+    exec: "tailscaled --version"
+    exit-status: 0
+
+  terraform:
+    exec: "terraform version"
+    exit-status: 0
+
+  send-mail:
+    exec: "send-mail --help"
+    exit-status: 0
+
+  msmtp:
+    exec: "msmtp --version"
+    exit-status: 0
+
+file:
+  /root/.config/opencode/opencode.jsonc:
+    exists: true
+    contents:
+      - 'opencode-mem@{{ .Vars.MEM_PIN }}'
+
+  /root/.config/opencode/opencode-mem.jsonc:
+    exists: true
+    contents:
+      - '/"autoUpdate": *false/'
+
+  /proc/1/cmdline:
+    exists: true
+    contents:
+      - 'opencode'
+      - 'serve'
