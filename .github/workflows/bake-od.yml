@@ -1,7 +1,8 @@
 name: bake-od
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
-# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+push。
+# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build+e2e+push。
+# 构建后先推 GHCR 临时 tag 跑产品 e2e（对话三件套），绿了才转正式 tag；红不推正式版。
 # 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，
 # 如 --dir/--pure flag 差异）；升 opencode 只走手动 workflow_dispatch，见 README。
 # sync-back：手动 dispatch 传的 tag 只当信使，正本是 git 里的 pin 值；
@@ -44,6 +45,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -118,30 +120,80 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build（本地 tag，不推）
         if: steps.check.outputs.skip != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile.opendesign
-          push: true
+          push: false
+          load: true
           build-args: |
             OD_TAG=${{ steps.upstream.outputs.od_tag }}
             OPENCODE_TAG=${{ steps.upstream.outputs.opencode_tag }}
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.upstream.outputs.combo }}
-            ${{ env.IMAGE }}:latest
-            ${{ env.SWR_IMAGE }}:${{ steps.upstream.outputs.combo }}
-            ${{ env.SWR_IMAGE }}:latest
+          tags: ${{ env.IMAGE }}:${{ steps.upstream.outputs.combo }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
 
+      - name: Push temp tag（只发 ci-<run号>，正式版等 e2e 绿了再转）
+        id: push_temp
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          COMBO="${{ steps.upstream.outputs.combo }}"
+          TEMP="ci-$GITHUB_RUN_ID"
+          docker tag "${{ env.IMAGE }}:${COMBO}" "${{ env.IMAGE }}:${TEMP}"
+          docker push "${{ env.IMAGE }}:${TEMP}"
+          DIGEST="$(docker buildx imagetools inspect "${{ env.IMAGE }}:${TEMP}" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          echo "temp tag $TEMP -> $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+
+      - name: 产品 e2e（GHCR 同版构建 + litellm 免费档 + 对话三件套）
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          IMAGE_REF: ${{ env.IMAGE }}:ci-${{ github.run_id }}
+          GATEWAY_IMAGE: ghcr.io/link-seek/litellm-gateway:latest
+        run: |
+          set -euo pipefail
+          docker pull -q "$IMAGE_REF"
+          docker pull -q "$GATEWAY_IMAGE"
+          bash docker/opendesign/e2e.sh
+
+      - name: temp digest 转正式版（retag 不 rebuild；e2e 绿才执行；非 main 只试不发）
+        if: steps.check.outputs.skip != 'true' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          COMBO="${{ steps.upstream.outputs.combo }}"
+          docker buildx imagetools create \
+            -t "${{ env.IMAGE }}:${COMBO}" -t "${{ env.IMAGE }}:latest" \
+            "${{ env.IMAGE }}@${DIGEST}"
+          docker buildx imagetools create \
+            -t "${{ env.SWR_IMAGE }}:${COMBO}" -t "${{ env.SWR_IMAGE }}:latest" \
+            "${{ env.IMAGE }}@${DIGEST}"
+          echo "released ${COMBO} ${DIGEST}"
+
+      - name: Pin 可拉取性（新 pin；缺 SWR 凭证则跳过，沿用旧逻辑）
+        if: steps.check.outputs.skip != 'true' && github.ref == 'refs/heads/main'
+        env:
+          SWR_U: ${{ secrets.SWR_LOGIN_USER }}
+          SWR_P: ${{ secrets.SWR_LOGIN_PASS }}
+        run: |
+          if [ -z "${SWR_U:-}" ] || [ -z "${SWR_P:-}" ]; then
+            echo "SKIP: SWR 凭证未配；pin 精确字节生产正在跑（存活证明），deploy pull 失败即停（fail-fast 兜底）"
+            exit 0
+          fi
+          echo "$SWR_P" | docker login "${{ env.SWR_REGISTRY }}" -u "$SWR_U" --password-stdin
+          PIN="${{ env.SWR_IMAGE }}:${{ steps.upstream.outputs.combo }}"
+          docker pull -q "$PIN" && echo "OK: pin 精确可拉取（$PIN）"
+
       - name: Record upstream tag
         # sync-back 落账：本次实际采用的 tag 在构建成功后回写 git（正本），
-        # dispatch 参数只当信使。有变化才提交，无变化不空提交。
-        if: steps.check.outputs.skip != 'true'
+        # dispatch 参数只当信使。有变化才提交，无变化不空提交；非 main 只试不发。
+        if: steps.check.outputs.skip != 'true' && github.ref == 'refs/heads/main'
         run: |
           OD_TAG="${{ steps.upstream.outputs.od_tag }}"
           OPENCODE_TAG="${{ steps.upstream.outputs.opencode_tag }}"

@@ -46,6 +46,13 @@ services:
 Actions → bake-od → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
 外部巡检可用 `repository_dispatch`（event type `upstream-od-image`，payload `{"tag": "0.25.0"}`）。
 
+## bake-od 产品 e2e（行为门）
+
+构建后先推 GHCR 临时 tag（`ci-<run号>`），用同版构建跑 `docker/opendesign/e2e.sh`：
+GHCR 拉取＋存活应答 → 起 litellm 免费档 byok 后端 → 对话三件套断言（单聊 / 切模型 / 多轮 7421 召回）。
+绿了才把同一 digest 转正式 tag（GHCR＋SWR）并回写 pin；红则只留临时 tag，不推正式版（非 main 分支只试不发）。
+pin 可拉取性检查用 SWR 新 tag，缺 `SWR_LOGIN_USER/PASS` 则跳过（沿用 infra 旧 e2e 逻辑）。
+
 ## opencode-tools（glibc 线）
 
 第二条流水线：`Dockerfile.opencode-tools` + `bake-tools.yml` + `test-memory.yml`。
@@ -77,4 +84,6 @@ Actions → bake-tools → Run workflow，可指定 `opencode_tag` / `force`。
 - **商家（本仓 `bake-*`）对产品负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号。
 - **快递（`link-seek/infra` 的 `deliver-*`）只对运输负责**：compose pin digest + env 引用 → `up` 即部署，无业务逻辑，不碰内容。
 - **门（`secret-hygiene` / `render-check` 等）只验货**：核密钥卫生与键集合，不碰值。
+- **行为门在商家侧闭环**：`bake-od` 构建后自跑产品 e2e（对话三件套），绿才转正式 tag；
+  infra 快递侧只剩运单 schema＋送达探针，不再设产品行为门禁。
 - **测试对象是镜像**：CI 拉 digest pin 跑 e2e；**回滚 = 换 digest 发 PR**，git 历史即备份。
