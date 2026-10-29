@@ -212,6 +212,63 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
 
+
+      - name: 安装 Trivy（pin 版二进制，CI 现取；sha256 校验）
+        run: |
+          set -euo pipefail
+          TRIVY_VER="v0.76.1"
+          case "$(uname -m)" in
+            x86_64)  TRIVY_ARCH="64bit"; TRIVY_SHA="c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0" ;;
+            aarch64) TRIVY_ARCH="ARM64"; TRIVY_SHA="e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f" ;;
+            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+          TGZ="/tmp/trivy_${TRIVY_VER#v}_Linux-${TRIVY_ARCH}.tar.gz"
+          curl -fsSL --retry 3 -o "$TGZ"             "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VER}/trivy_${TRIVY_VER#v}_Linux-${TRIVY_ARCH}.tar.gz"
+          echo "${TRIVY_SHA}  ${TGZ}" | sha256sum -c -
+          tar -xzf "$TGZ" -C /tmp trivy
+          sudo install -m 0755 /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Trivy 镜像扫描（OS 包＋语言依赖；CRITICAL/HIGH 超阈值红，拦转正式版）
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          IMAGE_REF="${{ env.SWR_IMAGE }}:${TAG}"
+          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
+          mkdir -p "$REPORT_DIR"
+          # 误报白名单仓内 .trivyignore（需 review 定）
+          trivy image --severity CRITICAL,HIGH --exit-code 1             --format table --output "$REPORT_DIR/trivy-image.txt"             --ignorefile .trivyignore "$IMAGE_REF"
+          trivy image --severity CRITICAL,HIGH --exit-code 0             --format json --output "$REPORT_DIR/trivy-image.json"             --ignorefile .trivyignore "$IMAGE_REF"
+          echo "TRIVY IMAGE OK: $IMAGE_REF"
+
+      - name: Trivy IaC 误配扫描（Dockerfile/compose；红线另议，先报不拦）
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
+          mkdir -p "$REPORT_DIR"
+          trivy config --severity CRITICAL,HIGH,MEDIUM --exit-code 0             --format table --output "$REPORT_DIR/trivy-config.txt"             --ignorefile .trivyignore . || true
+          trivy config --exit-code 0             --format json --output "$REPORT_DIR/trivy-config.json"             --ignorefile .trivyignore . || true
+          echo "TRIVY CONFIG DONE"
+
+      - name: Trivy SBOM 生成（artifact 落盘，不强制签名）
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          IMAGE_REF="${{ env.SWR_IMAGE }}:${TAG}"
+          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
+          mkdir -p "$REPORT_DIR"
+          trivy image --format cyclonedx --output "$REPORT_DIR/sbom.cdx.json"             --ignorefile .trivyignore "$IMAGE_REF"
+          echo "SBOM OK: $IMAGE_REF"
+
+      - name: 上传 Trivy 报告与 SBOM（artifact）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ inputs.image_slug }}
+          path: ${{ runner.temp }}/trivy-report/
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
         if: env.skip != 'true'
         id: push_temp
