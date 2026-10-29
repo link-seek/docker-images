@@ -1,0 +1,2 @@
+# Trivy 误报白名单（需 review 定）：每条 CVE/路径需附 review 说明与链接。
+# 格式参考：CVE-2024-xxxxx 或 pkg:path
