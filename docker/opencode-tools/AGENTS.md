@@ -21,6 +21,13 @@
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例
 - `tailscale status`：查看 tailnet 节点状态
 
+Cloudflare 自助（`wrangler` 已烘入镜像，token 走 `.env` 的 `CLOUDFLARE_API_TOKEN`，每次发版现签 90 天读写）：
+owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pages 等任务。
+- 查：`wrangler zones list` / `wrangler dns list <zone>`（只读先行）。
+- 改：建 zone、改 DNS、发 Worker 都可以直接做；DNS/Zone/Workers/Pages 读写全开（账号 zone 通配）。
+- 红线：切 NS（注册商侧）、删 zone/记录等影响现网的步骤，执行前必须先向用户确认；只动授权范围内的域。
+- token 90 天过期，发版自动续；过期报错先看 token 有效期，不要怀疑人生。
+
 浏览器自动化（`agent-browser` CLI 已烘入镜像 + 独立 `browser` sidecar，经 CDP 连接；浏览器不在本镜像内）：
 
 - 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`（默认 `http://browser:9222`，compose 服务名即地址）。
