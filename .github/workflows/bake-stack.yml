@@ -6,16 +6,20 @@
 #   dockerfile      Dockerfile 路径（如 Dockerfile.litellm-gateway）
 #   ghcr_image      GHCR 仓库（如 ghcr.io/link-seek/litellm-gateway）
 #   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../linkseed/litellm-gateway）
-#   tag_mode        date-sha | upstream
+#   tag_mode        date-sha | upstream | explicit
 #     date-sha      TAG=日期-shortsha（网关：上游 digest pin 在 Dockerfile FROM，手动 bump）
-#     upstream      跟上游 tag（tools/od）：upstream_repo + pattern + 最小年龄 + 资产检查
+#     upstream      跟上游 tag（tools）：upstream_repo + pattern + 最小年龄 + 资产检查
+#     explicit      TAG=explicit_tag（od：薄调用组装 <od>-oc<opencode> 后直传）
+#   explicit_tag    explicit 模式的 tag（tag_mode=explicit 时必填）
+#   build_args      docker build 的 --build-arg（多行，每行 ARG=值；空行忽略）
+#   push_temp_to_ghcr  temp tag 是否同步推 GHCR（od e2e 要验 GHCR 同版；默认 false）
 #   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
-#   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标
+#   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标；空=跳过 img 预检（od 过渡）
 #   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
 #   sync_paths      取的子目录（空格分隔，如 "stacks/litellm-gateway/config stacks/litellm-gateway/guard"）
 #   sync_dest       落到本仓的目录（取之前清空，如 litellm-gateway）
 #   fine_test_hook  细测 hook 脚本路径（仓内），空=只到预检（od 过渡态）
-#                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY，
+#                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY/TEMP_TAG，
 #                   exit 0 + 打印 PASS 行即过，非零即红。
 #   img_key_ttl     临 key 有效期秒（默认 21600）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、TS_API_KEY（mint）
@@ -43,6 +47,18 @@ on:
       tag_mode:
         required: true
         type: string
+      explicit_tag:
+        required: false
+        type: string
+        default: ""
+      build_args:
+        required: false
+        type: string
+        default: ""
+      push_temp_to_ghcr:
+        required: false
+        type: boolean
+        default: false
       upstream_repo:
         required: false
         type: string
@@ -60,8 +76,9 @@ on:
         type: string
         default: ""
       infra_stack_dir:
-        required: true
+        required: false
         type: string
+        default: ""
       fine_test_hook:
         required: false
         type: string
@@ -142,11 +159,15 @@ jobs:
           GH_TOKEN: ${{ secrets.gh_token }}
         run: |
           set -euo pipefail
+          normalize() { echo "${1#v}"; }
           if [ "${{ inputs.tag_mode }}" = "date-sha" ]; then
             TAG="$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
             echo "Tag: $TAG（上游 digest pin 见 Dockerfile FROM）"
+          elif [ "${{ inputs.tag_mode }}" = "explicit" ]; then
+            TAG="$(normalize "${{ inputs.explicit_tag }}")"
+            [ -n "$TAG" ] || { echo "FAIL: explicit 模式需要 explicit_tag"; exit 1; }
+            echo "Resolved explicit: ${TAG}"
           elif [ "${{ inputs.tag_mode }}" = "upstream" ]; then
-            normalize() { echo "${1#v}"; }
             TAG=""
             CUTOFF="$(date -u -d "${{ inputs.upstream_min_age_days }} days ago" +%Y-%m-%dT%H:%M:%SZ)"
             while read -r T S; do
@@ -177,10 +198,17 @@ jobs:
 
       - name: Build（本地 tag，不推；版本全由上游 resolve 定，不读 pin）
         id: build
+        env:
+          BUILD_ARGS_IN: ${{ inputs.build_args }}
         run: |
           set -euo pipefail
           TAG="${{ steps.upstream.outputs.tag }}"
-          docker build -f "${{ inputs.dockerfile }}" -t "${{ env.SWR_IMAGE }}:${TAG}" .
+          BUILD_ARGS=()
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            BUILD_ARGS+=(--build-arg "$line")
+          done <<< "$BUILD_ARGS_IN"
+          docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
 
@@ -193,13 +221,20 @@ jobs:
           TEMP="ci-$GITHUB_RUN_ID"
           docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
           docker push "${{ env.SWR_IMAGE }}:$TEMP"
-          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
+          DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
+          if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+            docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
+            docker push "${{ env.GHCR_IMAGE }}:$TEMP"
+            DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
+          fi
+          DIGEST="$(docker buildx imagetools inspect "$DIGEST_SOURCE" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
           echo "temp tag $TEMP -> $DIGEST"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+          echo "DIGEST_SOURCE=$DIGEST_SOURCE" >> "$GITHUB_ENV"
 
       - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
-        if: env.skip != 'true'
+        if: env.skip != 'true' && inputs.infra_stack_dir != ''
         run: |
           set -euo pipefail
           curl -fsSL https://tailscale.com/install.sh | sh
@@ -232,7 +267,7 @@ jobs:
           tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'))"
 
       - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
-        if: env.skip != 'true'
+        if: env.skip != 'true' && inputs.infra_stack_dir != ''
         run: |
           set -euo pipefail
           START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
@@ -244,7 +279,7 @@ jobs:
             -f ssh_transport="tailscale"
 
       - name: 轮询 infra 部署结论（按 node_tag 核对，fail-closed）
-        if: env.skip != 'true'
+        if: env.skip != 'true' && inputs.infra_stack_dir != ''
         run: |
           set -euo pipefail
           EXPECTED_NODE_TAG="host:${IMG_TAG:?IMG_TAG 未设置，无法核对预检 run}"
@@ -288,9 +323,10 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SWR_USER: ${{ secrets.SWR_LOGIN_USER }}
           SWR_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+          TEMP_TAG: ci-${{ github.run_id }}
         run: |
           set -euo pipefail
-          export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}"
+          export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}" TEMP_TAG
           bash "${{ inputs.fine_test_hook }}"
 
       - name: temp digest 转正式版（retag 不 rebuild；非 main 分支只试不发）
@@ -298,12 +334,19 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
+          SOURCE="${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
           docker buildx imagetools create \
             -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
-            "${{ env.SWR_IMAGE }}@$DIGEST"
-          docker buildx imagetools create \
-            -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
-            "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
+            "$SOURCE"
+          if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+            docker buildx imagetools create \
+              -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
+              "$SOURCE"
+          else
+            docker buildx imagetools create \
+              -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
+              "$SOURCE" || echo "GHCR retag skipped (org policy, SWR 为主)"
+          fi
           echo "released $TAG $DIGEST"
 
       - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
