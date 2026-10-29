@@ -10,8 +10,6 @@
 #     date-sha      TAG=日期-shortsha（网关：上游 digest pin 在 Dockerfile FROM，手动 bump）
 #     upstream      跟上游 tag（tools/od）：upstream_repo + pattern + 最小年龄 + 资产检查
 #   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
-#   pin_file        tag 落账文件（如 .upstream-tools-tag），空=不落账（网关）
-#   pin_arg         Dockerfile 里跟随的 ARG 名（如 ARG OPENCODE_TAG），空=不比对不回写（网关）
 #   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标
 #   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
 #   sync_paths      取的子目录（空格分隔，如 "stacks/litellm-gateway/config stacks/litellm-gateway/guard"）
@@ -25,7 +23,7 @@
 # 固定四拍：build（temp tag）→ img 预检（infra 部署到本机标签，只装+启动自测）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
 # 安全门：只有 main 分支才转正式 tag；分支 dispatch 只跑到细测（TRIAL-ONLY），合前可验骨架本身。
-# 不做的事：dispatch 参数只当信使，正本是 git 里的 pin（sync-back 在转正后回写）。
+# 版本全由上游 resolve 定（dispatch 参数或自动最新），不读 pin 不回写；审计靠 run 日志。
 
 on:
   workflow_call:
@@ -58,14 +56,6 @@ on:
         type: string
         default: "3"
       upstream_asset_url:
-        required: false
-        type: string
-        default: ""
-      pin_file:
-        required: false
-        type: string
-        default: ""
-      pin_arg:
         required: false
         type: string
         default: ""
@@ -185,21 +175,11 @@ jobs:
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
 
-      - name: Build（本地 tag，不推；pin 超前不降级）
+      - name: Build（本地 tag，不推；版本全由上游 resolve 定，不读 pin）
         id: build
         run: |
           set -euo pipefail
           TAG="${{ steps.upstream.outputs.tag }}"
-          if [ -n "${{ inputs.pin_file }}" ] && [ -n "${{ inputs.pin_arg }}" ]; then
-            PINNED="$(grep -oP "^${{ inputs.pin_arg }}=\K.+" "${{ inputs.dockerfile }}" | head -n1 || true)"
-            if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ]; then
-              echo "schedule: upstream 无变化（$TAG），跳过重打"
-              echo "skip=true" >> "$GITHUB_ENV"
-              exit 0
-            fi
-            NEWER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | tail -n1)"
-            if [ "$NEWER" != "$TAG" ]; then echo "pin $PINNED ahead of resolved $TAG, build pin instead"; TAG="$NEWER"; fi
-          fi
           docker build -f "${{ inputs.dockerfile }}" -t "${{ env.SWR_IMAGE }}:${TAG}" .
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
@@ -325,20 +305,6 @@ jobs:
             -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
             "${{ env.SWR_IMAGE }}@$DIGEST" || echo "GHCR retag skipped (org policy, SWR 为主)"
           echo "released $TAG $DIGEST"
-
-      - name: sync-back 落账（正本回写；dispatch 只当信使）
-        if: env.skip != 'true' && github.ref == 'refs/heads/main' && inputs.pin_file != '' && inputs.pin_arg != ''
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.build.outputs.tag }}"
-          sed -i "s/^${{ inputs.pin_arg }}=.*/${{ inputs.pin_arg }}=${TAG}/" "${{ inputs.dockerfile }}"
-          echo "${TAG}" > "${{ inputs.pin_file }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ inputs.dockerfile }}" "${{ inputs.pin_file }}"
-          git diff --cached --quiet || git commit -m "chore(${{ inputs.image_slug }}): 跟进 ${TAG}"
-          git pull --rebase origin "${GITHUB_REF_NAME:-main}" || { echo "FAIL: rebase 冲突，人工处理 pin 文件"; exit 1; }
-          git push
 
       - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
         if: always() && env.skip != 'true'
