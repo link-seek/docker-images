@@ -4,11 +4,9 @@ name: bake-tools
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
 # 单 runner 全链：build（记 digest，只推 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
 #   → 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机跳过，prod 全量覆盖）→ 绿才 push 正式版 + pin 回写。
-# 触发：每周一巡检上游 tag（只采用发布超 3 天且二进制资产存在的）＋ main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动。
+# 触发：main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动（周一巡检已关，上游更新靠人发现手点）。
 # 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
-  schedule:
-    - cron: "0 2 * * 1"
   push:
     branches: [main]
     paths:
@@ -28,7 +26,7 @@ on:
         type: string
         default: ""
       force:
-        description: "强制重打（true 则跳过 schedule 的“无变化跳过”检查；只影响本次构建，不改 pin）"
+        description: "强制重打（true 则跳过“无变化跳过”检查；只影响本次构建，不改 pin）"
         required: false
         type: choice
         options: ["false", "true"]
