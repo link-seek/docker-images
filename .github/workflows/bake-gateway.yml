@@ -15,7 +15,7 @@ on:
       - .github/workflows/bake-stack.yml
 
 permissions:
-  contents: write # sync-back 回写（网关暂无 pin 文件，骨架统一要写权限）
+  contents: read
   packages: write
 
 jobs:
