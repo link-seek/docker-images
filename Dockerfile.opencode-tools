@@ -87,6 +87,12 @@ RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown
  && oci --version \
  && markitdown --version
 
+# crypto 后升层（与 oci-cli 的上古 pin 解耦）：CVE-2026-26007 等要求新版；
+# oci-cli 若 import 已删 API 会在这里冒烟失败，届时改白名单认，不硬升。
+RUN pip3 install --no-cache-dir --break-system-packages --upgrade "cryptography==50.0.2" "pyOpenSSL==26.4.0" \
+ && python3 -c "import cryptography, OpenSSL; print('crypto-ok', cryptography.__version__)" \
+ && oci --version
+
 # wrangler + agent-browser + lmnr-cli：npm 全局
 RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && wrangler --version \
