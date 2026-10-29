@@ -1,213 +1,56 @@
 name: bake-od
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 
-# 每周一 02:00 UTC 巡检上游 nexu-io/od 的 GHCR tag（只采用发布超 3 天的），有新 tag 才 build，
-# 先推 ci-<run> temp tag；产品 e2e + 可拉取性绿后才转正式 tag/latest（红不转）。
-# 注意：OPENCODE_TAG 不跟最新版，pin 死在 Dockerfile.opendesign 的 ARG 默认值里（OD 与 CLI 版本对死，
-# 如 --dir/--pure flag 差异）；升 opencode 只走手动 workflow_dispatch，见 README。
-# sync-back：手动 dispatch 传的 tag 只当信使，正本是 git 里的 pin 值；
-# 构建成功后实际采用的 tag 自动回写 .upstream-od-tag + Dockerfile ARG pin，有变化才提交。
+# 薄调用：OD 镜像只声明参数，构建/细测/转正逻辑全在 bake-stack.yml（共用骨架），照 bake-gateway。
+# 版本全由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）；combo 在薄调用组装后直传
+# explicit tag。审计靠 run 日志：不落 pin、不 sync-back；周一上游巡检已关。
+# 构建后先推 ci-<run> temp tag；细测（SWR 候选校验 + 产品 e2e）绿了才转正式 tag/latest（红不转）。
+# push 触发保留占位，但版本必须手传，空参数跳过（避免拿 Dockerfile 旧默认值覆盖 latest）。
 on:
-  schedule:
-    # 每周一 02:00 UTC 巡检一次（OD 发版不算频繁，不值得天天跟）
-    - cron: "0 2 * * 1"
-  repository_dispatch:
-    types: [upstream-od-image]
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.opendesign
+      - docker/opendesign/**
+      - docker/opencode-shim
+      - docker/opencode.jsonc
+      - .github/workflows/bake-od.yml
+      - .github/workflows/bake-stack.yml
   workflow_dispatch:
     inputs:
       od_tag:
-        description: "上游 OD tag（信使参数：空则自动取最新；形如 0.24.1，无 v 前缀。构建成功后回写 .upstream-od-tag + Dockerfile pin）"
-        required: false
+        description: "上游 OD tag（必填，形如 0.26.0，无 v 前缀）"
+        required: true
         type: string
-        default: ""
       opencode_tag:
-        description: "OpenCode 版本（信使参数：空则用 Dockerfile.opendesign 里 ARG OPENCODE_TAG 的 pin 值；只在 OD 要求时手动 bump，成功后回写 pin）"
-        required: false
+        description: "OpenCode 版本（必填，形如 2.0.6；须与 OD 版本对死）"
+        required: true
         type: string
-        default: ""
-      force:
-        description: "强制重打（true 则跳过“无变化跳过”检查；只影响本次构建，不改 pin）"
-        required: false
-        type: choice
-        options: ["false", "true"]
-        default: "false"
 
 permissions:
-  contents: write # 回写 .upstream-od-tag
+  contents: read
   packages: write # push ghcr.io/link-seek/opendesign
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/link-seek/opendesign
-  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign
-  # e2e 的 byok 后端：商家已发布的 litellm 网关（无业务断言，只负责免费档上游转发）。
-  LITELLM_IMAGE: ghcr.io/link-seek/litellm-gateway:latest
-
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Resolve upstream OD tag
-        id: upstream
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 以 GHCR 上的镜像 tag 为准（形如 0.24.x，无 v 前缀；git tag 另有前缀，不能直接用）。
-          # 滞后策略：只采用发布时间超过 3 天的 tag，避开刚发版的 hotfix churn。
-          normalize() { echo "${1#v}"; }
-          if [ -n "${{ inputs.od_tag }}" ]; then
-            OD_TAG="$(normalize "${{ inputs.od_tag }}")"
-          elif [ "${{ github.event_name }}" = "repository_dispatch" ] && [ -n "${{ github.event.client_payload.tag }}" ]; then
-            OD_TAG="$(normalize "${{ github.event.client_payload.tag }}")"
-          else
-            CUTOFF="$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)"
-            OD_TAG=""
-            while read -r T D; do
-              if [[ "${D}" < "${CUTOFF}" ]]; then OD_TAG="${T}"; break; fi
-            done < <(gh api 'orgs/nexu-io/packages/container/od/versions?per_page=100' \
-              --jq '([.[] | {tags: .metadata.container.tags, created: .created_at} as $v | $v.tags[]? as $t | {tag: $t, created: $v.created} | select(.tag | test("^0\\.[0-9]+\\.[0-9]+$"))] | sort_by(.tag | split(".") | map(tonumber)) | reverse | .[] | "\(.tag) \(.created)")')
-            if [ -z "${OD_TAG}" ]; then echo "no tag older than 3 days."; fi
-          fi
-          if [ -n "${{ inputs.opencode_tag }}" ]; then
-            OPENCODE_TAG="$(normalize "${{ inputs.opencode_tag }}")"
-          else
-            OPENCODE_TAG="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opendesign | head -n1)"
-          fi
-          echo "od_tag=${OD_TAG}" >> "$GITHUB_OUTPUT"
-          echo "opencode_tag=${OPENCODE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "combo=${OD_TAG}-oc${OPENCODE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "upstream combo: ${OD_TAG}-oc${OPENCODE_TAG}"
-
-      - name: Skip if unchanged
-        id: check
-        run: |
-          PREV="$(cat .upstream-od-tag 2>/dev/null || true)"
-          FORCE="${{ inputs.force }}"
-          COMBO="${{ steps.upstream.outputs.combo }}"
-          if [ -z "${{ steps.upstream.outputs.od_tag }}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "no qualifying tag, skip."
-          elif [ "${PREV}" = "${COMBO}" ] && [ "${FORCE}" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "no new upstream release (still ${PREV}), skip."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Buildx
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to SWR via token
-        if: steps.check.outputs.skip != 'true'
-        env:
-          HCLOUD_AK: ${{ secrets.PROD_HCLOUD_AK }}
-          HCLOUD_SK: ${{ secrets.PROD_HCLOUD_SK }}
-        run: |
-          mkdir -p ~/.docker
-          curl -fsSL -o /tmp/hcloud.tgz "https://ap-southeast-3-hwcloudcli.obs.ap-southeast-3.myhuaweicloud.com/cli/latest/huaweicloud-cli-linux-amd64.tar.gz"
-          tar -xzf /tmp/hcloud.tgz -C /tmp
-          echo y | /tmp/hcloud SWR CreateAuthorizationToken --cli-region=cn-north-9 --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" > /tmp/swr.json 2> /tmp/hcloud.err; echo "hcloud exit: $?"; wc -c /tmp/swr.json; head -c 120 /tmp/hcloud.err
-          python3 -c "import json,os,re; t=json.loads(re.search(r'\{.*\}', open('/tmp/swr.json').read(), re.S).group(0)); assert t.get('auths'); c=os.path.expanduser('~/.docker/config.json'); d=json.load(open(c)) if os.path.exists(c) else {}; d.setdefault('auths',{}).update(t['auths']); json.dump(d,open(c,'w')); print('swr auth merged')"
-
-      - name: Login to GHCR
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push temp tag（正式版等产品 e2e 绿了再转）
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.opendesign
-          push: true
-          build-args: |
-            OD_TAG=${{ steps.upstream.outputs.od_tag }}
-            OPENCODE_TAG=${{ steps.upstream.outputs.opencode_tag }}
-          tags: |
-            ${{ env.IMAGE }}:ci-${{ github.run_id }}
-            ${{ env.SWR_IMAGE }}:ci-${{ github.run_id }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
-          sbom: false
-
-      - name: Resolve candidate digest（以 GHCR 同版构建为准，e2e/转正都用这一份）
-        id: candidate
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          set -euo pipefail
-          CANDIDATE="${{ env.IMAGE }}:ci-${{ github.run_id }}"
-          DIGEST="$(docker buildx imagetools inspect "$CANDIDATE" --format '{{json .Manifest}}' \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
-          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "candidate $CANDIDATE -> $DIGEST"
-
-      - name: 产品 e2e（GHCR 同版存活＋免费档 byok＋对话三件套；红不转正式 tag）
-        if: steps.check.outputs.skip != 'true'
-        env:
-          GO_BACKEND_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          E2E_IMAGE: ${{ steps.candidate.outputs.candidate }}
-          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
-          LITELLM_IMAGE: ${{ env.LITELLM_IMAGE }}
-        run: bash docker/opendesign/e2e.sh
-
-      - name: Pin 可拉取性（候选 digest；缺 SWR 凭证则跳过，沿用旧逻辑）
-        if: steps.check.outputs.skip != 'true'
-        env:
-          SWR_U: ${{ secrets.SWR_LOGIN_USER }}
-          SWR_P: ${{ secrets.SWR_LOGIN_PASS }}
-          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
-        run: |
-          set -euo pipefail
-          if [ -z "$SWR_U" ] || [ -z "$SWR_P" ]; then
-            echo "SKIP: SWR 凭证未配；GHCR 存活已由 e2e 验，SWR 侧 pin 可拉取性留待凭证补齐"
-            exit 0
-          fi
-          echo "$SWR_P" | docker login "${{ env.SWR_REGISTRY }}" -u "$SWR_U" --password-stdin
-          CANDIDATE="${{ env.SWR_IMAGE }}:ci-${{ github.run_id }}"
-          docker pull -q "$CANDIDATE"
-          GOT="$(docker image inspect "$CANDIDATE" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')"
-          if [ "$GOT" != "$CANDIDATE_DIGEST" ]; then
-            echo "FAIL: SWR 候选 digest=$GOT，与刚构建的 $CANDIDATE_DIGEST 不一致"; exit 1
-          fi
-          echo "OK: 候选 pin 精确可拉取（$CANDIDATE == $CANDIDATE_DIGEST）"
-
-      - name: temp digest 转正式版（retag 不 rebuild；e2e＋可拉取性绿才到这一步）
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          set -euo pipefail
-          COMBO="${{ steps.upstream.outputs.combo }}"
-          DIGEST="${{ steps.candidate.outputs.digest }}"
-          SOURCE="${{ env.IMAGE }}@${DIGEST}"
-          docker buildx imagetools create \
-            -t "${{ env.IMAGE }}:${COMBO}" -t "${{ env.IMAGE }}:latest" \
-            -t "${{ env.SWR_IMAGE }}:${COMBO}" -t "${{ env.SWR_IMAGE }}:latest" \
-            "$SOURCE"
-          echo "released ${COMBO} ${DIGEST}"
-
-      - name: Record upstream tag
-        # sync-back 落账：本次实际采用的 tag 在构建成功后回写 git（正本），
-        # dispatch 参数只当信使。有变化才提交，无变化不空提交。
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          OD_TAG="${{ steps.upstream.outputs.od_tag }}"
-          OPENCODE_TAG="${{ steps.upstream.outputs.opencode_tag }}"
-          echo -n "${{ steps.upstream.outputs.combo }}" > .upstream-od-tag
-          # Dockerfile pin 前移：只改 ARG 默认值行，不动其他内容
-          sed -i "s/^ARG OD_TAG=.*/ARG OD_TAG=${OD_TAG}/" Dockerfile.opendesign
-          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${OPENCODE_TAG}/" Dockerfile.opendesign
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .upstream-od-tag Dockerfile.opendesign
-          git diff --staged --quiet || git commit -m "chore: track upstream ${{ steps.upstream.outputs.combo }}"
-          git push
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: opendesign
+      dockerfile: Dockerfile.opendesign
+      ghcr_image: ghcr.io/link-seek/opendesign
+      swr_image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign
+      tag_mode: explicit
+      explicit_tag: ${{ format('{0}-oc{1}', inputs.od_tag, inputs.opencode_tag) }}
+      build_args: |
+        OD_TAG=${{ inputs.od_tag }}
+        OPENCODE_TAG=${{ inputs.opencode_tag }}
+      push_temp_to_ghcr: true
+      fine_test_hook: docker/opendesign/fine-test.sh
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}

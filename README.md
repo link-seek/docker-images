@@ -9,13 +9,14 @@
 | `ghcr.io/link-seek/opendesign:<od>-oc<oc>`（+ `latest`）| 官方 `ghcr.io/nexu-io/od` + 固定版 `opencode` 二进制 + `--dir` shim，开箱即用，不再挂宿主机 CLI |
 | `swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign`（同 tag）| 国内加速镜像（SWR 华北九区组织数配额满，暂用个人命名空间） |
 
-## 为什么 OpenCode 版本要 pin 死
+## 为什么 OpenCode 版本要对死
 
 OpenDesign 调 CLI 参数是按版本写死的（如 `--dir`、`--pure`），新版 opencode 会直接报错
-（`Unrecognized flag: --pure`，`--dir` 靠 shim 硬转）。所以 `OPENCODE_TAG` 默认 pin 在
-`Dockerfile.opendesign` 里（当前 `2.0.6` 配 `OD 0.24.1`），流水线只巡检 OD 上游，不跟 opencode 最新版。
+（`Unrecognized flag: --pure`，`--dir` 靠 shim 硬转）。所以 OD / opencode 版本必须成对升级。
+`Dockerfile.opendesign` 的 ARG 默认值（当前 `2.0.6` 配 `OD 0.24.1`）只给本地构建兜底，
+CI 不读默认值：版本全由手动 dispatch 必填传入（周一巡检已关，审计靠 run 日志）。
 
-升级 opencode 的唯一入口：手动 `workflow_dispatch` 传 `opencode_tag`，并先在测试容器里确认
+升级 opencode 的唯一入口：手动 `workflow_dispatch` 同时传 `od_tag` / `opencode_tag`，并先在测试容器里确认
 daemon 日志 `test:agent ... ok` 再切生产。
 
 ## 本地用法（HW21）
@@ -43,13 +44,15 @@ services:
 
 ## 手动触发
 
-Actions → bake-od → Run workflow，可指定 `od_tag` / `opencode_tag` / `force`。
-外部巡检可用 `repository_dispatch`（event type `upstream-od-image`，payload `{"tag": "0.25.0"}`）。
+Actions → bake-od → Run workflow，必填 `od_tag` / `opencode_tag`（combo 自动组装为 `<od>-oc<opencode>`）。
+周一巡检已关，也没有 `repository_dispatch`；上游更新靠人发现后手点。main 上的 push 触发保留占位，
+但版本必须手传，空参数跳过（不拿 Dockerfile 旧默认值覆盖 `latest`）。
 
-* 行为门：构建后自调 `docker/opendesign/e2e.sh`（GHCR 同版存活 → litellm 免费档 byok 后端 →
+* 行为门：构建后 `docker/opendesign/fine-test.sh` 先核 SWR 候选 pin 可拉取，再原样跑
+  `docker/opendesign/e2e.sh`（GHCR 同版存活 → litellm 免费档 byok 后端 →
   建 project→run→轮询断言：单聊/切模型/多轮/免费档）。
-* 放行：e2e 绿 + 候选 digest 可拉取（缺 SWR 凭证则跳过）才把 `ci-<run>` temp digest 转正式 tag
-  并回写 pin；红则只留临时 tag，不推 `latest`/正式 tag。
+* 放行：细测绿才把 `ci-<run>` temp digest 转正式 tag/latest；红则只留临时 tag，不推 `latest`/正式 tag。
+* 不做 sync-back：仓里不记版本，审计看 run 日志（bake-stack 共用骨架）。
 * 产品行为门在商家侧闭环；infra 快递侧只剩运单 schema + 送达探针（见 #37）。
 
 ## opencode-tools（glibc 线）
