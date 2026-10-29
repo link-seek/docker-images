@@ -9,6 +9,15 @@
 
 本容器内各云 CLI 已直接配好凭证。需要查云资源时直接在容器内执行对应 CLI。不要向用户索取任何密钥。所有查询优先只读。执行变更类操作前必须先向用户确认。
 
+密钥验证白名单（只读验证可直接跑，不用问；名单外的命令先问）：
+- `gh auth status`（GitHub 身份）
+- `hcloud ECS ListServersDetails --limit 1 --cli-region=cn-north-4`（华为云连通）
+- `wrangler whoami`（Cloudflare 身份）
+- SMTP 建连（`send-mail` 发探针邮件走默认垃圾桶规则；批量群发先确认）
+- `tailscale status`（本节点在线）
+- CF 记忆 key：调一次 bge-m3 embedding（1024 维回即通）
+- 写操作（建 zone/改 DNS/删东西/发 Worker/转 tag）除 Cloudflare 授权范围外一律先确认。
+
 可用工具：
 
 - 铁律：所有源在国外的下载/拉取（GitHub release、ghcr.io 镜像、外网文件、pip/npm/go 等境外源），一律优先走 `url2hc` 中转，禁止直连硬扛。直连只有当中转失败或不适用时才允许。
