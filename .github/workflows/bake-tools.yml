@@ -3,7 +3,8 @@ name: bake-tools
 
 # opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
 # 单 runner 全链：build（记 digest，只推 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
-#   → 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机跳过，prod 全量覆盖）→ 绿才 push 正式版 + pin 回写。
+#   → 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机跳过，prod 全量覆盖）→ 绿才 push 正式版。
+# 版本全由 dispatch 必填传入，CI 不读 Dockerfile pin；审计靠 run 日志。
 # 触发：main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动（周一巡检已关，上游更新靠人发现手点）。
 # 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
@@ -16,25 +17,16 @@ on:
   workflow_dispatch:
     inputs:
       opencode_tag:
-        description: "官方 tag（信使参数：空则自动取最新，如 2.0.29，无 v 前缀也行；构建成功后回写 Dockerfile pin + .upstream-tools-tag）"
-        required: false
+        description: "官方 tag（必填，如 2.1.4，无 v 前缀也行）"
+        required: true
         type: string
-        default: ""
       opencode_mem_version:
-        description: "记忆插件版本（信使参数：空则用 Dockerfile 里 ARG OPENCODE_MEM_VERSION 的 pin 值；成功后回写 Dockerfile + opencode.jsonc plugins）"
-        required: false
+        description: "记忆插件版本（必填，如 2.31.1）"
+        required: true
         type: string
-        default: ""
-      force:
-        description: "强制重打（true 则跳过“无变化跳过”检查；只影响本次构建，不改 pin）"
-        required: false
-        type: choice
-        options: ["false", "true"]
-        default: "false"
 
 permissions:
-  contents: write # 回写分支（sync-back 开 PR，不直推 main）
-  pull-requests: write # sync-back 开 pin PR
+  contents: read
   packages: write # push ghcr.io/link-seek/opencode-tools
 
 env:
@@ -57,40 +49,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve upstream tag (>3d + 二进制资产存在）
+      - name: Resolve 版本（全必填传入，不读 pin 不自动取最新）
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           normalize() { echo "${1#v}"; }
-          tag_date() {
-            gh api "repos/anomalyco/opencode/commits/$1" --jq '.commit.committer.date' 2>/dev/null
-          }
-          if [ -n "${{ inputs.opencode_tag }}" ]; then
-            TAG="$(normalize "${{ inputs.opencode_tag }}")"
-          else
-            CUTOFF="$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)"
-            TAG=""
-            while read -r T S; do
-              D="$(tag_date "$S")"
-              [ -z "$D" ] && continue
-              if [[ "$D" < "$CUTOFF" ]]; then TAG="$T"; break; fi
-              echo "skip $T ($D, too fresh)"
-            done < <(gh api 'repos/anomalyco/opencode/tags?per_page=20' \
-              --jq '[.[] | {tag: .name | ltrimstr("v"), sha: .commit.sha} | select(.tag | test("^2\\.[0-9]+\\.[0-9]+$"))] | sort_by(.tag | split(".") | map(tonumber)) | reverse | .[] | "\(.tag) \(.sha)"' | head -5)
-          fi
-          [ -z "$TAG" ] && { echo "no tag older than 3 days."; exit 1; }
+          TAG="$(normalize "${{ inputs.opencode_tag }}")"
+          MEM_VERSION="$(normalize "${{ inputs.opencode_mem_version }}")"
+          [ -n "$TAG" ] || { echo "opencode_tag 必填"; exit 1; }
+          [ -n "$MEM_VERSION" ] || { echo "opencode_mem_version 必填"; exit 1; }
           # 二进制资产必须存在（x64 baseline；tag 无 release 资产就地报错，不静默）
           curl -fsSL -o /dev/null "https://opencode.ai/files/bin/${TAG}/opencode-linux-x64-baseline.tar.gz" \
             || { echo "binary asset missing for ${TAG}"; exit 1; }
-          # 记忆插件版本：dispatch 只当信使，空则读 git 里 Dockerfile 的 pin 正本
-          if [ -n "${{ inputs.opencode_mem_version }}" ]; then
-            MEM_VERSION="${{ inputs.opencode_mem_version }}"
-            MEM_VERSION="${MEM_VERSION#v}"
-          else
-            MEM_VERSION="$(grep -oP '^ARG OPENCODE_MEM_VERSION=\K.+' Dockerfile.opencode-tools | head -n1)"
-          fi
-          [ -n "$MEM_VERSION" ] || { echo "cannot resolve opencode-mem version"; exit 1; }
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "mem_version=${MEM_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved: ${TAG} + opencode-mem@${MEM_VERSION}"
@@ -102,31 +73,15 @@ jobs:
       - name: Login to SWR
         run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
 
-      - name: Build（本地 tag，不推）
+      - name: Build（本地 tag，不推；版本全由 dispatch 必填传入）
         id: build
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
-          PINNED="$(grep -oP '^ARG OPENCODE_TAG=\K.+' Dockerfile.opencode-tools | head -n1)"
-          # 定时巡检无新上游时跳过： digest pin 指向即稳定版，周一重打只会制造无人引用的悬空 digest
-          # （SWR 会 GC 未被 tag 引用的 manifest，旧 pin 当场腐坏）。push/dispatch 恒打（代码变了必须验）。
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TAG" = "$PINNED" ] && [ "${{ inputs.force }}" != "true" ]; then
-            echo "schedule: upstream 无变化（$TAG），跳过重打，pin 保持有效"
-            echo "skip=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          # 取较新者：手动 bump 超前时不降级（网关式每次都打 + 不开倒车）
-          NEWER="$(printf '%s\n%s\n' "$TAG" "$PINNED" | sort -V | tail -n1)"
-          if [ "$NEWER" != "$TAG" ]; then echo "pin $PINNED ahead of resolved $TAG, build pin instead"; TAG="$NEWER"; fi
           MEM_VERSION="${{ steps.upstream.outputs.mem_version }}"
           docker build --build-arg "OPENCODE_TAG=${TAG}" --build-arg "OPENCODE_MEM_VERSION=${MEM_VERSION}" \
             -f Dockerfile.opencode-tools -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG} + opencode-mem@${MEM_VERSION}"
-          # sync-back 落账：本次实际采用的 tag 回写 git 正本（dispatch 只当信使）
-          sed -i "s/^ARG OPENCODE_TAG=.*/ARG OPENCODE_TAG=${TAG}/" Dockerfile.opencode-tools
-          sed -i "s/^ARG OPENCODE_MEM_VERSION=.*/ARG OPENCODE_MEM_VERSION=${MEM_VERSION}/" Dockerfile.opencode-tools
-          sed -i -E "s/\"plugins\": \[\"opencode-mem@[0-9.]+\"\]/\"plugins\": [\"opencode-mem@${MEM_VERSION}\"]/" docker/opencode-tools/opencode.jsonc
-          echo "${TAG}" > .upstream-tools-tag
 
       - name: 安装 goss/dgoss（pin 版，sha256 校验）
         if: env.skip != 'true'
@@ -364,22 +319,3 @@ jobs:
           docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
           echo logged-out
 
-      - name: Commit pin（sync-back 开 PR，不直推 main）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile.opencode-tools .upstream-tools-tag docker/opencode-tools/opencode.jsonc
-          if git diff --cached --quiet; then
-            echo "pin 无变化，无需提交"
-            exit 0
-          fi
-          BRANCH="sync-back/tools-${{ steps.build.outputs.tag }}-mem-${{ steps.upstream.outputs.mem_version }}"
-          git checkout -b "$BRANCH"
-          git commit -m "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}"
-          git push -u origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" \
-            --title "chore(tools): 跟进 opencode ${{ steps.build.outputs.tag }} + mem ${{ steps.upstream.outputs.mem_version }}" \
-            --body "sync-back 落账（bake run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} 全绿）。合入后 pin 生效。" \
-          || echo "PR 创建失败（同名分支已存在时请人工看一眼）"

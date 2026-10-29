@@ -66,17 +66,15 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 为什么不用官方镜像（Alpine/musl）：opencode-mem 的 onnxruntime/turso 原生件缺
 `fcntl64`，musl 上启动即死且静默（2026-10 实证）。glibc 线是记忆系统的前提。
 
-* 版本：`OPENCODE_TAG`（默认见 Dockerfile）、`OPENCODE_MEM_VERSION`（与
-  `docker/opencode-tools/opencode.jsonc` 同值，CI 一致性检查）。
-* 跟随：每周一扫 anomalyco git tag（v2.0.x，超 3 天＋二进制资产存在才打），`force` 重打。
-* 回写：`.upstream-tools-tag`＋Dockerfile pin 前移，main 留痕。
-* 测试：`test-memory.yml`（opencode＋烘入插件＋网关＋Ollama 跨会话召回、工具 parity 矩阵、
-  烘焙文件密钥卫生扫描）全绿才算交付。
-* 部署侧（compose/`.env`/pin）在 infra 仓，本仓只管构建。
+* 版本：全由 dispatch 必填传入（`opencode_tag`＋`opencode_mem_version`），CI 不读 Dockerfile 默认值；Dockerfile 默认值只给本地构建兜底。
+* 跟随：周一巡检已关，上游更新靠人发现后手点 dispatch 传版。
+* 审计：bake run 日志记 tag/digest（90 天）；仓里不记版本（无 sync-back）。
+* 测试：dgoss 成品自检＋双 runner 预检＋细测全绿才转正式版。
+* 部署侧（compose/`.env`）在 infra 仓，本仓只管构建。
 
 ## 手动触发
 
-Actions → bake-tools → Run workflow，可指定 `opencode_tag` / `force`。
+Actions → bake-tools → Run workflow，必填 `opencode_tag` / `opencode_mem_version`。
 
 ## 分工：商家 vs 快递（2026-10-18，与 infra 仓 README 同源）
 
