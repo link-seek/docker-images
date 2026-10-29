@@ -99,7 +99,7 @@ on:
         required: true
 
 permissions:
-  contents: write # sync-back 回写 pin
+  contents: read
   packages: write # push 镜像
 
 env:
