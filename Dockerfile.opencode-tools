@@ -83,7 +83,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
 
 # oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
 # certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）
-RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown "certifi==2026.10.23" \
+RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown "certifi==2026.10.23" "cryptography==50.0.2" "pyOpenSSL==26.4.0" \
  && oci --version \
  && markitdown --version
 
