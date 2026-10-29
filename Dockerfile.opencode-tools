@@ -47,11 +47,11 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
 # （基础运行时已在上一步装好：curl/git/python/ssh/msmtp/node，供下面各工具下载校验）
 
 # 版本 pin（沿用 Dockerfile.tools 验证过的版本）
-ARG GH_VERSION=2.97.0
-ARG ALIYUN_VERSION=3.3.16
+ARG GH_VERSION=2.103.3
+ARG ALIYUN_VERSION=3.5.2
 ARG OCI_SPEC=oci-cli
 ARG TERRAFORM_VERSION=1.16.5
-ARG AGENT_BROWSER_VERSION=0.39.0
+ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 
 # gh：官方 tarball（Go 静态二进制）
@@ -82,7 +82,8 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
  && printf 'y\n' | hcloud version
 
 # oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
-RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown \
+# certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）
+RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown "certifi==2026.10.23" \
  && oci --version \
  && markitdown --version
 
