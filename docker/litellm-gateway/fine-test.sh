@@ -27,5 +27,11 @@ sudo -E REMOTE_DIR=/root/stacks/litellm-gateway CANDIDATE_DIGEST="$DIGEST" \
   SWR_USER="$SWR_USER" SWR_PASS="$SWR_PASS" \
   bash "/tmp/canary-run.sh"
 identity "$CANARY"
-probe boot
+# canary-run.sh 只 up -d 不等就绪：轮换后冷启动，boot 最多等 5 分钟（10sx30）。
+for i in $(seq 1 30); do
+  if probe boot; then break; fi
+  echo "boot retry $i/30"
+  [ "$i" = "30" ] && exit 1
+  sleep 10
+done
 echo "ROTATE OK: master 轮换不影响透传"
