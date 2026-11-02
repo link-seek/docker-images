@@ -22,17 +22,26 @@ RUN test -f /app/models-denied.json \
  && echo 'guard denied OK'
 
 # tailscale：官方静态二进制（与 opencode-tools 同版本 pin；网关容器 userspace 入网用，无需 tun/NET_ADMIN）
+# 上游 litellm 底座无 apt-get/uname，用 ubuntu 阶段下载再 COPY（静态二进制，底座无关）。
 ARG TAILSCALE_VERSION=1.102.4
+FROM ubuntu:24.04 AS ts-fetch
+ARG TAILSCALE_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
  && ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
  && curl -fsSL -o /tmp/tailscale.tgz \
       "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
  && tar -xzf /tmp/tailscale.tgz -C /tmp \
- && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /usr/local/bin/tailscale \
- && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /usr/local/bin/tailscaled \
- && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
- && tailscale version
+ && mkdir -p /out && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /out/tailscale \
+ && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /out/tailscaled
+
+FROM ghcr.io/berriai/litellm@sha256:3def0387871a732a6d18b009576c4bf4313c54d448fa938a58f51cf189d1fa33
+
+USER root
+
+COPY --from=ts-fetch /out/tailscale /usr/local/bin/tailscale
+COPY --from=ts-fetch /out/tailscaled /usr/local/bin/tailscaled
+RUN tailscale version
 
 WORKDIR /app
 EXPOSE 4000
