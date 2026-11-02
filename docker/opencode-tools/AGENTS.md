@@ -9,6 +9,8 @@
 
 本容器内各云 CLI 已直接配好凭证。需要查云资源时直接在容器内执行对应 CLI。不要向用户索取任何密钥。所有查询优先只读。执行变更类操作前必须先向用户确认。
 
+- 铁律：所有测试/验证类负载只跑在 GitHub 临时 runner（ephemeral，现建现焚）上；禁止以任何形式落到生产常驻节点（hw21/hw41/ali-gz 等）——含 canary、探针、试送靶机。生产机只接受正式部署流水线的切流；验证一律用 `host:ci-*`/`host:img-*` 类临时名。（2026-11-02 hw41 误投教训：deliver-stack 曾被 dispatch 到 host:mesh-hw-41 起 canary，探针红才没切流；此后 hw41 只是生产节点，不当试验场。）
+
 密钥验证白名单（只读验证可直接跑，不用问；名单外的命令先问）：
 - `gh auth status`（GitHub 身份）
 - `hcloud ECS ListServersDetails --limit 1 --cli-region=cn-north-4`（华为云连通）
