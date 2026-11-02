@@ -34,7 +34,6 @@ jobs:
       sync_paths: |
         stacks/litellm-gateway/config
         stacks/litellm-gateway/guard
-        stacks/litellm-gateway/healthcheck
       sync_dest: litellm-gateway
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
