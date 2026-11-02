@@ -29,7 +29,8 @@ ARG TAILSCALE_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
  && ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
- && curl -fsSL -o /tmp/tailscale.tgz \
+ && echo "FETCH tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz (uname=$ARCH)" \
+ && curl -fsSL --retry 3 -o /tmp/tailscale.tgz \
       "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
  && tar -xzf /tmp/tailscale.tgz -C /tmp \
  && mkdir -p /out && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /out/tailscale \
