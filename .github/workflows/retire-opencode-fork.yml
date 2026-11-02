@@ -1,0 +1,89 @@
+name: retire-opencode-fork
+
+# 旧 fork xieyucheng123/opencode 退役收尾：归档 30 天后删库（最早 2026-12-03 UTC）。
+# 删库不可逆且会销毁 Discussions（#11 正被文档引用），三道门全过才删：
+#   1. 日期门：不到 2026-12-03 直接过（skip，不报错）；
+#   2. 迁移门：本仓 #2 必须已关闭，否则 skip；
+#   3. 状态门：目标必须仍是 archived（防误删解档复用的库）；404 视为已删成功。
+# 删库要 delete_repo 权限，GITHUB_TOKEN 做不到，用 secrets.RETIRE_FORK_PAT
+# （PAT 最小化：仅针对 xieyucheng123/opencode；缺密钥则失败提醒，不静默跳过）。
+# 手动触发：force=true 可跳过日期门（迁移门/密钥门照旧，用于演练）。
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "跳过日期门（迁移门+密钥门照旧）"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  issues: read
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: 日期门（2026-12-03 前直接过）
+        id: date
+        run: |
+          NOW="$(date -u +%s)"
+          CUTOFF="$(date -u -d 2026-12-03T00:00:00Z +%s)"
+          if [ "$NOW" -lt "$CUTOFF" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "未到 2026-12-03，跳过"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 迁移门（本仓 #2 必须已关闭）
+        id: track
+        if: steps.date.outputs.skip != 'true'
+        run: |
+          STATE="$(gh api repos/link-seek/docker-images/issues/2 --jq .state)"
+          echo "tracking #2 state: $STATE"
+          if [ "$STATE" != "closed" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "迁移未完成（#2 仍 open），跳过删库"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 状态门（目标须仍 archived；404 视为已删）
+        id: target
+        if: steps.date.outputs.skip != 'true' && steps.track.outputs.skip != 'true'
+        run: |
+          if ! INFO="$(gh api repos/xieyucheng123/opencode 2>/dev/null)"; then
+            echo "目标库已不存在，视为完成"
+            echo "gone=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "gone=false" >> "$GITHUB_OUTPUT"
+          ARCHIVED="$(echo "$INFO" | jq -r .archived)"
+          echo "archived: $ARCHIVED"
+          if [ "$ARCHIVED" != "true" ]; then
+            echo "目标库不在 archived 态，拒绝删除（可能已解档复用），请人工确认"
+            exit 1
+          fi
+
+      - name: 删库
+        if: steps.date.outputs.skip != 'true' && steps.track.outputs.skip != 'true' && steps.target.outputs.gone != 'true'
+        env:
+          RETIRE_PAT: ${{ secrets.RETIRE_FORK_PAT }}
+        run: |
+          if [ -z "$RETIRE_PAT" ]; then
+            echo "缺 secrets.RETIRE_FORK_PAT（需 delete_repo 权限的 PAT），请配好密钥后重跑"
+            exit 1
+          fi
+          GH_TOKEN="$RETIRE_PAT" gh repo delete xieyucheng123/opencode --yes
+          if gh api repos/xieyucheng123/opencode >/dev/null 2>&1; then
+            echo "删除后仍可访问，失败"
+            exit 1
+          fi
+          echo "xieyucheng123/opencode 已删除"
