@@ -37,6 +37,16 @@ command:
   send-mail:
     exec: "send-mail --help"
     exit-status: 0
+    stdout:
+      - '-m'
+
+  md2html:
+    exec: "python3 /usr/local/lib/send-mail/md2html.py"
+    exit-status: 2
+
+  md2html-convert:
+    exec: "printf '# T\\n\\n| a | b |\\n|---|---|\\n| 1 | 2 |\\n\\n> q\\n' > /tmp/goss-md-test.md && python3 /usr/local/lib/send-mail/md2html.py /tmp/goss-md-test.md /tmp/goss-md-test.html && grep -c 'style=\"' /tmp/goss-md-test.html"
+    exit-status: 0
 
   msmtp:
     exec: "msmtp --version"
