@@ -7,9 +7,14 @@
 #   send-mail <收件人> <主题> [正文...]
 #   echo "正文" | send-mail <收件人> <主题>
 #   send-mail <收件人> <主题> -f <文件>
+#   send-mail <收件人> <主题> -m <文件.md>   # markdown 转 HTML 富文本（multipart，纯文本兜底）
 #   send-mail --help
 # 收件人多个用逗号或空格分隔。缺配置时报错说明缺哪个变量。
+# 说明：-m 只用标准库转换，渲染发生在收件端（Outlook/浏览器自带字体），容器侧无需中文字体。
 set -eu
+
+# md2html 随镜像烘入（Dockerfile COPY），与本脚本同版本。
+MD2HTML="/usr/local/lib/send-mail/md2html.py"
 
 usage() {
   cat <<'EOF'
@@ -17,8 +22,10 @@ usage() {
   send-mail <收件人> <主题> [正文...]
   echo "正文" | send-mail <收件人> <主题>
   send-mail <收件人> <主题> -f <文件>
+  send-mail <收件人> <主题> -m <文件.md>
 
 收件人多个用逗号或空格分隔，如 "a@x.com,b@x.com"。
+-m 把 markdown 转 HTML 富文本发出（纯文本兜底，渲染在收件端）。
 配置走环境变量：SMTP_HOST SMTP_PORT(默认587) SMTP_USER SMTP_PASS SMTP_FROM，MAIL_DEFAULT_TO 为缺省收件人。
 EOF
 }
@@ -44,9 +51,15 @@ if [ -z "$SUBJECT" ]; then
   exit 2
 fi
 
-# 正文来源：-f 文件 > 剩余参数 > stdin(非终端时)
+# 正文来源：-m md 文件 > -f 文件 > 剩余参数 > stdin(非终端时)
 BODY_FILE=""
-if [ "${1:-}" = "-f" ]; then
+MD_FILE=""
+if [ "${1:-}" = "-m" ]; then
+  MD_FILE="${2:-}"
+  [ -n "$MD_FILE" ] && [ -f "$MD_FILE" ] || { echo "send-mail: markdown 文件不存在: ${2:-}" >&2; exit 2; }
+  command -v python3 >/dev/null 2>&1 || { echo "send-mail: -m 需要 python3（标准库即可）" >&2; exit 127; }
+  [ -f "$MD2HTML" ] || { echo "send-mail: 缺 $MD2HTML（镜像构建漏 COPY）" >&2; exit 127; }
+elif [ "${1:-}" = "-f" ]; then
   BODY_FILE="${2:-}"
   [ -n "$BODY_FILE" ] && [ -f "$BODY_FILE" ] || { echo "send-mail: 正文文件不存在: ${2:-}" >&2; exit 2; }
 fi
@@ -92,7 +105,23 @@ EOF
 chmod 600 "$CFG"
 
 # 组装邮件（stdin 正文避免参数过长；主题中文无需转码，msmtp 按 UTF-8 透传）
-if [ -n "$BODY_FILE" ]; then
+if [ -n "$MD_FILE" ]; then
+  HTML="$(mktemp)"
+  trap 'rm -f "$CFG" "$HTML"' EXIT INT TERM
+  python3 "$MD2HTML" "$MD_FILE" "$HTML" || { echo "send-mail: markdown 转换失败" >&2; exit 1; }
+  BOUND="send-mail-$$-$(date +%s)"
+  {
+    printf 'From: %s\n' "$SMTP_FROM"
+    printf 'Subject: %s\n' "$SUBJECT"
+    printf 'MIME-Version: 1.0\n'
+    printf 'Content-Type: multipart/alternative; boundary="%s"\n\n' "$BOUND"
+    printf -- '--%s\nContent-Type: text/plain; charset=utf-8\n\n' "$BOUND"
+    cat "$MD_FILE"
+    printf '\n--%s\nContent-Type: text/html; charset=utf-8\n\n' "$BOUND"
+    cat "$HTML"
+    printf '\n--%s--\n' "$BOUND"
+  } | msmtp -C "$CFG" -- $TO
+elif [ -n "$BODY_FILE" ]; then
   {
     printf 'From: %s\n' "$SMTP_FROM"
     printf 'Subject: %s\n' "$SUBJECT"

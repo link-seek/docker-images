@@ -129,7 +129,9 @@ COPY docker/opencode-tools/opencode.jsonc docker/opencode-tools/opencode-mem.jso
 ARG OPENCODE_MEM_VERSION=2.31.1
 RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
+# - md2html：send-mail -m 用的 markdown→HTML 转换（纯标准库，渲染在收件端）
 COPY docker/opencode-tools/send-mail.sh /usr/local/bin/send-mail
+COPY docker/opencode-tools/md2html.py /usr/local/lib/send-mail/md2html.py
 RUN chmod +x /usr/local/bin/send-mail && send-mail --help >/dev/null \
  && echo "tools image ready:" && opencode --version
 # 默认直接 serve（compose 仍可用 entrypoint 覆盖；CI 可直接 docker run 起服）
