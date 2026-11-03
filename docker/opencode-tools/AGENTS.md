@@ -56,6 +56,12 @@ owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pa
 - 用户的默认邮箱是 122306789@qq.com：用户说“发给我”又没给地址时直接发这里，不用再问；`MAIL_DEFAULT_TO` 已配好，收件人传空字符串即走默认，如 `send-mail "" "主题" "正文"`。
 - 发前确认收件人正确；缺配置时按报错补 `.env` 后重启容器生效，不要向用户索取密码。
 
+邮件读取（`fetch-mail` + 标准库 imaplib 只读，已烘入镜像；`IMAP_*` 缺省回落 `SMTP_*`，163 收发共用同一授权码）：
+
+- 163 配置：`IMAP_HOST=imap.163.com`，`IMAP_PORT=993 SSL`；`IMAP_USER/IMAP_PASS` 不配则自动用 `SMTP_USER/SMTP_PASS`。
+- 按需查看（只读 EXAMINE，不改已读、不删信）：`fetch-mail list --limit 10` / `fetch-mail unread --limit 10` / `fetch-mail show <uid>`。
+- AI 被问到才看，不轮询、不常驻；缺配置时按报错补 `.env` 后重启容器生效。
+
 工作区说明：
 
 - `/workspace` 为默认工作目录（git 仓库，改动前会自动 checkpoint）。

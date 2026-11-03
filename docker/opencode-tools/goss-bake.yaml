@@ -40,6 +40,30 @@ command:
     stdout:
       - '-m'
 
+  send-mail-missing-config:
+    exec: "env -u SMTP_HOST -u SMTP_USER -u SMTP_PASS -u SMTP_FROM -u MAIL_DEFAULT_TO send-mail no-one@example.com subj body"
+    exit-status: 2
+    stderr:
+      - '缺少邮件配置'
+
+  fetch-mail:
+    exec: "fetch-mail --help"
+    exit-status: 0
+    stdout:
+      - 'list'
+
+  fetch-mail-missing-config:
+    exec: "env -u IMAP_USER -u IMAP_PASS -u SMTP_USER -u SMTP_PASS fetch-mail list"
+    exit-status: 2
+    stderr:
+      - '缺少邮件配置'
+
+  fetch-mail-imap-tls:
+    exec: "timeout 20 python3 -c \"import socket,ssl; s=socket.create_connection(('imap.163.com',993),timeout=12); ss=ssl.create_default_context().wrap_socket(s,server_hostname='imap.163.com'); print('TLS-OK', ss.version()); ss.close()\""
+    exit-status: 0
+    stdout:
+      - 'TLS-OK'
+
   md2html:
     exec: "python3 /usr/local/lib/send-mail/md2html.py"
     exit-status: 2
