@@ -278,7 +278,7 @@ jobs:
           echo "START=$START" >> "$GITHUB_ENV"
           gh workflow run img-preflight.yml -R link-seek/infra \
             -f digest_or_tag="$DIGEST" \
-            -f stack_dir=stacks/opencode-prod \
+            -f stack_dir=stacks/opencode/hw21 \
             -f node_tag="host:$IMG_TAG" \
             -f ssh_transport="tailscale"
 
@@ -355,7 +355,7 @@ jobs:
         run: |
           set -euo pipefail
           # canary 由 infra 装在本机（脚本在目标机 /tmp/ 下，core 每次部署都 scp；canary 跑在本地 docker，直接打桥上 IP）
-          RDIR=/root/stacks/opencode-prod
+          RDIR=/root/stacks/opencode/hw21
           sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" bash /tmp/canary-probe.sh
           echo "DETAIL OK: 细测通过（drain 在 img 机无网关则跳过，prod 全量覆盖）"
 
