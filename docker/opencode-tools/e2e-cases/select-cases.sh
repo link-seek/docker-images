@@ -168,14 +168,20 @@ thr = float(sys.argv[2])
 def truthy(v):
     prob = None
     if isinstance(v, dict):
-        for k in ("probability", "confidence", "score", "p"):
-            if isinstance(v.get(k), (int, float)):
+        for k in ("probability", "confidence", "score", "p", "noul"):
+            if isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool):
                 prob = float(v[k]); break
+        if prob is None:
+            # 兜底：{"type": <题型>, <题型>: <数值>}（Jev 实测 noul 题即此形状，原样见上）
+            nums = [(k2, float(x)) for k2, x in v.items()
+                    if k2 != "type" and isinstance(x, (int, float)) and not isinstance(x, bool)]
+            if len(nums) == 1:
+                prob = nums[0][1]
         for k in ("value", "answer", "decision", "label", "result"):
             if k in v:
                 v = v[k]; break
         else:
-            v = None
+            v = None if prob is None else prob
     if isinstance(v, bool):
         return v if prob is None else (v and prob >= thr)
     if isinstance(v, (int, float)):
