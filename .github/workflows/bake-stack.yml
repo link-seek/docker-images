@@ -21,6 +21,12 @@
 #   fine_test_hook  细测 hook 脚本路径（仓内），空=只到预检（od 过渡态）
 #                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY/TEMP_TAG，
 #                   exit 0 + 打印 PASS 行即过，非零即红。
+#   goss_dir        dgoss 自检目录（仓内相对路径，含 goss-bake.yaml；可选 goss_wait.yaml），空=跳过。
+#                   网关/OD 不填，零感知；tools 填 docker/opencode-tools。
+#   goss_vars       追加 goss vars（多行 KEY: "值"），TAG 骨架自带；空=只有 TAG。
+#   goss_docker_args  dgoss run 的 docker 参数（如 "--network host -e FOO=bar"）；空=默认。
+#   goss_command    容器内替代命令（如 "serve --port 4096 --hostname 127.0.0.1"）；空=镜像默认 CMD。
+#   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/auto/空=auto）；骨架只透传不解释。
 #   img_key_ttl     临 key 有效期秒（默认 21600）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、TS_API_KEY（mint）
 #
@@ -83,6 +89,26 @@ on:
         required: false
         type: string
         default: ""
+      goss_dir:
+        required: false
+        type: string
+        default: ""
+      goss_vars:
+        required: false
+        type: string
+        default: ""
+      goss_docker_args:
+        required: false
+        type: string
+        default: ""
+      goss_command:
+        required: false
+        type: string
+        default: ""
+      e2e_cases:
+        required: false
+        type: string
+        default: ""
       canary_name:
         required: false
         type: string
@@ -121,6 +147,10 @@ permissions:
 
 env:
   SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
+  GOSS_VER: v0.4.10
+  GOSS_SHA256_AMD64: "26e365428946294bcec0c61d867bb3c8349f39feb3d0e6f59084e98632785cc7" # goss_0.4.10_linux_x86_64.tar.gz
+  GOSS_SHA256_ARM64: "90a59612b4d67d9f1a9038634c000790136bb82526a69de1e81ac075c2f6d2c6" # goss_0.4.10_linux_arm64.tar.gz
+  DGOSS_SHA256: "3bb3ac9df33eeab8ce71a35763f4a69582eceb7db7bf02b4d0a551e72c7a888d" # dgoss 脚本（架构无关）
 
 jobs:
   release:
@@ -212,6 +242,65 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
 
+
+      - name: 安装 goss/dgoss（pin 版，sha256 校验；goss_dir 为空跳过）
+        if: inputs.goss_dir != ''
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64)  GOSS_ARCH=x86_64; GOSS_SHA="${{ env.GOSS_SHA256_AMD64 }}" ;;
+            aarch64)  GOSS_ARCH=arm64;  GOSS_SHA="${{ env.GOSS_SHA256_ARM64 }}" ;;
+            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+          GOSS_TGZ="/tmp/goss_${GOSS_VER#v}_linux_${GOSS_ARCH}.tar.gz"
+          curl -fsSL --retry 3 -o "$GOSS_TGZ" \
+            "https://github.com/goss-org/goss/releases/download/${GOSS_VER}/goss_${GOSS_VER#v}_linux_${GOSS_ARCH}.tar.gz"
+          echo "${GOSS_SHA}  ${GOSS_TGZ}" | sha256sum -c -
+          tar -xzf "$GOSS_TGZ" -C /tmp goss
+          sudo install -m 0755 /tmp/goss /usr/local/bin/goss
+          curl -fsSL --retry 3 -o /tmp/dgoss \
+            "https://github.com/goss-org/goss/releases/download/${GOSS_VER}/dgoss"
+          echo "${{ env.DGOSS_SHA256 }}  /tmp/dgoss" | sha256sum -c -
+          sudo install -m 0755 /tmp/dgoss /usr/local/bin/dgoss
+          goss --version
+
+      - name: 成品自检 dgoss（声明式；goss_dir 为空跳过，网关/OD 零感知）
+        if: inputs.goss_dir != ''
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          IMG="${{ env.SWR_IMAGE }}:${TAG}"
+          GOSS_DIR="$(mktemp -d)"
+          REPORT_DIR="${RUNNER_TEMP:-/tmp}/goss-report"
+          mkdir -p "$REPORT_DIR"
+          cp "${{ inputs.goss_dir }}"/*.yaml "$GOSS_DIR/"
+          {
+            echo "TAG: \"${TAG}\""
+            printf '%s\n' "${{ inputs.goss_vars }}"
+          } > "$GOSS_DIR/goss-bake-vars.yaml"
+          echo "goss vars:"; cat "$GOSS_DIR/goss-bake-vars.yaml"
+          set +e
+          GOSS_FILES_PATH="$GOSS_DIR" \
+            GOSS_FILE="goss-bake.yaml" \
+            GOSS_VARS="goss-bake-vars.yaml" \
+            GOSS_WAIT_OPTS="-r 60s -s 5s > /dev/null" \
+            GOSS_OPTS="--format junit" \
+            dgoss run ${{ inputs.goss_docker_args }} "$IMG" ${{ inputs.goss_command }} \
+            > "$REPORT_DIR/goss-junit.xml"
+          RC=$?
+          set -e
+          rm -rf "$GOSS_DIR"
+          [ "$RC" -eq 0 ] || { echo "FAIL: dgoss 自检未过"; cat "$REPORT_DIR/goss-junit.xml" || true; exit "$RC"; }
+          echo "SELFCHECK OK: dgoss 成品自检通过"
+
+      - name: 上传 goss JUnit 报告（失败也留档）
+        if: always() && inputs.goss_dir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: goss-${{ inputs.image_slug }}-junit
+          path: ${{ runner.temp }}/goss-report/goss-junit.xml
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: 安装 Trivy（pin 版二进制，CI 现取；sha256 校验）
         run: |
@@ -381,6 +470,7 @@ jobs:
           SWR_USER: ${{ secrets.SWR_LOGIN_USER }}
           SWR_PASS: ${{ secrets.SWR_LOGIN_PASS }}
           TEMP_TAG: ci-${{ github.run_id }}
+          E2E_CASES: ${{ inputs.e2e_cases }}
         run: |
           set -euo pipefail
           export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}" TEMP_TAG

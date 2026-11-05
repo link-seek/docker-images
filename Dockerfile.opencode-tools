@@ -102,7 +102,7 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
 # - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
 # - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
 # - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
-RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g \
+RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md
 
 # terraform：HashiCorp 官方 zip

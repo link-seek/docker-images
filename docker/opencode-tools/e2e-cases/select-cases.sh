@@ -1,8 +1,8 @@
 #!/bin/bash
 # docker/opencode-tools/e2e-cases/select-cases.sh — 用 Jev 选本次要跑的 E2E 用例。
 #
-# 用例零登记：e2e-cases/<id>.sh 头注释即元数据（CASE-ID/CASE-DESC/CASE-COST/CASE-SUGGEST），
-# 本脚本启动即扫描组装名单+校验（id 与文件名不符/缺 DESC/COST 非法/重复 id 直接 fail）。
+# 用例零登记：e2e-cases/case-<id>.sh 头注释即元数据（CASE-ID/CASE-DESC/CASE-COST/CASE-SUGGEST），
+# 本脚本启动即扫描组装名单+校验（id 与文件名不符/缺 DESC/COST 非法直接 fail）。
 # smoke 为内置兜底，不需要文件。
 #
 # 输入（env）：
@@ -25,9 +25,9 @@ DIFF_CAP="${DIFF_CAP_BYTES:-204800}"
 
 command -v python3 >/dev/null || { echo "FAIL: 缺 python3"; exit 1; }
 
-# --- 自动发现：扫目录组装名单（唯一真相来源，无登记文件） ---
+# --- 自动发现：只扫 case-*.sh（helper/手册一律不算用例，避免误扫） ---
 DISCOVERED="$(mktemp)"; RAWLIST=""; trap 'rm -f "$DISCOVERED" $RAWLIST' EXIT
-dup_check="$(ls "$CASES_DIR"/*.sh 2>/dev/null | grep -v '/select-cases\.sh$' || true)"
+dup_check="$(ls "$CASES_DIR"/case-*.sh 2>/dev/null || true)"
 if [ -z "$dup_check" ]; then
   echo "select: e2e-cases/ 下无用例文件，只有内置 smoke 可用" >&2
 fi
@@ -98,6 +98,13 @@ FILES="$(git diff --name-only "${BASE_REF}".."${HEAD_REF}" 2>/dev/null || true)"
 [ -n "$FILES" ] || { echo "smoke"; echo "select: empty diff, smoke only" >&2; exit 0; }
 MUST=""
 echo "$FILES" | grep -qE '(^|/)Dockerfile' && MUST="smoke"
+
+# 2b) 无用例文件：只有内置 smoke，不调模型
+if [ ! -s "$DISCOVERED" ]; then
+  echo "smoke"
+  echo "select: no case files, smoke only (no model call)" >&2
+  exit 0
+fi
 
 # 3) 组装 state：文件清单 + --stat + 完整 diff（体积上限 + 排除锁文件/二进制）
 STAT="$(git diff --stat "${BASE_REF}".."${HEAD_REF}" -- . ':(exclude)package-lock.json' ':(exclude)pnpm-lock.yaml' 2>/dev/null | tail -n 30 || true)"

@@ -1,19 +1,14 @@
 name: bake-tools
+# 薄调用：opencode-tools 只声明参数，构建/自检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
+#
+# 版本：opencode_tag / opencode_mem_version 全由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
+# mem 走普通 build-args 透传（不占上游槽位；Dockerfile pin 是唯一真相，dispatch 传的值必须与之同值，
+# goss 用同一值校验，传错即红）。opencode 二进制 404 由 build 期 curl 兜底 fail-closed。
+# 骨架变更验证：从分支手动 dispatch 本 workflow（非 main 只试不发正式 tag）。
+# E2E：e2e_cases 空=auto（Jev 按改动推断），skip=跳过，full=全跑，逗号名单=指定跑。
 
-# opencode-tools（glibc 线）构建与发布：ubuntu:24.04 digest pin + 官方 release 二进制 + 工具层 + 记忆插件。
-# 单 runner 全链：build（记 digest，只推 temp tag）→ 本机加网+sshd → infra 部署到本机标签（只装+启动自测）
-#   → 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机跳过，prod 全量覆盖）→ 绿才 push 正式版。
-# 版本全由 dispatch 必填传入，CI 不读 Dockerfile pin；审计靠 run 日志。
-# 触发：main push（Dockerfile/烘焙文件/workflow 本身）＋ 手动（周一巡检已关，上游更新靠人发现手点）。
-# 命名：ghcr.io/link-seek/opencode-tools（保留，包已存在可推） + SWR north-9 linkseed（组织命名空间统一）。
 on:
-  push:
-    branches: [main]
-    paths:
-      - Dockerfile.opencode-tools
-      - docker/opencode-tools/**
-      - .github/workflows/bake-tools.yml
   workflow_dispatch:
     inputs:
       opencode_tag:
@@ -21,360 +16,53 @@ on:
         required: true
         type: string
       opencode_mem_version:
-        description: "记忆插件版本（必填，如 2.31.1）"
+        description: "记忆插件版本（必填，如 2.31.1，须与 Dockerfile/AGENTS pin 同值）"
         required: true
         type: string
+      e2e_cases:
+        description: "E2E 名单（空=auto Jev 推断；skip跳过；full全跑；逗号名单指定）"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.opencode-tools
+      - docker/opencode-tools/**
+      - .github/workflows/bake-tools.yml
+      - .github/workflows/bake-stack.yml
 
 permissions:
   contents: read
-  packages: write # push ghcr.io/link-seek/opencode-tools
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/link-seek/opencode-tools
-  SWR_REGISTRY: swr.cn-north-9.myhuaweicloud.com
-  SWR_IMAGE: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
-  IMG_KEY_TTL: "21600" # 临 key 有效期 6h（实测稳定后收紧）；无 tag + preauthorized，用完即废
-  GOSS_VER: v0.4.10
-  GOSS_SHA256_AMD64: "26e365428946294bcec0c61d867bb3c8349f39feb3d0e6f59084e98632785cc7" # goss_0.4.10_linux_x86_64.tar.gz
-  GOSS_SHA256_ARM64: "90a59612b4d67d9f1a9038634c000790136bb82526a69de1e81ac075c2f6d2c6" # goss_0.4.10_linux_arm64.tar.gz
-  DGOSS_SHA256: "3bb3ac9df33eeab8ce71a35763f4a69582eceb7db7bf02b4d0a551e72c7a888d" # dgoss 脚本（架构无关）
+  packages: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    env:
-      GH_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Resolve 版本（全必填传入，不读 pin 不自动取最新）
-        id: upstream
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          normalize() { echo "${1#v}"; }
-          TAG="$(normalize "${{ inputs.opencode_tag }}")"
-          MEM_VERSION="$(normalize "${{ inputs.opencode_mem_version }}")"
-          [ -n "$TAG" ] || { echo "opencode_tag 必填"; exit 1; }
-          [ -n "$MEM_VERSION" ] || { echo "opencode_mem_version 必填"; exit 1; }
-          # 二进制资产必须存在（x64 baseline；tag 无 release 资产就地报错，不静默）
-          curl -fsSL -o /dev/null "https://opencode.ai/files/bin/${TAG}/opencode-linux-x64-baseline.tar.gz" \
-            || { echo "binary asset missing for ${TAG}"; exit 1; }
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "mem_version=${MEM_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved: ${TAG} + opencode-mem@${MEM_VERSION}"
-
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
-
-      - name: Login to SWR
-        run: echo "${{ secrets.SWR_LOGIN_PASS }}" | docker login ${{ env.SWR_REGISTRY }} -u "${{ secrets.SWR_LOGIN_USER }}" --password-stdin
-
-      - name: Build（本地 tag，不推；版本全由 dispatch 必填传入）
-        id: build
-        run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          MEM_VERSION="${{ steps.upstream.outputs.mem_version }}"
-          docker build --build-arg "OPENCODE_TAG=${TAG}" --build-arg "OPENCODE_MEM_VERSION=${MEM_VERSION}" \
-            -f Dockerfile.opencode-tools -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" .
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "built ${TAG} + opencode-mem@${MEM_VERSION}"
-
-      - name: 安装 goss/dgoss（pin 版，sha256 校验）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          case "$(uname -m)" in
-            x86_64)  GOSS_ARCH=x86_64; GOSS_SHA="${{ env.GOSS_SHA256_AMD64 }}" ;;
-            aarch64) GOSS_ARCH=arm64;  GOSS_SHA="${{ env.GOSS_SHA256_ARM64 }}" ;;
-            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
-          esac
-          GOSS_TGZ="/tmp/goss_${GOSS_VER#v}_linux_${GOSS_ARCH}.tar.gz"
-          curl -fsSL --retry 3 -o "$GOSS_TGZ" \
-            "https://github.com/goss-org/goss/releases/download/${GOSS_VER}/goss_${GOSS_VER#v}_linux_${GOSS_ARCH}.tar.gz"
-          echo "${GOSS_SHA}  ${GOSS_TGZ}" | sha256sum -c -
-          tar -xzf "$GOSS_TGZ" -C /tmp goss
-          sudo install -m 0755 /tmp/goss /usr/local/bin/goss
-          curl -fsSL --retry 3 -o /tmp/dgoss \
-            "https://github.com/goss-org/goss/releases/download/${GOSS_VER}/dgoss"
-          echo "${{ env.DGOSS_SHA256 }}  /tmp/dgoss" | sha256sum -c -
-          sudo install -m 0755 /tmp/dgoss /usr/local/bin/dgoss
-          goss --version
-
-      - name: 成品自检（dgoss 声明式：版本＋插件＋工具＋起服就绪）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          IMG="${{ env.IMAGE }}:${{ steps.build.outputs.tag }}"
-          TAG="${{ steps.build.outputs.tag }}"
-          # MEM 版本用 resolved 值（信使 override 时与镜像一致；无 override 时即 Dockerfile pin）
-          MEM_PIN="${{ steps.upstream.outputs.mem_version }}"
-          GOSS_DIR="$(mktemp -d)"
-          REPORT_DIR="${RUNNER_TEMP:-/tmp}/goss-report"
-          mkdir -p "$REPORT_DIR"
-          # dgoss 只从 GOSS_FILES_PATH 读 goss-bake.yaml / goss_wait.yaml / vars，故先拼临时目录。
-          cp docker/opencode-tools/goss-bake.yaml docker/opencode-tools/goss_wait.yaml "$GOSS_DIR/"
-          cat > "$GOSS_DIR/goss-bake-vars.yaml" <<EOF
-          TAG: "${TAG}"
-          MEM_PIN: "${MEM_PIN}"
-          EOF
-          echo "TAG=${TAG} MEM_PIN=${MEM_PIN}"
-          # junit 落盘：dgoss 的 info 走 stderr，stdout 只有 goss validate 结果，直接收成报告。
-          set +e
-          GOSS_FILES_PATH="$GOSS_DIR" \
-          GOSS_FILE="goss-bake.yaml" \
-          GOSS_VARS="goss-bake-vars.yaml" \
-          GOSS_WAIT_OPTS="-r 60s -s 5s > /dev/null" \
-          GOSS_OPTS="--format junit" \
-          dgoss run --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy \
-            "$IMG" serve --port 4096 --hostname 127.0.0.1 \
-            > "$REPORT_DIR/tools-junit.xml"
-          RC=$?
-          set -e
-          rm -rf "$GOSS_DIR"
-          echo "junit report: $REPORT_DIR/tools-junit.xml"
-          [ "$RC" -eq 0 ] || { echo "FAIL: dgoss 自检未过"; cat "$REPORT_DIR/tools-junit.xml" 2>/dev/null || true; exit "$RC"; }
-          echo "SELFCHECK OK: tools 成品自检通过"
-
-      - name: 上传 goss JUnit 报告（失败也留档）
-        if: always() && env.skip != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: goss-tools-junit
-          path: ${{ runner.temp }}/goss-report/tools-junit.xml
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: 安装 Trivy（pin 版二进制，CI 现取；sha256 校验）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          TRIVY_VER="v0.76.1"
-          case "$(uname -m)" in
-            x86_64)  TRIVY_ARCH="64bit"; TRIVY_SHA="c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0" ;;
-            aarch64) TRIVY_ARCH="ARM64"; TRIVY_SHA="e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f" ;;
-            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
-          esac
-          TGZ="/tmp/trivy_${TRIVY_VER#v}_Linux-${TRIVY_ARCH}.tar.gz"
-          curl -fsSL --retry 3 -o "$TGZ"             "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VER}/trivy_${TRIVY_VER#v}_Linux-${TRIVY_ARCH}.tar.gz"
-          echo "${TRIVY_SHA}  ${TGZ}" | sha256sum -c -
-          tar -xzf "$TGZ" -C /tmp trivy
-          sudo install -m 0755 /tmp/trivy /usr/local/bin/trivy
-          trivy --version
-
-      - name: Trivy 镜像扫描（OS 包＋语言依赖；CRITICAL/HIGH 超阈值红，拦转正式版）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.build.outputs.tag }}"
-          IMAGE_REF="${{ env.IMAGE }}:${TAG}"
-          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
-          mkdir -p "$REPORT_DIR"
-          trivy image --severity CRITICAL,HIGH --exit-code 1             --format table --output "$REPORT_DIR/trivy-image.txt"             --ignorefile .trivyignore "$IMAGE_REF"
-          trivy image --severity CRITICAL,HIGH --exit-code 0             --format json --output "$REPORT_DIR/trivy-image.json"             --ignorefile .trivyignore "$IMAGE_REF"
-          echo "TRIVY IMAGE OK: $IMAGE_REF"
-
-      - name: Trivy IaC 误配扫描（Dockerfile/compose；红线另议，先报不拦）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
-          mkdir -p "$REPORT_DIR"
-          trivy config --severity CRITICAL,HIGH,MEDIUM --exit-code 0             --format table --output "$REPORT_DIR/trivy-config.txt"             --ignorefile .trivyignore . || true
-          trivy config --exit-code 0             --format json --output "$REPORT_DIR/trivy-config.json"             --ignorefile .trivyignore . || true
-          echo "TRIVY CONFIG DONE"
-
-      - name: Trivy SBOM 生成（artifact 落盘，不强制签名）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.build.outputs.tag }}"
-          IMAGE_REF="${{ env.IMAGE }}:${TAG}"
-          REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
-          mkdir -p "$REPORT_DIR"
-          trivy image --format cyclonedx --output "$REPORT_DIR/sbom.cdx.json"             --ignorefile .trivyignore "$IMAGE_REF"
-          echo "SBOM OK: $IMAGE_REF"
-
-      - name: 上传 Trivy 报告与 SBOM（artifact）
-        if: always() && env.skip != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-opencode-tools
-          path: ${{ runner.temp }}/trivy-report/
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Push temp tag（只发 ci-<run号>，正式版等细测绿了再转）
-        id: push_temp
-        if: env.skip != 'true'
-        run: |
-          TAG="${{ steps.build.outputs.tag }}"
-          TEMP="ci-$GITHUB_RUN_ID"
-          docker tag "${{ env.IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
-          docker push "${{ env.SWR_IMAGE }}:$TEMP"
-          DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TEMP" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
-          echo "temp tag $TEMP -> $DIGEST"
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
-
-      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          curl -fsSL https://tailscale.com/install.sh | sh
-          IMG_TAG="img-$GITHUB_RUN_ID"
-          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
-          MINTED=""
-          TSKEY="${{ vars.TS_API_KEY }}${{ secrets.TS_API_KEY }}"
-          [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
-          if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:guest\"]}}},\"expirySeconds\":${{ env.IMG_KEY_TTL }}}"
-            # tag:guest：bake 靶机；部署方 tag:user 经 user→guest 放行；寻址仍走 host:
-            MINT_RESP="$(mktemp)"
-            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
-              -d "$MINT_BODY" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
-              echo "mint-bearer: HTTP $MINT_CODE（包体已遮蔽，内含 key）"
-              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
-              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-            else
-              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
-            fi
-            if [ -z "$MINTED" ]; then
-              MINT_CODE2="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -u "$TSKEY:" -H 'Content-Type: application/json' \
-                -d "$MINT_BODY" \
-                https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-              if [ "$MINT_CODE2" = "200" ] || [ "$MINT_CODE2" = "201" ]; then
-                echo "mint-basic: HTTP $MINT_CODE2（包体已遮蔽，内含 key）"
-                MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
-                [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-              else
-                echo "mint-basic: HTTP $MINT_CODE2 body: $(head -c 400 "$MINT_RESP")"
-              fi
-            fi
-            rm -f "$MINT_RESP"
-            [ -n "$MINTED" ] || { echo "mint 被拒（Bearer 与 Basic 双试，见上两行包体）"; }
-          fi
-          if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（tag:guest，有效期 ${{ env.IMG_KEY_TTL }}s）"
-            # --ssh：guest 靶机；infra 部署方（tag:user）直接 tailscale ssh 进来，不需要单次钥匙/sshd
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --ssh --accept-routes=false --accept-dns=false
-          else
-            echo "FAIL: 现场 mint 未成功（无 TS_API_KEY 或 Bearer/Basic 双试皆拒，见上）；本线 mint-only，不回退任何直连 key（含已退役的 TS_AUTHKEY）"
-            exit 1
-          fi
-          set -x
-          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'), d.get('Self',{}).get('Tags'))"
-
-      - name: 触发 infra 部署到本机标签（opencode 栈，只装+启动自测）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
-          echo "START=$START" >> "$GITHUB_ENV"
-          gh workflow run img-preflight.yml -R link-seek/infra \
-            -f digest_or_tag="$DIGEST" \
-            -f stack_dir=stacks/opencode/hw21 \
-            -f node_tag="host:$IMG_TAG" \
-            -f ssh_transport="tailscale"
-
-      - name: 跨机可达性取证（非门：只记录，给 infra 连不进来定因用）
-        if: env.skip != 'true'
-        run: |
-          set -uo pipefail
-          echo "== netcheck（UDP/DERP 出向） =="
-          tailscale netcheck --format=json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print('UDP:',d.get('UDP')); print('DERP_latency:', dict(list((d.get('DERPRegionLatency') or {}).items())[:6]))" || echo "netcheck 失败"
-          echo "== 等 infra 节点出现并反向 ping（最多 8 分钟） =="
-          PEER=""
-          for i in $(seq 1 16); do
-            sleep 30
-            PEER="$(tailscale status --json 2>/dev/null | python3 -c "
-          import json,sys
-          try:
-              ps = json.load(sys.stdin).get('Peer', {})
-              for p in ps.values():
-                  hn = p.get('HostName') or ''
-                  if hn.startswith('ci-deploy-'):
-                      print(hn + '=' + (p.get('TailscaleIPs') or ['?'])[0]); break
-              else: print('')
-          except Exception: print('')" || true)"
-            [ -n "$PEER" ] && { echo "infra peer: $PEER"; break; }
-            echo "infra 节点未出现（$i/16）"
-          done
-          [ -n "$PEER" ] || { echo "结论：infra 节点始终没进 tailnet 可见范围（控制面/审批嫌疑）"; exit 0; }
-          IP="${PEER##*=}"
-          tailscale ping -c 3 "$IP" 2>&1 | tail -n 5 || true
-          (echo >/dev/tcp/$IP/22) 2>/dev/null && echo "反向 22 通（TS SSH）" || echo "反向 22 不通"
-          exit 0
-
-      - name: 轮询 infra 部署结论（按 node_tag 核对，fail-closed）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          EXPECTED_NODE_TAG="host:${IMG_TAG:?IMG_TAG 未设置，无法核对预检 run}"
-          EXPECTED_DIGEST="${DIGEST:?DIGEST 未设置，无法核对预检 run}"
-          RUN_ID=""
-          REJECTED="$(mktemp)"
-          LOG="$(mktemp)"
-          trap 'rm -f "$REJECTED" "$LOG"' EXIT
-          for i in $(seq 1 30); do
-            sleep 60
-            CANDIDATES="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=100" \
-              -q "[.workflow_runs[] | select(.created_at >= \"$START\")] | sort_by(.created_at) | reverse | .[] | \"\(.id) \(.status)\"" 2>/dev/null || true)"
-            while read -r RUN_CANDIDATE RUN_STATUS; do
-              if [ -z "$RUN_CANDIDATE" ] || [ "$RUN_STATUS" != "completed" ]; then
-                continue
-              fi
-              if grep -qxF "$RUN_CANDIDATE" "$REJECTED"; then
-                continue
-              fi
-              if timeout 180 gh run view "$RUN_CANDIDATE" -R link-seek/infra --log >"$LOG" 2>/dev/null; then
-                if grep -qE -- "${EXPECTED_NODE_TAG}([^0-9]|$)" "$LOG" && grep -qF -- "$EXPECTED_DIGEST" "$LOG"; then
-                  RUN_ID="$RUN_CANDIDATE"
-                  break
-                fi
-                echo "$RUN_CANDIDATE" >> "$REJECTED"
-              fi
-            done <<< "$CANDIDATES"
-            if [ -n "$RUN_ID" ]; then
-              break
-            fi
-          done
-          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现，或无 node_tag=$EXPECTED_NODE_TAG + digest=$EXPECTED_DIGEST 的可核对 run（fail-closed）"; exit 1; }
-          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID (node_tag=$EXPECTED_NODE_TAG, digest=$EXPECTED_DIGEST)"
-          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 20 --exit-status \
-            || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
-          echo PREFLIGHT-GREEN
-
-      - name: 本地细测（直连 canary：就绪+镜像 ID；drain 在无网关 img 机由脚本自判跳过）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          # canary 由 infra 装在本机（脚本在目标机 /tmp/ 下，core 每次部署都 scp；canary 跑在本地 docker，直接打桥上 IP）
-          RDIR=/root/stacks/opencode-prod  # 与 infra hw21 manifest 第38行注释一致：宿主机路径保持历史值，不迁移
-          sudo -E PROBE_LEVEL=full REMOTE_DIR="$RDIR" CANDIDATE_DIGEST="$DIGEST" bash /tmp/canary-probe.sh
-          echo "DETAIL OK: 细测通过（drain 在 img 机无网关则跳过，prod 全量覆盖）"
-
-      - name: temp digest 转正式版（retag 不 rebuild）
-        if: env.skip != 'true'
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.build.outputs.tag }}"
-          # SWR 为主先推（部署只认 SWR）；GHCR 硬推，红即修（用户要求保留）
-          for t in "${TAG}" latest; do
-            docker buildx imagetools create -t "${{ env.SWR_IMAGE }}:${t}" "${{ env.SWR_IMAGE }}@$DIGEST"
-          done
-          docker buildx imagetools create -t "${{ env.IMAGE }}:${TAG}" -t "${{ env.IMAGE }}:latest" "${{ env.SWR_IMAGE }}@$DIGEST"
-          echo "released $TAG $DIGEST"
-
-      - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
-        if: always() && env.skip != 'true'
-        run: |
-          sudo tailscale logout || true
-          docker logout "$(echo '${{ env.SWR_IMAGE }}' | cut -d/ -f1)" || true
-          echo logged-out
-
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: opencode-tools
+      dockerfile: Dockerfile.opencode-tools
+      ghcr_image: ghcr.io/link-seek/opencode-tools
+      swr_image: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.opencode_tag }}
+      build_args: |
+        OPENCODE_TAG=${{ inputs.opencode_tag }}
+        OPENCODE_MEM_VERSION=${{ inputs.opencode_mem_version }}
+      infra_stack_dir: stacks/opencode/hw21
+      canary_name: opencode-prod-canary
+      fine_test_hook: docker/opencode-tools/fine-test.sh
+      goss_dir: docker/opencode-tools
+      goss_vars: |
+        MEM_PIN: "${{ inputs.opencode_mem_version }}"
+      goss_docker_args: --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy
+      goss_command: serve --port 4096 --hostname 127.0.0.1
+      e2e_cases: ${{ inputs.e2e_cases }}
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
