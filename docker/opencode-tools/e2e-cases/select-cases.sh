@@ -82,8 +82,15 @@ fi
 
 # 1) 默认走 Jev：base 缺省为上一个 commit（push 由流水线填 before/after 覆盖）
 
-# 1b) 定 base：缺省 HEAD~1；单 commit 仓库取不到时只跑 smoke
+# 1b) 定 base：缺省 HEAD~1；CI 默认浅克隆（depth 1）时先加深 100 层再定；
+# 加深失败直接红（fail-closed，不静默 smoke；手动填 E2E_CASES 可绕过）；
+# 加深后仍无 HEAD~1 才是 genuine 单 commit 仓库，只跑 smoke
 if [ -z "${BASE_REF:-}" ]; then
+  if ! git rev-parse -q --verify HEAD~1 >/dev/null 2>&1; then
+    echo "select: shallow history, deepening 100..." >&2
+    git fetch -q --deepen=100 origin >&2 \
+      || { echo "FAIL: 加深历史失败（git fetch --deepen=100 origin），无法定 base；手动填 E2E_CASES 可绕过"; exit 1; }
+  fi
   if git rev-parse -q --verify HEAD~1 >/dev/null 2>&1; then
     BASE_REF="HEAD~1"
   else
