@@ -4,7 +4,7 @@
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
 # 二进制版本线：v2 tag 有 release 资产（x64/arm64，x64 取 baseline 最大兼容，随 brew 配方）。
-# 版本 pin：OPENCODE_TAG（默认）+ opencode-mem（MEM_* 与 docker/opencode-tools/opencode.jsonc 同值）。
+# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.1.4
@@ -14,6 +14,12 @@ FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f57
 
 USER root
 SHELL ["/bin/bash", "-c"]
+
+# 安全基线（Trivy 门）：底座 digest 自带 apt 旧版，noble-updates 已有高危修复（CVE-2026-109518）；
+# 定向 --only-upgrade 这两包，不全量 upgrade（减少漂移面）。
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg6.0t64 \
+ && rm -rf /var/lib/apt/lists/* \
+ && apt --version
 
 # 基础运行时（放最前：裸 ubuntu 连 curl 都没有，后面所有下载都靠它）：
 # node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用，
@@ -98,6 +104,13 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && wrangler --version \
  && agent-browser --version
 
+# 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
+# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
+# - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
+# - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
+RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
+ && test -f /root/.agents/skills/open-design/SKILL.md
+
 # terraform：HashiCorp 官方 zip
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
  && curl -fsSL -o /tmp/terraform.zip \
@@ -118,16 +131,36 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH
  && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
  && tailscale version
 
+# kit 的 check/export 要本地浏览器（不支持 CDP，等上游合 CDP PR 再切 sidecar，见 Discussions）：
+# chrome-headless-shell（puppeteer 官方裁剪版）+ 运行库 + CJK/emoji 字体（中文截图不 tofu）。
+# 注意体积：headless-shell 约 270M + fonts-noto-cjk 约 61M（deb）+ emoji 约 10M，整段约 +450M。
+# OPEN_DESIGN_BROWSER_PATH 钉死绝对路径，auto-detect 不靠运气；unzip 是 puppeteer/browsers 解包必需。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      unzip libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+      libdbus-1-3 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+      libgbm1 libxcb1 libxkbcommon0 libasound2t64 fonts-noto-cjk fonts-noto-color-emoji \
+ && rm -rf /var/lib/apt/lists/* \
+ && npx -y "@puppeteer/browsers@latest" install chrome-headless-shell --path /root/.cache/puppeteer \
+ && CHROME_BIN="$(find /root/.cache/puppeteer -name chrome-headless-shell -type f | head -n1)" \
+ && [ -n "$CHROME_BIN" ] && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell \
+ && chrome-headless-shell --version
+ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
+
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
 # - opencode-mem.jsonc：记忆插件配置（storagePath 钉 prod-data 卷，密钥全走 env://）
 # - AGENTS.md：agent 使用说明（含记忆系统规约）
 # 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
-COPY docker/opencode-tools/opencode.jsonc docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+# 注意：源文件叫 opencode.jsonc（保留注释），但必须落盘为 opencode.json——
+# 2.1.4 实测 daemon 只读 opencode.json，.jsonc 同内容零命中（debug config 0 结果）。
+COPY docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
-# 注意：配 plugins 只声明不断网，必须 install。pin 与 opencode.jsonc 同值。
+# 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
 ARG OPENCODE_MEM_VERSION=2.31.1
-RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
+RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
+ && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
+ && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）
