@@ -98,6 +98,13 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && wrangler --version \
  && agent-browser --version
 
+# 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
+# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
+# - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
+# - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
+RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g \
+ && test -f /root/.agents/skills/open-design/SKILL.md
+
 # terraform：HashiCorp 官方 zip
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
  && curl -fsSL -o /tmp/terraform.zip \
@@ -117,6 +124,21 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH
  && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /usr/local/bin/tailscaled \
  && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
  && tailscale version
+
+# kit 的 check/export 要本地浏览器（不支持 CDP，等上游合 CDP PR 再切 sidecar，见 Discussions）：
+# chrome-headless-shell（puppeteer 官方裁剪版）+ 运行库 + CJK/emoji 字体（中文截图不 tofu）。
+# 注意体积：headless-shell 约 270M + fonts-noto-cjk 约 61M（deb）+ emoji 约 10M，整段约 +450M。
+# OPEN_DESIGN_BROWSER_PATH 钉死绝对路径，auto-detect 不靠运气；unzip 是 puppeteer/browsers 解包必需。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      unzip libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+      libdbus-1-3 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+      libgbm1 libxcb1 libxkbcommon0 libasound2t64 fonts-noto-cjk fonts-noto-color-emoji \
+ && rm -rf /var/lib/apt/lists/* \
+ && npx -y "@puppeteer/browsers@latest" install chrome-headless-shell --path /root/.cache/puppeteer \
+ && CHROME_BIN="$(find /root/.cache/puppeteer -name chrome-headless-shell -type f | head -n1)" \
+ && [ -n "$CHROME_BIN" ] && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell \
+ && chrome-headless-shell --version
+ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem

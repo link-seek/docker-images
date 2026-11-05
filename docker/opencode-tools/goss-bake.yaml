@@ -72,6 +72,23 @@ command:
     exec: "printf '# T\\n\\n| a | b |\\n|---|---|\\n| 1 | 2 |\\n\\n> q\\n' > /tmp/goss-md-test.md && python3 /usr/local/lib/send-mail/md2html.py /tmp/goss-md-test.md /tmp/goss-md-test.html && grep -c 'style=\"' /tmp/goss-md-test.html"
     exit-status: 0
 
+  design-skill:
+    exec: "test -f /root/.agents/skills/open-design/SKILL.md && grep -c prepare_open_design_brief /root/.agents/skills/open-design/SKILL.md"
+    exit-status: 0
+
+  design-browser:
+    exec: "chrome-headless-shell --version"
+    exit-status: 0
+    stdout:
+      - 'Chrome'
+
+  design-mcp-wired:
+    exec: "opencode mcp list"
+    exit-status: 0
+    timeout: 180000
+    stdout:
+      - 'open-design'
+
   msmtp:
     exec: "msmtp --version"
     exit-status: 0
@@ -81,6 +98,13 @@ file:
     exists: true
     contents:
       - 'opencode-mem@{{ .Vars.MEM_PIN }}'
+      - 'open-design-mcp'
+
+  /root/.agents/skills/open-design/SKILL.md:
+    exists: true
+
+  /usr/local/bin/chrome-headless-shell:
+    exists: true
 
   /root/.config/opencode/opencode-mem.jsonc:
     exists: true

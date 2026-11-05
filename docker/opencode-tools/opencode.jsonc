@@ -6,6 +6,20 @@
   // 插件本体由 Dockerfile 的 RUN plugin add 烘入镜像，版本与 OPENCODE_MEM_VERSION 同值）。
   // 版本前移只走 digest pin 流程，不接受 floating。
   "plugins": ["opencode-mem@2.31.1"],
+  // 设计 MCP（feimacode/open-design-agent-kit-mcp，不烘焙，npx 随调随下；v2 schema：mcp.servers + timeout 对象）。
+  // npx 首启要下载（startup 给足），生成类工具跑得久（execution 给足）；密钥不进镜像（模型走网关，MCP server 本身不调模型）。
+  "mcp": {
+    "servers": {
+      "open-design": {
+        "type": "local",
+        "command": ["npx", "-y", "@feimacode/open-design-agent-kit-mcp"],
+        "timeout": {
+          "startup": 120000,
+          "execution": 600000
+        }
+      }
+    }
+  },
   "provider": {
     "opencode-go": {
       "options": {

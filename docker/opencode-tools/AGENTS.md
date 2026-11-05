@@ -62,6 +62,12 @@ owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pa
 - 按需查看（只读 EXAMINE，不改已读、不删信）：`fetch-mail list --limit 10` / `fetch-mail unread --limit 10` / `fetch-mail show <uid>`。
 - AI 被问到才看，不轮询、不常驻；缺配置时按报错补 `.env` 后重启容器生效。
 
+设计能力（`open-design` skill + MCP，已烘入镜像；文件全落 `/workspace`，无 daemon/网页/写回）：
+
+- 设计需求先走 MCP `open-design` 工具（`list_open_design_skills` → `prepare_open_design_brief`，绑 `DESIGN.md` 再写 HTML），模型走网关，产物即文件。
+- 邮件正文只认 `send-mail -m <.md>`，设计 kit 的 HTML 不许直接 `-f` 发（收件端兼容两条链，见 Dockerfile 注释）。
+- 要机器验（横滚/对比度/焦点）跑 `check_open_design_artifact`（本地 headless 浏览器已烘入）；`export email` 未启用前，营销邮件仍人眼终验。
+
 工作区说明：
 
 - `/workspace` 为默认工作目录（git 仓库，改动前会自动 checkpoint）。
