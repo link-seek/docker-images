@@ -4,7 +4,7 @@
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
 # 二进制版本线：v2 tag 有 release 资产（x64/arm64，x64 取 baseline 最大兼容，随 brew 配方）。
-# 版本 pin：OPENCODE_TAG（默认）+ opencode-mem（MEM_* 与 docker/opencode-tools/opencode.jsonc 同值）。
+# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.1.4
@@ -156,9 +156,11 @@ ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
 COPY docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
-# 注意：配 plugins 只声明不断网，必须 install。pin 与 opencode.jsonc 同值。
+# 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
 ARG OPENCODE_MEM_VERSION=2.31.1
-RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
+RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
+ && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
+ && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）

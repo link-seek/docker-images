@@ -82,6 +82,10 @@ command:
     stdout:
       - 'Chrome'
 
+  mem-pin-versioned:
+    exec: "grep -E '\"opencode-mem@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
+    exit-status: 0
+
   design-mcp-wired:
     exec: "opencode debug config"
     exit-status: 0
@@ -97,7 +101,6 @@ file:
   /root/.config/opencode/opencode.json:
     exists: true
     contents:
-      - 'opencode-mem@{{ .Vars.MEM_PIN }}'
       - '@feimacode/open-design-agent-kit-mcp'
 
   /root/.agents/skills/open-design/SKILL.md:

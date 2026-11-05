@@ -3,8 +3,8 @@ name: bake-tools
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 #
 # 版本：opencode_tag 由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
-# mem 版本不进 dispatch：触发层写死（MEM_PIN，下面的 build_args/goss_vars），与 Dockerfile ARG /
-# opencode.jsonc plugins 三处同值；升 mem = 同 PR 改这三处，goss 用触发层的值验镜像，漂了就红。
+# mem 版本单源头：只 Dockerfile 的 ARG OPENCODE_MEM_VERSION 一处定义，
+# 触发层不传（构建用默认值），jsonc 占位符由构建 sed 注入；升 mem = 改 ARG 一行。
 # opencode 二进制 404 由 build 期 curl 兜底 fail-closed。
 # 骨架变更验证：从分支手动 dispatch 本 workflow（非 main 只试不发正式 tag）。
 # E2E：e2e_cases 空=auto（Jev 按改动推断），skip=跳过，full=全跑，逗号名单=指定跑。
@@ -47,13 +47,10 @@ jobs:
       explicit_tag: ${{ inputs.opencode_tag }}
       build_args: |
         OPENCODE_TAG=${{ inputs.opencode_tag }}
-        OPENCODE_MEM_VERSION=2.31.1
       infra_stack_dir: stacks/opencode/hw21
       canary_name: opencode-prod-canary
       fine_test_hook: docker/opencode-tools/fine-test.sh
       goss_dir: docker/opencode-tools
-      goss_vars: |
-        MEM_PIN: "2.31.1"
       goss_docker_args: --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy
       goss_command: serve --port 4096 --hostname 127.0.0.1
       e2e_cases: ${{ inputs.e2e_cases }}
