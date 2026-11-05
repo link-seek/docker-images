@@ -15,6 +15,12 @@ FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f57
 USER root
 SHELL ["/bin/bash", "-c"]
 
+# 安全基线（Trivy 门）：底座 digest 自带 apt 旧版，noble-updates 已有高危修复（CVE-2026-109518）；
+# 定向 --only-upgrade 这两包，不全量 upgrade（减少漂移面）。
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg6.0t64 \
+ && rm -rf /var/lib/apt/lists/* \
+ && apt --version
+
 # 基础运行时（放最前：裸 ubuntu 连 curl 都没有，后面所有下载都靠它）：
 # node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用，
 # 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh + msmtp + gnupg
