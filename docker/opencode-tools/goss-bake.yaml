@@ -83,7 +83,7 @@ command:
       - 'Chrome'
 
   design-mcp-wired:
-    exec: "opencode mcp list"
+    exec: "opencode debug config"
     exit-status: 0
     timeout: 180000
     stdout:
@@ -94,11 +94,11 @@ command:
     exit-status: 0
 
 file:
-  /root/.config/opencode/opencode.jsonc:
+  /root/.config/opencode/opencode.json:
     exists: true
     contents:
       - 'opencode-mem@{{ .Vars.MEM_PIN }}'
-      - 'open-design-mcp'
+      - '@feimacode/open-design-agent-kit-mcp'
 
   /root/.agents/skills/open-design/SKILL.md:
     exists: true

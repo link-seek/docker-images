@@ -145,7 +145,10 @@ ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
 # - opencode-mem.jsonc：记忆插件配置（storagePath 钉 prod-data 卷，密钥全走 env://）
 # - AGENTS.md：agent 使用说明（含记忆系统规约）
 # 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
-COPY docker/opencode-tools/opencode.jsonc docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+# 注意：源文件叫 opencode.jsonc（保留注释），但必须落盘为 opencode.json——
+# 2.1.4 实测 daemon 只读 opencode.json，.jsonc 同内容零命中（debug config 0 结果）。
+COPY docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
 # 注意：配 plugins 只声明不断网，必须 install。pin 与 opencode.jsonc 同值。
 ARG OPENCODE_MEM_VERSION=2.31.1
