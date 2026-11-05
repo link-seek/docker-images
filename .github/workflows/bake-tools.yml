@@ -2,9 +2,10 @@ name: bake-tools
 # 薄调用：opencode-tools 只声明参数，构建/自检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
 # 商家线（bake）：对镜像运行结果负责；快递（infra deliver-*）只管送达，不管内容。
 #
-# 版本：opencode_tag / opencode_mem_version 全由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
-# mem 走普通 build-args 透传（不占上游槽位；Dockerfile pin 是唯一真相，dispatch 传的值必须与之同值，
-# goss 用同一值校验，传错即红）。opencode 二进制 404 由 build 期 curl 兜底 fail-closed。
+# 版本：opencode_tag 由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
+# mem 版本不进 dispatch：触发层写死（MEM_PIN，下面的 build_args/goss_vars），与 Dockerfile ARG /
+# opencode.jsonc plugins 三处同值；升 mem = 同 PR 改这三处，goss 用触发层的值验镜像，漂了就红。
+# opencode 二进制 404 由 build 期 curl 兜底 fail-closed。
 # 骨架变更验证：从分支手动 dispatch 本 workflow（非 main 只试不发正式 tag）。
 # E2E：e2e_cases 空=auto（Jev 按改动推断），skip=跳过，full=全跑，逗号名单=指定跑。
 
@@ -13,10 +14,6 @@ on:
     inputs:
       opencode_tag:
         description: "官方 tag（必填，如 2.1.4，无 v 前缀也行）"
-        required: true
-        type: string
-      opencode_mem_version:
-        description: "记忆插件版本（必填，如 2.31.1，须与 Dockerfile/AGENTS pin 同值）"
         required: true
         type: string
       e2e_cases:
@@ -50,13 +47,13 @@ jobs:
       explicit_tag: ${{ inputs.opencode_tag }}
       build_args: |
         OPENCODE_TAG=${{ inputs.opencode_tag }}
-        OPENCODE_MEM_VERSION=${{ inputs.opencode_mem_version }}
+        OPENCODE_MEM_VERSION=2.31.1
       infra_stack_dir: stacks/opencode/hw21
       canary_name: opencode-prod-canary
       fine_test_hook: docker/opencode-tools/fine-test.sh
       goss_dir: docker/opencode-tools
       goss_vars: |
-        MEM_PIN: "${{ inputs.opencode_mem_version }}"
+        MEM_PIN: "2.31.1"
       goss_docker_args: --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy
       goss_command: serve --port 4096 --hostname 127.0.0.1
       e2e_cases: ${{ inputs.e2e_cases }}
