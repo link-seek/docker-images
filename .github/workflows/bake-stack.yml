@@ -366,11 +366,11 @@ jobs:
           TAG="${{ steps.build.outputs.tag }}"
           TEMP="ci-$GITHUB_RUN_ID"
           docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
-          docker push "${{ env.SWR_IMAGE }}:$TEMP"
+          timeout 1800 docker push "${{ env.SWR_IMAGE }}:$TEMP"
           DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
           if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
             docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
-            docker push "${{ env.GHCR_IMAGE }}:$TEMP"
+            timeout 1800 docker push "${{ env.GHCR_IMAGE }}:$TEMP"
             DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
           fi
           DIGEST="$(docker buildx imagetools inspect "$DIGEST_SOURCE" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
