@@ -142,7 +142,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
  && npx -y "@puppeteer/browsers@latest" install chrome-headless-shell --path /root/.cache/puppeteer \
  && CHROME_BIN="$(find /root/.cache/puppeteer -name chrome-headless-shell -type f | head -n1)" \
- && [ -n "$CHROME_BIN" ] && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell \
+ && [ -n "$CHROME_BIN" ] && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell.real \
+ && chrome-headless-shell.real --version
+# wrapper 落到 OPEN_DESIGN_BROWSER_PATH（root 自动加 --no-sandbox；构建期即验 wrapper 本身，坏了这里就红）。
+COPY docker/opencode-tools/chrome-headless-shell-wrapper.sh /usr/local/bin/chrome-headless-shell
+RUN chmod +x /usr/local/bin/chrome-headless-shell \
  && chrome-headless-shell --version
 ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
 
