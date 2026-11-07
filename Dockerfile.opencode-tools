@@ -56,7 +56,6 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
 ARG GH_VERSION=2.103.3
 ARG ALIYUN_VERSION=3.5.2
 ARG OCI_SPEC=oci-cli
-ARG TERRAFORM_VERSION=1.16.5
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 
@@ -110,16 +109,6 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
 # - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md
-
-# terraform：HashiCorp 官方 zip
-RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
- && curl -fsSL -o /tmp/terraform.zip \
-      "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TF_ARCH}.zip" \
- && python3 -c "import zipfile; zipfile.ZipFile('/tmp/terraform.zip').extract('terraform', '/tmp')" \
- && mv /tmp/terraform /usr/local/bin/terraform \
- && chmod +x /usr/local/bin/terraform \
- && rm -f /tmp/terraform.zip \
- && terraform version
 
 # tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
