@@ -12,7 +12,11 @@ FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f57
 USER root
 SHELL ["/bin/bash", "-c"]
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 安全基线（与 opencode-tools 同策略）：底座 digest 自带 apt 旧版（CVE-2026-109518），
+# 定向 --only-upgrade 这两包，不全量 upgrade（减少漂移面）。
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg6.0t64 \
+ && rm -rf /var/lib/apt/lists/* \
+ && apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gnupg python3 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
