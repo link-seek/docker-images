@@ -30,10 +30,6 @@ command:
     exec: "tailscaled --version"
     exit-status: 0
 
-  terraform:
-    exec: "terraform version"
-    exit-status: 0
-
   send-mail:
     exec: "send-mail --help"
     exit-status: 0
