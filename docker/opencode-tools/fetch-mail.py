@@ -16,6 +16,7 @@ import email.header
 import email.utils
 import imaplib
 import os
+import re
 import socket
 import sys
 
@@ -82,14 +83,38 @@ def connect(host, port, user, pw):
     except Exception as e:
         print(f"fetch-mail: 登录异常: {e}", file=sys.stderr)
         sys.exit(1)
+    send_client_id(m)
     return m
 
 
+def send_client_id(m):
+    # 163 Coremail 对无 ID 标识的会话（尤其机房 IP）直接拒 EXAMINE/SELECT：
+    #   NO EXAMINE/SELECT Unsafe Login. Please contact kefu@188.com
+    # 实测 login 后先报一个主流客户端身份即可放行；失败忽略（非 163 ord 老服务直接 OK）。
+    try:
+        tag = m._new_tag()
+        if isinstance(tag, bytes):
+            tag = tag.decode()
+        m.send(('%s ID ("name" "Foxmail" "version" "7.2")\r\n' % tag).encode())
+        m.readline()
+        m.readline()
+    except Exception:
+        pass
+
+
 def pick_uids(m, folder, unseen, limit):
-    typ, _ = m.select(folder, readonly=True)
+    typ, data = m.select(folder, readonly=True)
     if typ != "OK":
-        # 163 文件夹名大小写敏感，INBOX 以外按原样试一次
-        print(f"fetch-mail: 打开邮箱失败: {folder}", file=sys.stderr)
+        detail = ""
+        try:
+            detail = " ".join(
+                d.decode(errors="replace") if isinstance(d, bytes) else str(d)
+                for d in (data or [])
+            ).strip()
+        except Exception:
+            pass
+        hint = f": {detail}" if detail else ""
+        print(f"fetch-mail: 打开邮箱失败: {folder}{hint}", file=sys.stderr)
         sys.exit(1)
     crit = "UNSEEN" if unseen else "ALL"
     typ, data = m.search(None, crit)
@@ -110,7 +135,8 @@ def cmd_list(args):
             print("(空)")
             return
         for n in nums:
-            typ, data = m.fetch(n, "(UID RFC822.HEADER)")
+            # BODY.PEEK 保证任何模式下都不打 \Seen（EXAMINE 本来也改不了，双保险）
+            typ, data = m.fetch(n, "(UID BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT)])")
             if typ != "OK" or not data or not data[0]:
                 continue
             raw = data[0][1] if isinstance(data[0], tuple) else data[0]
@@ -132,11 +158,20 @@ def cmd_show(args):
     folder = args.folder or def_folder
     m = connect(host, port, user, pw)
     try:
-        typ, _ = m.select(folder, readonly=True)
+        typ, data = m.select(folder, readonly=True)
         if typ != "OK":
-            print(f"fetch-mail: 打开邮箱失败: {folder}", file=sys.stderr)
+            detail = ""
+            try:
+                detail = " ".join(
+                    d.decode(errors="replace") if isinstance(d, bytes) else str(d)
+                    for d in (data or [])
+                ).strip()
+            except Exception:
+                pass
+            hint = f": {detail}" if detail else ""
+            print(f"fetch-mail: 打开邮箱失败: {folder}{hint}", file=sys.stderr)
             sys.exit(1)
-        typ, data = m.fetch(args.uid.encode() if isinstance(args.uid, str) else args.uid, "(RFC822)")
+        typ, data = m.fetch(args.uid.encode() if isinstance(args.uid, str) else args.uid, "(BODY.PEEK[])")
         if typ != "OK" or not data or not data[0]:
             print(f"fetch-mail: 取信失败: {args.uid}", file=sys.stderr)
             sys.exit(1)
@@ -148,19 +183,32 @@ def cmd_show(args):
         print(f"Subject: {decode_hdr(msg, 'Subject')}")
         print()
         body = ""
+        html_fallback = ""
+        attach = []
         if msg.is_multipart():
             for part in msg.walk():
                 if part.get_content_maintype() == "multipart":
                     continue
-                ctype = part.get_content_type()
-                if ctype != "text/plain":
+                fn = part.get_filename()
+                if fn:
+                    try:
+                        attach.append("".join(
+                            t.decode(c or "utf-8", errors="replace") if isinstance(t, bytes) else t
+                            for t, c in email.header.decode_header(fn)
+                        ))
+                    except Exception:
+                        attach.append(str(fn))
                     continue
+                ctype = part.get_content_type()
                 try:
                     payload = part.get_payload(decode=True) or b""
-                    body = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-                    break
+                    text = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
                 except Exception:
                     continue
+                if ctype == "text/plain" and not body:
+                    body = text
+                elif ctype == "text/html" and not html_fallback:
+                    html_fallback = text
         else:
             try:
                 payload = msg.get_payload(decode=True)
@@ -170,9 +218,16 @@ def cmd_show(args):
                     body = str(payload or "")
             except Exception:
                 body = ""
+        if not body and html_fallback:
+            body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html_fallback)
+            body = re.sub(r"(?s)<!--.*?-->", " ", body)
+            body = re.sub(r"<[^>]+>", " ", body)
+            body = re.sub(r"\s+", " ", body).strip()
         if len(body) > 8000:
             body = body[:8000] + "\n…(截断 8000 字)"
         print(body if body else "(无文本正文)")
+        if attach:
+            print(f"附件({len(attach)}): " + ", ".join(attach))
     finally:
         try:
             m.logout()
