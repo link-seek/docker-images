@@ -1,0 +1,41 @@
+# cloudflared-os-demo：cloudflare-os（link-seek 部署仓 pin 版）+ node/pnpm 运行层，HW41 demo 试用。
+# 用法：docker build --build-arg CFOS_SHA=<commit> -f Dockerfile.cloudflared-os-demo -t <镜像> .
+# 背景：免费号发不到 CF 线上（Dynamic Workers 要 Paid，wrangler 10195 实测），
+#   demo 先落 HW41 跑 run-local（整栈本地 workerd），手机经 tailnet 入口试用。
+# 版本 pin：CFOS_SHA（dispatch 传参，默认值为本文件编写时 main）；底座 digest 下行。
+# 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
+# 运行：run-local 占 8787，远端 binding（AI/R2）走运行时 .env 的 CLOUDFLARE_API_TOKEN（不烘镜像）。
+ARG CFOS_SHA=fe4c68bdec67d3e9467515bac2c848df4cb91b9d
+# 底座 digest pin（与 opencode-tools 同源，ubuntu 24.04）。
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+
+USER root
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g pnpm@11.17.0 \
+    && node --version && pnpm --version
+
+ARG CFOS_SHA
+# 部署仓全量（含 starter + 上游 gitlink），子模块浅拉（cloudflare-os 上游 pin 由部署仓的 gitlink 锁死）。
+RUN git clone https://github.com/link-seek/cloudflare-os.git /app \
+ && cd /app && git checkout -q "$CFOS_SHA" \
+ && git submodule update --init --depth 1 \
+ && pnpm install --frozen-lockfile \
+ && pnpm --dir cloudflare-os exec wrangler --version \
+ && rm -rf /root/.cache /root/.local/share/pnpm/store 2>/dev/null || true
+
+WORKDIR /app
+EXPOSE 8787
+# run-local 状态（.wrangler 在上游子目录）：volume 持久化，重建不丢会话。
+VOLUME /app/cloudflare-os/.wrangler
+
+# PIPELINE 门禁（与 opencode 栈同约定）：无 PIPELINE_MANAGED=true 拒绝启动，防手起。
+ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; exec pnpm --dir cloudflare-os run-local"]
