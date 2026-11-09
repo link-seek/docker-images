@@ -17,7 +17,7 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg6.0t64 \
  && rm -rf /var/lib/apt/lists/* \
  && apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git gnupg python3 \
+      ca-certificates curl git gnupg procps python3 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -58,4 +58,4 @@ EXPOSE 8787 8788
 VOLUME /app/cloudflare-os/.wrangler
 
 # PIPELINE 门禁（与 opencode 栈同约定）：无 PIPELINE_MANAGED=true 拒绝启动，防手起。
-ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; node /app/forward.js & exec pnpm --dir cloudflare-os run-local"]
+ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; node /app/forward.js & (while true; do date -u +%FT%TZ; ps -eo pid,etime,pcpu,pmem,comm,args | sort -k3 -nr | head -n 6; echo ---; sleep 30; done &) exec pnpm --dir cloudflare-os run-local"]
