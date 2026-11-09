@@ -37,9 +37,22 @@ RUN git clone https://github.com/link-seek/cloudflare-os.git /app \
  && rm -rf /root/.cache /root/.local/share/pnpm/store 2>/dev/null || true
 
 WORKDIR /app
-EXPOSE 8787
+# 本地转发：上游 run-local（wrangler dev）只绑容器内 127.0.0.1:8787，
+# 上游未提供 --ip 口子，不碰上游，在本层用 node 转发 0.0.0.0:8788 -> 127.0.0.1:8787。
+# compose/canary 对外只暴露 8788（见 infra 栈 CANARY_CONTAINER_PORT）。
+RUN printf '%s\n' \
+  "const net = require('node:net');" \
+  "const srv = net.createServer((src) => {" \
+  "  const dst = net.connect(8787, '127.0.0.1');" \
+  "  src.on('error', () => dst.destroy());" \
+  "  dst.on('error', () => src.destroy());" \
+  "  src.pipe(dst); dst.pipe(src);" \
+  "});" \
+  "srv.listen(8788, '0.0.0.0', () => console.log('forward 0.0.0.0:8788 -> 127.0.0.1:8787'));" \
+  > /app/forward.js
+EXPOSE 8787 8788
 # run-local 状态（.wrangler 在上游子目录）：volume 持久化，重建不丢会话。
 VOLUME /app/cloudflare-os/.wrangler
 
 # PIPELINE 门禁（与 opencode 栈同约定）：无 PIPELINE_MANAGED=true 拒绝启动，防手起。
-ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; exec pnpm --dir cloudflare-os run-local"]
+ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; node /app/forward.js & exec pnpm --dir cloudflare-os run-local"]
