@@ -52,7 +52,7 @@ RUN printf '%s\n' \
   "  src.pipe(dst); dst.pipe(src);" \
   "});" \
   "srv.listen(8788, '0.0.0.0', () => console.log('forward 0.0.0.0:8788 -> 127.0.0.1:8787'));" \
-  > /app/forward.js
+  > /app/forward.cjs
 EXPOSE 8787 8788
 # run-local 状态（.wrangler 在上游子目录）：volume 持久化，重建不丢会话。
 VOLUME /app/cloudflare-os/.wrangler
@@ -66,7 +66,7 @@ RUN printf '%s\n' \
   "  echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2" \
   '  exit 1' \
   'fi' \
-  'node /app/forward.js &' \
+  'node /app/forward.cjs &' \
   '(while true; do date -u +%FT%TZ; ps -eo pid,etime,pcpu,pmem,comm,args | sort -k3 -nr | head -n 6; echo ---; sleep 30; done) &' \
   'exec pnpm --dir cloudflare-os run-local' \
   > /app/entrypoint.sh && chmod +x /app/entrypoint.sh && sh -n /app/entrypoint.sh && echo entrypoint-syntax-ok
