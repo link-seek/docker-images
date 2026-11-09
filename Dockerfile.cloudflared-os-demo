@@ -36,7 +36,8 @@ RUN git clone https://github.com/link-seek/cloudflare-os.git /app \
  && pnpm --dir cloudflare-os exec wrangler --version \
  && pnpm --dir cloudflare-os run build \
  && du -sh /app/cloudflare-os/dist-app 2>/dev/null || true \
- && rm -rf /root/.cache /root/.local/share/pnpm/store 2>/dev/null || true
+ && du -sh /root/.local/share/pnpm/store 2>/dev/null || true \
+ && rm -rf /root/.cache 2>/dev/null || true
 
 WORKDIR /app
 # 本地转发：上游 run-local（wrangler dev）只绑容器内 127.0.0.1:8787，
