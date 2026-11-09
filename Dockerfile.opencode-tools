@@ -7,7 +7,7 @@
 # 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
-ARG OPENCODE_TAG=2.1.4
+ARG OPENCODE_TAG=2.2.6
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
 # 行为=digest：重打即刷新底座；bump=改这行发 PR。
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
@@ -150,7 +150,7 @@ COPY docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /r
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
 # 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
-ARG OPENCODE_MEM_VERSION=2.31.1
+ARG OPENCODE_MEM_VERSION=2.41.1
 RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
  && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
