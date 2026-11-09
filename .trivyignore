@@ -95,3 +95,10 @@ CVE-2026-96889 exp:2027-01-31
 GHSA-mrv2-3pqr-j5jr exp:2027-01-31
 GHSA-wq5f-xc86-pv6w exp:2027-01-31
 GHSA-cg2g-xh64-v4q7 exp:2026-11-22
+
+# —— litellm-gateway 认领批（2026-11-09，gateway bake 门红补认领）——
+# 上游 litellm Wolfi 底座 + 传递依赖（非我方代码）：libexpat1 x2、oauthlib x1，均为 HIGH 有修版。
+# 上游 digest 按季度刷（见 Dockerfile 注释），刷底座时重审本批；exp 到期重审。
+CVE-2026-113351 exp:2027-01-31
+CVE-2026-115506 exp:2027-01-31
+CVE-2026-49272 exp:2027-01-31
