@@ -58,4 +58,16 @@ EXPOSE 8787 8788
 VOLUME /app/cloudflare-os/.wrangler
 
 # PIPELINE 门禁（与 opencode 栈同约定）：无 PIPELINE_MANAGED=true 拒绝启动，防手起。
-ENTRYPOINT ["/bin/sh", "-c", "set -eu; if [ \"${PIPELINE_MANAGED:-}\" != \"true\" ]; then echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2; exit 1; fi; node /app/forward.js & (while true; do date -u +%FT%TZ; ps -eo pid,etime,pcpu,pmem,comm,args | sort -k3 -nr | head -n 6; echo ---; sleep 30; done &) exec pnpm --dir cloudflare-os run-local"]
+# 入口脚本化（一行流易碎：曾少个分号导致 crash-loop；脚本可 shellcheck）。
+RUN printf '%s\n' \
+  '#!/bin/sh' \
+  'set -eu' \
+  'if [ "${PIPELINE_MANAGED:-}" != "true" ]; then' \
+  "  echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2" \
+  '  exit 1' \
+  'fi' \
+  'node /app/forward.js &' \
+  '(while true; do date -u +%FT%TZ; ps -eo pid,etime,pcpu,pmem,comm,args | sort -k3 -nr | head -n 6; echo ---; sleep 30; done) &' \
+  'exec pnpm --dir cloudflare-os run-local' \
+  > /app/entrypoint.sh && chmod +x /app/entrypoint.sh && sh -n /app/entrypoint.sh && echo entrypoint-syntax-ok
+ENTRYPOINT ["/app/entrypoint.sh"]
