@@ -28,6 +28,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
     && node --version && pnpm --version
 
 ARG CFOS_SHA
+ARG TAILSCALE_VERSION=1.102.4
+# tailscale 静态二进制（与 litellm-gateway 同版本 pin）：容器独立入网，
+# Caddy 直打容器身份，不再经宿主端口。
+RUN curl -fsSL "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz" -o /tmp/ts.tgz \
+ && tar -xzf /tmp/ts.tgz -C /tmp \
+ && cp /tmp/tailscale_${TAILSCALE_VERSION}_amd64/tailscale /tmp/tailscale_${TAILSCALE_VERSION}_amd64/tailscaled /usr/local/bin/ \
+ && rm -rf /tmp/ts.tgz /tmp/tailscale_${TAILSCALE_VERSION}_amd64 \
+ && tailscale version
 # 部署仓全量（含 starter + 上游 gitlink），子模块浅拉（cloudflare-os 上游 pin 由部署仓的 gitlink 锁死）。
 RUN git clone https://github.com/link-seek/cloudflare-os.git /app \
  && cd /app && git checkout -q "$CFOS_SHA" \
@@ -66,6 +74,19 @@ RUN printf '%s\n' \
   "  echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2" \
   '  exit 1' \
   'fi' \
+  'if [ -z "${TS_JOIN_KEY:-}" ]; then' \
+  "  echo 'FATAL: TS_JOIN_KEY missing (.env must be rendered by deliver line).' >&2" \
+  '  exit 1' \
+  'fi' \
+  'mkdir -p /var/lib/tailscale /var/run/tailscale /var/log' \
+  'tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock >/var/log/tailscaled.log 2>&1 &' \
+  'for i in $(seq 1 60); do [ -S /var/run/tailscale/tailscaled.sock ] && break; sleep 1; done' \
+  'if ! timeout 120 tailscale --socket=/var/run/tailscale/tailscaled.sock up --authkey="$TS_JOIN_KEY" --hostname="${TS_HOSTNAME:-cfos-demo}" --accept-routes=false --accept-dns=false; then' \
+  "  echo 'FATAL: tailscale up failed' >&2" \
+  '  exit 1' \
+  'fi' \
+  'echo "tailscale up: $(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null || echo no-ip)"' \
+  'unset TS_JOIN_KEY' \
   'node /app/forward.cjs &' \
   '(while true; do date -u +%FT%TZ; ps -eo pid,etime,pcpu,pmem,comm,args | sort -k3 -nr | head -n 6; echo ---; sleep 30; done) &' \
   'exec pnpm --dir cloudflare-os run-local' \
