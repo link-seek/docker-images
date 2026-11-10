@@ -28,6 +28,7 @@
 - 镜像到 SWR：`gh workflow run img-to-swr.yml --repo link-seek/url2hc -f source_image="ghcr.io/xxx:tag"`，自动公开 + 7 天老化，拉取地址 `swr.cn-north-4.myhuaweicloud.com/link-seek/<名>:<标签>`（SWR 在 cn-north-4，跨区只能公网拉）。
 - Dockerfile 云端构建：`gh workflow run build-to-swr.yml --repo link-seek/url2hc -f target_name="<名>" -f dockerfile_inline="$(cat Dockerfile)"`。
 - `gh repo list --limit 10`：查看 GitHub 仓库
+- `gh repo clone OWNER/REPO`：GitHub 克隆默认走 gh（已含 `gh auth` 身份），不用 `git clone`
 - `hcloud ECS ListServersDetails --limit 5 --cli-region=cn-north-4`：华为云华北四区 ECS
 - `aliyun ecs DescribeInstances --RegionId cn-hangzhou`：阿里云杭州地域实例
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例
