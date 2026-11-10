@@ -52,26 +52,25 @@ jobs:
           git config --global user.name "jennifer95929-svgs"
           git config --global user.email "272089793+jennifer95929-svgs@users.noreply.github.com"
 
-      - name: Run OpenCode
+      - name: Run OpenCode (review)
         if: github.event_name != 'issues'
-        uses: anomalyco/opencode/github@latest
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+        uses: link-seek/opencode-github-bot@659479f063168760b3a3f801f991fd81cbd28cac # pinned: JSON-aware model var; replaces anomalyco/opencode/github
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
-          use_github_token: true
+          llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          github-token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          mode: review
+          pr-number: ${{ github.event.issue.number || github.event.pull_request.number }}
+          require-evidence: "false"
+          require-pinned-actions: "false"
+          collect-feedback: "true"
 
       - name: Run OpenCode for assigned issue
         if: github.event_name == 'issues'
-        uses: anomalyco/opencode/github@latest
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
+        uses: link-seek/opencode-github-bot@659479f063168760b3a3f801f991fd81cbd28cac # pinned: JSON-aware model var; replaces anomalyco/opencode/github
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
-          use_github_token: true
-          prompt: |
-            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-
-            ${{ github.event.issue.body }}
+          llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          github-token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          mode: fix-issue
+          issue-number: ${{ github.event.issue.number }}
