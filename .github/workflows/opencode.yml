@@ -55,6 +55,11 @@ jobs:
       - name: Run OpenCode (review)
         if: github.event_name != 'issues'
         uses: link-seek/opencode-github-bot@659479f063168760b3a3f801f991fd81cbd28cac # pinned: JSON-aware model var; replaces anomalyco/opencode/github
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
+          KEY_FAST: ${{ secrets.KEY_FAST }}
+          KEY_BULK: ${{ secrets.KEY_BULK }}
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
@@ -68,6 +73,11 @@ jobs:
       - name: Run OpenCode for assigned issue
         if: github.event_name == 'issues'
         uses: link-seek/opencode-github-bot@659479f063168760b3a3f801f991fd81cbd28cac # pinned: JSON-aware model var; replaces anomalyco/opencode/github
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
+          KEY_FAST: ${{ secrets.KEY_FAST }}
+          KEY_BULK: ${{ secrets.KEY_BULK }}
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
