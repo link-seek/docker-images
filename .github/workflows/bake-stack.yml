@@ -5,7 +5,7 @@
 #   image_slug      短名（temp tag/TS hostname 用，如 litellm-gateway）
 #   dockerfile      Dockerfile 路径（如 Dockerfile.litellm-gateway）
 #   ghcr_image      GHCR 仓库（如 ghcr.io/link-seek/litellm-gateway）
-#   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../linkseed/litellm-gateway）
+#   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../link-seek/litellm-gateway）
 #   tag_mode        date-sha | upstream | explicit
 #     date-sha      TAG=日期-shortsha（网关：上游 digest pin 在 Dockerfile FROM，手动 bump）
 #     upstream      跟上游 tag（tools）：upstream_repo + pattern + 最小年龄 + 资产检查

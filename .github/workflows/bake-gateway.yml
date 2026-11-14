@@ -25,7 +25,7 @@ jobs:
       image_slug: litellm-gateway
       dockerfile: Dockerfile.litellm-gateway
       ghcr_image: ghcr.io/link-seek/litellm-gateway
-      swr_image: swr.cn-north-9.myhuaweicloud.com/linkseed/litellm-gateway
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
       tag_mode: date-sha
       infra_stack_dir: stacks/litellm-gateway
       canary_name: litellm-guard-canary
