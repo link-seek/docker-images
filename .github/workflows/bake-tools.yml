@@ -42,7 +42,7 @@ jobs:
       image_slug: opencode-tools
       dockerfile: Dockerfile.opencode-tools
       ghcr_image: ghcr.io/link-seek/opencode-tools
-      swr_image: swr.cn-north-9.myhuaweicloud.com/linkseed/opencode-tools
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
       tag_mode: explicit
       explicit_tag: ${{ inputs.opencode_tag }}
       build_args: |

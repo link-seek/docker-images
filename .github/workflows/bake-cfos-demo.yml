@@ -23,7 +23,7 @@ jobs:
       image_slug: cloudflared-os-demo
       dockerfile: Dockerfile.cloudflared-os-demo
       ghcr_image: ghcr.io/link-seek/cloudflared-os-demo
-      swr_image: swr.cn-north-9.myhuaweicloud.com/linkseed/cloudflared-os-demo
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/cloudflared-os-demo
       tag_mode: date-sha
       build_args: |
         CFOS_SHA=fe4c68bdec67d3e9467515bac2c848df4cb91b9d
