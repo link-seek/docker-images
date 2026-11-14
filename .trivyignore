@@ -71,11 +71,6 @@ CVE-2026-119209 exp:2027-02-28
 # 查过上游：仅 terraform v1.17.1 带 0.62.0，其余最新版仍是 v0.60.0/hcloud 未知，无升级路径；容器内交互式调用、无监听面，按 HIGH 认领，exp 到期重审。
 CVE-2026-78661 exp:2027-02-28
 
-# —— cloudflared-os-demo B 特批（2026-11-08，所有者特批，demo 试用 scope）——
-# 范围：上游 cloudflare-os node_modules 第三方依赖（非我方代码），18 HIGH + 1 CRITICAL。
-# HIGH 按批认领，exp 到期重审（与本文件既有节奏一致）。
-# CRITICAL（dompurify GHSA-cg2g）为例外特批：tailnet-only 无公网面、demo 短命、
-#   到期 2026-11-22 自动过期（门重新变红），转正前必须等上游修或换方案。
 CVE-2026-102990 exp:2027-01-31
 CVE-2026-109383 exp:2027-01-31
 CVE-2026-109829 exp:2027-01-31
