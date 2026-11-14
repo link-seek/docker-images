@@ -58,6 +58,7 @@ ARG ALIYUN_VERSION=3.5.2
 ARG OCI_SPEC=oci-cli
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
+ARG KUBECTL_VERSION=1.37.2
 
 # gh：官方 tarball（Go 静态二进制）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
@@ -119,6 +120,13 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH
  && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /usr/local/bin/tailscaled \
  && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
  && tailscale version
+
+# kubectl：官方 release 二进制（breakglass/排障常驻；与集群版本对齐）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) KUBECTL_ARCH=amd64;; aarch64) KUBECTL_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSLo /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBECTL_ARCH}/kubectl" \
+ && chmod +x /usr/local/bin/kubectl \
+ && kubectl version --client
 
 # kit 的 check/export 要本地浏览器（不支持 CDP，等上游合 CDP PR 再切 sidecar，见 Discussions）：
 # chrome-headless-shell（puppeteer 官方裁剪版）+ 运行库 + CJK/emoji 字体（中文截图不 tofu）。
