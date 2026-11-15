@@ -57,7 +57,6 @@ ARG GH_VERSION=2.103.3
 ARG ALIYUN_VERSION=3.5.2
 ARG OCI_SPEC=oci-cli
 ARG AGENT_BROWSER_VERSION=0.41.0
-ARG TAILSCALE_VERSION=1.102.4
 ARG KUBECTL_VERSION=1.37.2
 
 # gh：官方 tarball（Go 静态二进制）
@@ -102,7 +101,8 @@ RUN pip3 install --no-cache-dir --break-system-packages --upgrade "cryptography=
 # wrangler + agent-browser + lmnr-cli：npm 全局
 RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && wrangler --version \
- && agent-browser --version
+ && agent-browser --version \
+ && lmnr-cli --version
 
 # 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
 # - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
@@ -110,16 +110,6 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
 # - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md
-
-# tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
-RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
- && curl -fsSL -o /tmp/tailscale.tgz \
-      "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
- && tar -xzf /tmp/tailscale.tgz -C /tmp \
- && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /usr/local/bin/tailscale \
- && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /usr/local/bin/tailscaled \
- && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
- && tailscale version
 
 # kubectl：官方 release 二进制（breakglass/排障常驻；与集群版本对齐）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) KUBECTL_ARCH=amd64;; aarch64) KUBECTL_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \

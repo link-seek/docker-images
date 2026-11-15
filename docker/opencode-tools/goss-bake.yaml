@@ -22,12 +22,16 @@ command:
     exec: "agent-browser --version"
     exit-status: 0
 
-  tailscale:
-    exec: "tailscale version"
+  wrangler:
+    exec: "wrangler --version"
     exit-status: 0
 
-  tailscaled:
-    exec: "tailscaled --version"
+  lmnr-cli:
+    exec: "lmnr-cli --version"
+    exit-status: 0
+
+  kubectl:
+    exec: "kubectl version --client"
     exit-status: 0
 
   send-mail:

@@ -17,7 +17,6 @@
 - `hcloud ECS ListServersDetails --limit 1 --cli-region=cn-north-4`（华为云连通）
 - `wrangler whoami`（Cloudflare 身份）
 - SMTP 建连（`send-mail` 发探针邮件走默认垃圾桶规则；批量群发先确认）
-- `tailscale status`（本节点在线）
 - CF 记忆 key：调一次 bge-m3 embedding（1024 维回即通）
 - 写操作（建 zone/改 DNS/删东西/发 Worker/转 tag）除 Cloudflare 授权范围外一律先确认。
 
@@ -32,7 +31,7 @@
 - `hcloud ECS ListServersDetails --limit 5 --cli-region=cn-north-4`：华为云华北四区 ECS
 - `aliyun ecs DescribeInstances --RegionId cn-hangzhou`：阿里云杭州地域实例
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例
-- `tailscale status`：查看 tailnet 节点状态
+- `kubectl version --client`：集群排障（版本与集群对齐）
 
 Cloudflare 自助（`wrangler` 已烘入镜像，token 走 `.env` 的 `CLOUDFLARE_API_TOKEN`，每次发版现签 90 天读写）：
 owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pages 等任务。
