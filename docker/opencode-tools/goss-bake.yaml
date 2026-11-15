@@ -30,6 +30,14 @@ command:
     exec: "tailscaled --version"
     exit-status: 0
 
+  kubectl:
+    exec: "kubectl version --client"
+    exit-status: 0
+
+  flux:
+    exec: "flux --version"
+    exit-status: 0
+
   send-mail:
     exec: "send-mail --help"
     exit-status: 0

@@ -59,6 +59,7 @@ ARG OCI_SPEC=oci-cli
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 ARG KUBECTL_VERSION=1.37.2
+ARG FLUX_VERSION=2.10.0
 
 # gh：官方 tarball（Go 静态二进制）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
@@ -127,6 +128,16 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) KUBECTL_ARCH=amd64;; aarch64) KU
       "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBECTL_ARCH}/kubectl" \
  && chmod +x /usr/local/bin/kubectl \
  && kubectl version --client
+
+# flux：官方 GitHub release 二进制（与控制器 v2.10.0 同版；自验 rollout 去 HW21 跳板）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/flux.tar.gz \
+      "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_${FLUX_ARCH}.tar.gz" \
+ && tar -xzf /tmp/flux.tar.gz -C /tmp \
+ && mv /tmp/flux /usr/local/bin/flux \
+ && chmod +x /usr/local/bin/flux \
+ && rm -f /tmp/flux.tar.gz \
+ && flux --version
 
 # kit 的 check/export 要本地浏览器（不支持 CDP，等上游合 CDP PR 再切 sidecar，见 Discussions）：
 # chrome-headless-shell（puppeteer 官方裁剪版）+ 运行库 + CJK/emoji 字体（中文截图不 tofu）。
