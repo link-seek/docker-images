@@ -3,8 +3,9 @@ accept:
   - 镜像构建：Dockerfile、bake 脚本、guard/passthrough/auth/重试/默认配置
   - 业务逻辑 bake：玩法、策略、模型对接进镜像
   - 构建流水线报错、基础镜像升级、digest pin
+  - 应用发版：镜像 bake、打 tag、发版本
 reject:
-  - 部署运维的一切（K3S、TS 网络、节点、tunnel、发版）：去 link-seek/infra
+  - 部署运维的一切（K3S、TS 网络、节点、tunnel、deliver 执行、摆场）：去 link-seek/infra
   - 具体环境的值（IP、域名、token）：必须走 ${VAR} 引用，不许 bake 死
   - OpenCode 本体 bug：去上游 anomalyco/opencode
 notes: 跨界的一律拒收并指路；语义模糊放行由 Jev 判；镜像敏感，进仓前人审 Dockerfile diff。
