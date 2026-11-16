@@ -40,10 +40,6 @@ RUN test -f /app/models-denied.json \
  && chmod +x /app/healthcheck && bash -n /app/healthcheck \
  && echo 'guard+healthcheck OK'
 
-# Trivy CVE-2026-128089：上游 venv 自带 dnspython 2.9.0，patch 级升到 2.9.2（pip 走升级不认领，见 .trivyignore 头注）
-RUN pip install --no-cache-dir --upgrade "dnspython==2.9.2" \
- && python3 -c "import dnspython" 2>/dev/null || python3 -c "from dns.version import version; assert version >= '2.9.2', version; print('dnspython', version)"
-
 COPY --from=ts-fetch /out/tailscale /usr/local/bin/tailscale
 COPY --from=ts-fetch /out/tailscaled /usr/local/bin/tailscaled
 RUN tailscale version

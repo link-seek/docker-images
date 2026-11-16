@@ -97,3 +97,4 @@ GHSA-cg2g-xh64-v4q7 exp:2026-11-22
 CVE-2026-113351 exp:2027-01-31
 CVE-2026-115506 exp:2027-01-31
 CVE-2026-49272 exp:2027-01-31
+CVE-2026-128089 exp:2027-02-28 # 网关上游venv自带dnspython 2.9.0：Wolfi无pip，venv动不了；等上游升。HIGH认领，e2e照常。
