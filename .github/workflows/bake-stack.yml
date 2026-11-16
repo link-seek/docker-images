@@ -3,7 +3,7 @@
 # 【接口（写死）】薄调用只传参，不写逻辑；各镜像按接口实现 hook。
 # inputs:
 #   image_slug      短名（temp tag/TS hostname 用，如 litellm-gateway）
-#   dockerfile      Dockerfile 路径（如 Dockerfile.litellm-gateway）
+#   dockerfile      Dockerfile 路径（如 docker/litellm-gateway/Dockerfile）
 #   ghcr_image      GHCR 仓库（如 ghcr.io/link-seek/litellm-gateway）
 #   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../link-seek/litellm-gateway）
 #   tag_mode        date-sha | upstream | explicit
