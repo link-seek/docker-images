@@ -1,0 +1,57 @@
+name: opencode-review
+
+# PR 评审门（advisory：只评论，不 block 合并）。
+# 只判三类：①部署专属（环境 IP/域名/tunnel/节点配置 bake 进镜像，一律拒收，只认 ${VAR}），
+# ②密钥（明文真值不许进仓，只认 ${VAR} 引用），③硬伤（空指针/越界/静默吞错/条件写反/竞态/引号）。
+# 不谈风格、命名、注释、行长。无违规就回一句干净，不要车轱辘话。
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  review:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run OpenCode review
+        uses: link-seek/opencode-github-bot@v0.7.2 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
+          KEY_FAST: ${{ secrets.KEY_FAST }}
+          KEY_BULK: ${{ secrets.KEY_BULK }}
+        with:
+          model: ${{ vars.OPENCODE_MODEL }} # 引擎ID集中在org变量，一改全仓生效
+          llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          github-token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          mode: review
+          pr-number: ${{ github.event.pull_request.number }}
+          require-evidence: "false"
+          require-pinned-actions: "false"
+          collect-feedback: "true"
+          review-prompt: |
+            Review this pull request for the link-seek/docker-images repo.
+            This is the BAKE repo ("merchant"): product/business logic is baked into images here.
+            Flag ONLY violations of these three categories, each with file:line and trigger path:
+
+            1. Deploy leakage: environment-specific values (host IPs, domain names, tunnel/node
+               configs, per-site credentials) must NOT be baked into images; they belong in
+               link-seek/infra and must come through ${VAR} references. Bake-time constants only.
+            2. Secrets: no plaintext secrets or real-looking keys/tokens anywhere; secrets only via ${VAR} references.
+            3. Hard bugs only: null/empty dereference, silently swallowed errors (set -e gaps, `|| true`
+               hiding real failures), wrong conditionals, race conditions, unquoted shell variables that break
+               on spaces, jq/yaml parsing that fails on valid input.
+
+            Do NOT comment on style, naming, comments, or line length.
+            If no violations, reply briefly that the PR is clean per these rules. Keep each finding under 5 lines.
