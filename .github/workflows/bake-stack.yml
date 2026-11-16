@@ -574,11 +574,16 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
           docker pull "${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
           k3d image import "${DIGEST_SOURCE}" -c preflight
-          # sidecar 同簇（CDP e2e 用；SWR 直拉，失败直接红，不静默跳过）
+          # sidecar 同簇（CDP e2e 用；SWR 直拉 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}')"
           [ -n "${SIDECAR_IMG:-}" ] || { echo "FAIL: manifest 里没找到 sidecar 镜像行"; exit 1; }
           docker pull "$SIDECAR_IMG"
           k3d image import "$SIDECAR_IMG" -c preflight
+          kubectl -n "$NS" create secret docker-registry swr-pull \
+            --docker-server="${{ env.SWR_REGISTRY }}" \
+            --docker-username="${{ secrets.SWR_LOGIN_USER }}" \
+            --docker-password="${{ secrets.SWR_LOGIN_PASS }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
           echo "SIDECAR OK: $SIDECAR_IMG"
           # Secret 预渲染（模板占位注入；SMTP 缺失直接红，提示补仓 secret）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
