@@ -30,6 +30,7 @@
 - Dockerfile 云端构建：`gh workflow run build-to-swr.yml --repo link-seek/url2hc -f target_name="<名>" -f dockerfile_inline="$(cat Dockerfile)"`。
 - `gh repo list --limit 10`：查看 GitHub 仓库
 - `gh repo clone OWNER/REPO`：GitHub 克隆默认走 gh（已含 `gh auth` 身份），不用 `git clone`
+- GitHub 代码操作默认优先 gh（`gh api` 读文件/调接口、`gh pr`、`gh run`、`gh release`）；git 协议只作 fallback（容器出口抖时 `gh api` 常比 github.com 稳）。
 - `gh run watch <id> --exit-status --interval 20`：远端任务跟到底，不用 sleep 轮询；间隔不小于 15s（防次级限流）。
 - `hcloud ECS ListServersDetails --limit 5 --cli-region=cn-north-4`：华为云华北四区 ECS
 - `aliyun ecs DescribeInstances --RegionId cn-hangzhou`：阿里云杭州地域实例
