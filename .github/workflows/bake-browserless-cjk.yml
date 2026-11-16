@@ -44,7 +44,7 @@ jobs:
       ghcr_temp_only: true
       fine_test_hook: docker/browserless-cjk/fine-test.sh
       goss_dir: docker/browserless-cjk
-      goss_docker_args: --network host -e TOKEN=goss-ci-token
+      goss_docker_args: -e TOKEN=goss-ci-token
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
