@@ -73,6 +73,17 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_SK}}
             - name: SMTP_PASS
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: SMTP_PASS}}
+            # OCI 身份（pilot 专用；真值走 pipeline mint，OCI_CLI_* 环境认证，免 ~/.oci）：
+            - name: OCI_CLI_USER
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_USER}}
+            - name: OCI_CLI_FINGERPRINT
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_FINGERPRINT}}
+            - name: OCI_CLI_TENANCY
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_TENANCY}}
+            - name: OCI_CLI_REGION
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_REGION}}
+            - name: OCI_CLI_KEY_CONTENT
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_KEY_CONTENT}}
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
             - {name: prod-data, mountPath: /root/.local/share/opencode}

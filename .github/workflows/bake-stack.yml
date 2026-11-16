@@ -44,7 +44,8 @@
 #   k8s_skip_sidecar  无 sidecar 的应用传 true 跳过 sidecar import（默认 false；tools 有 browser sidecar，保持强制）。
 #   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
-#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）
+#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
+#          OCI_*（新预检 oci 用例；KEY_CONTENT 走 --from-file，不进 env-file；没传则 case-oci 自跳）
 #
 # 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
@@ -210,6 +211,16 @@ on:
       TS_API_KEY:
         required: true
       ENV_SMTP_PASS:
+        required: false
+      OCI_USER_OCID:
+        required: false
+      OCI_FINGERPRINT:
+        required: false
+      OCI_TENANCY_OCID:
+        required: false
+      OCI_REGION:
+        required: false
+      OCI_API_PRIVATE_KEY:
         required: false
 
 permissions:
@@ -585,6 +596,11 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SMTP_PASS: ${{ secrets.ENV_SMTP_PASS }}
+          OCI_U: ${{ secrets.OCI_USER_OCID }}
+          OCI_FP: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_T: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_R: ${{ secrets.OCI_REGION }}
+          OCI_KEY: ${{ secrets.OCI_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
@@ -619,10 +635,17 @@ jobs:
           [ -n "${{ inputs.k8s_secret_env_file }}" ] || { echo "FAIL: k8s_secret_env_file 未传"; exit 1; }
           [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }
           sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" \
+            -e "s/__OCI_USER__/${OCI_U:-}/g" -e "s/__OCI_FINGERPRINT__/${OCI_FP:-}/g" \
+            -e "s/__OCI_TENANCY__/${OCI_T:-}/g" -e "s/__OCI_REGION__/${OCI_R:-}/g" \
             "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
+          OCI_ARG=""
+          if [ -n "${OCI_KEY:-}" ]; then
+            printf '%s' "$OCI_KEY" > /tmp/oci-key.pem && chmod 600 /tmp/oci-key.pem
+            OCI_ARG="--from-file=OCI_CLI_KEY_CONTENT=/tmp/oci-key.pem"
+          fi
           kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
-            --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
-          rm -f /tmp/preflight-secret.env
+            --from-env-file=/tmp/preflight-secret.env $OCI_ARG --dry-run=client -o yaml | kubectl apply -f -
+          rm -f /tmp/preflight-secret.env /tmp/oci-key.pem
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
           SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
           SRC_REF="${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}"
