@@ -7,7 +7,7 @@ name: bake-tools
 # 触发层不传（构建用默认值），jsonc 占位符由构建 sed 注入；升 mem = 改 ARG 一行。
 # opencode 二进制 404 由 build 期 curl 兜底 fail-closed。
 # 骨架变更验证：从分支手动 dispatch 本 workflow（非 main 只试不发正式 tag）。
-# E2E：e2e_cases 空=auto（Jev 按改动推断），skip=跳过，full=全跑，逗号名单=指定跑。
+# E2E：e2e_cases 空=full（默认全量），skip=跳过，full=全跑，逗号名单指定跑；Jev 已退役。
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       e2e_cases:
-        description: "E2E 名单（空=auto Jev 推断；skip跳过；full全跑；逗号名单指定）"
+        description: "E2E 名单（空=full 全量；skip跳过；full全跑；逗号名单指定）"
         required: false
         type: string
         default: ""
@@ -47,8 +47,16 @@ jobs:
       explicit_tag: ${{ inputs.opencode_tag }}
       build_args: |
         OPENCODE_TAG=${{ inputs.opencode_tag }}
-      infra_stack_dir: stacks/opencode/hw21
-      canary_name: opencode-prod-canary
+      push_temp_to_ghcr: true
+      ghcr_temp_only: true
+      k8s_app: opencode
+      k8s_manifest_repo: link-seek/infra
+      k8s_manifest_path: k8s/opencode
+      k8s_manifest_ref: main
+      k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
+      k8s_secret_env_file: docker/opencode-tools/preflight-env.conf
+      k8s_secret_name: opencode-env
+      k8s_namespace: opencode
       fine_test_hook: docker/opencode-tools/fine-test.sh
       goss_dir: docker/opencode-tools
       goss_docker_args: --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy
@@ -60,3 +68,4 @@ jobs:
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
       TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}
