@@ -1,0 +1,11 @@
+# litellm 网关 ts-state（身份跨重启稳定；无状态，业务数据不落盘）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ts-state
+  namespace: litellm
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
