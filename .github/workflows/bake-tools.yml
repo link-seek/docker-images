@@ -48,6 +48,7 @@ jobs:
       build_args: |
         OPENCODE_TAG=${{ inputs.opencode_tag }}
       push_temp_to_ghcr: true
+      ghcr_temp_only: true
       k8s_app: opencode
       k8s_manifest_repo: link-seek/infra
       k8s_manifest_path: k8s/opencode

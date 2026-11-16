@@ -13,6 +13,7 @@
 #   explicit_tag    explicit 模式的 tag（tag_mode=explicit 时必填）
 #   build_args      docker build 的 --build-arg（多行，每行 ARG=值；空行忽略）
 #   push_temp_to_ghcr  temp tag 是否同步推 GHCR（od e2e 要验 GHCR 同版；默认 false）
+#   ghcr_temp_only   temp 只推 GHCR，不推 SWR（tools 新预检用；SWR 只留正式版）
 #   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
 #   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标；空=跳过 img 预检（od 过渡）
 #   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
@@ -73,6 +74,10 @@ on:
         type: string
         default: ""
       push_temp_to_ghcr:
+        required: false
+        type: boolean
+        default: false
+      ghcr_temp_only:
         required: false
         type: boolean
         default: false
@@ -414,13 +419,19 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
           TEMP="ci-$GITHUB_RUN_ID"
-          docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
-          timeout 1800 docker push "${{ env.SWR_IMAGE }}:$TEMP"
-          DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
-          if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+          if [ "${{ inputs.ghcr_temp_only }}" = "true" ]; then
             docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
             timeout 1800 docker push "${{ env.GHCR_IMAGE }}:$TEMP"
             DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
+          else
+            docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
+            timeout 1800 docker push "${{ env.SWR_IMAGE }}:$TEMP"
+            DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
+            if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+              docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
+              timeout 1800 docker push "${{ env.GHCR_IMAGE }}:$TEMP"
+              DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
+            fi
           fi
           DIGEST="$(docker buildx imagetools inspect "$DIGEST_SOURCE" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
           echo "temp tag $TEMP -> $DIGEST"
