@@ -596,12 +596,49 @@ jobs:
             sourceRef:
               kind: GitRepository
               name: $APP-preflight
+            patches:
+            - target:
+                kind: Deployment
+                name: $APP
+              patch: |-
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: $APP
+                spec:
+                  template:
+                    spec:
+                      containers:
+                      - name: $APP
+                        command: ["opencode"]
+                        volumeMounts:
+                        - mountPath: /dev/net/tun
+                          $patch: delete
+                    volumes:
+                    - name: tun
+                      $patch: delete
           EOF
           printf '  images:\n%s\n' "$IMAGES_YAML" >> /tmp/preflight-ks.yaml
           kubectl apply -f /tmp/preflight-ks.yaml
           flux get kustomizations
-          kubectl wait --for=condition=ready kustomization/$APP-preflight -n flux-system --timeout=300s
+          kubectl wait --for=condition=ready kustomization/$APP-preflight -n flux-system --timeout=300s || {
+            echo "FAIL: Kustomization 未 Ready，dump 诊断"; FAIL_DUMP=1; }
           echo "FLUX-RECONCILE-GREEN $APP-preflight == ${DIGEST}"
+          [ -z "${FAIL_DUMP:-}" ] || exit 1
+
+      - name: 预检诊断（新预检；失败时 dump，成功只留一行）
+        if: always() && env.skip != 'true' && inputs.k8s_app != ''
+        run: |
+          set -euo pipefail
+          NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
+          echo "--- flux ---"
+          flux get sources git 2>&1 | tail -5 || true
+          flux get kustomizations 2>&1 | tail -5 || true
+          echo "--- deploy/pods ---"
+          kubectl -n "$NS" get deploy,pods -o wide 2>&1 | tail -10 || true
+          echo "--- pod describe/events (tail) ---"
+          kubectl -n "$NS" describe pods 2>&1 | grep -aE "Name:|Image:|Status:|Reason:|Message:|Failed|Error|Warning" | head -30 || true
+          kubectl -n "$NS" get events --sort-by=.lastTimestamp 2>&1 | tail -8 || true
 
       - name: 下线收尾-k3d（新预检；ephemeral 簇即焚）
         if: always() && env.skip != 'true' && inputs.k8s_app != ''
