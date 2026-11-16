@@ -11,7 +11,7 @@ metadata:
     tailscale.com/hostname: opencode-team
     tailscale.com/tags: tag:k8s
 spec:
-  selector: {app: opencode-team}
+  selector: {app: opencode}
   ports:
     - {name: http, port: 4097, targetPort: 4097}
 ---
