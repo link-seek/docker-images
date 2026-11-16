@@ -80,11 +80,12 @@ command:
     exec: "test -f /root/.agents/skills/open-design/SKILL.md && grep -c prepare_open_design_brief /root/.agents/skills/open-design/SKILL.md"
     exit-status: 0
 
-  design-browser:
-    exec: "chrome-headless-shell --version"
+  design-browser-removed:
+    # 本地 chrome 已删（CDP sidecar 代替）：wrapper 必须不存在，防止旧层残留
+    exec: "test ! -e /usr/local/bin/chrome-headless-shell && test ! -e /usr/local/bin/chrome-headless-shell.real && echo removed"
     exit-status: 0
     stdout:
-      - 'Chrome'
+      - 'removed'
 
   mem-pin-versioned:
     exec: "grep -E '\"opencode-mem@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
@@ -110,8 +111,6 @@ file:
   /root/.agents/skills/open-design/SKILL.md:
     exists: true
 
-  /usr/local/bin/chrome-headless-shell:
-    exists: true
 
   /root/.config/opencode/opencode-mem.jsonc:
     exists: true
