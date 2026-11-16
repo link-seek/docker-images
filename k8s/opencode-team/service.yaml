@@ -6,6 +6,10 @@ kind: Service
 metadata:
   name: opencode
   namespace: opencode-team
+  labels:
+    # operator 无 default class，不挂 proxy-class 则 expose 被忽略（实锤：144 分钟无设备）。
+    # ha-b 钉 .69，与本 pod 同节点。
+    tailscale.com/proxy-class: ha-b
   annotations:
     tailscale.com/expose: "true"
     tailscale.com/hostname: opencode-team
