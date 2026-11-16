@@ -4,8 +4,8 @@
 # CASE-COST: low
 # CASE-SUGGEST: 浏览器层/Dockerfile 动了就跑；纯本地断言，无模型。
 set -euo pipefail
-[ -n "${CANARY:-}" ] || { echo "FAIL: CANARY 为空"; exit 1; }
-docker exec "$CANARY" chrome-headless-shell --version 2>&1 | tee /tmp/case-browser.out | grep -q 'Chrome' \
+[ -n "${K8S_EXEC:-}" ] || { echo "FAIL: K8S_EXEC 为空（fine-test.sh 未导出）"; exit 1; }
+$K8S_EXEC chrome-headless-shell --version 2>&1 | tee /tmp/case-browser.out | grep -q 'Chrome' \
   || { echo "FAIL: chrome-headless-shell 版本异常"; cat /tmp/case-browser.out 2>/dev/null || true; exit 1; }
-docker exec "$CANARY" test -x /usr/local/bin/chrome-headless-shell
+$K8S_EXEC test -x /usr/local/bin/chrome-headless-shell
 echo "CASE OK: case-browser（headless-shell 可用）"
