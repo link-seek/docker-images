@@ -4,9 +4,9 @@
 # runner 已被骨架 docker login 过 GHCR）；exit 0 + 打印 PASS 行即过，非零即红。
 #
 # ghcr_temp_only=true：temp 只在 GHCR（SWR 只留正式版），本 hook 从 GHCR 拉 temp 测。
-# 测三件事（跑的即刚打出来的 digest，DIGEST 货对单保证）：
+# 容器内探测走 node fetch（底座工具链不保证有 curl；node 必在）：
 #   1) 中文字体在位（fc-list 有 noto cjk）——本镜像存在的唯一理由；
-#   2) /pressure 200（TOKEN 鉴权通）；
+#   2) /pressure 200 且含 pressure（TOKEN 鉴权通）；
 #   3) 中文页截图非空（POST /chromium/screenshot，渲染链路通）。
 set -euo pipefail
 
@@ -25,7 +25,7 @@ docker run -d --name "$CONTAINER" --shm-size=2g -e TOKEN="$TOKEN" "$GHCR_IMAGE:$
 
 echo "等待 /pressure（最多 120s）..."
 for i in $(seq 1 24); do
-  if docker exec "$CONTAINER" curl -fsS "http://127.0.0.1:3000/pressure?token=$TOKEN" | grep -q pressure; then
+  if docker exec "$CONTAINER" node -e "fetch('http://127.0.0.1:3000/pressure?token=$TOKEN').then(r=>r.text().then(t=>{if(!r.ok||!t.includes('pressure'))process.exit(1)})).catch(()=>process.exit(1))"; then
     echo "PRESSURE OK"
     break
   fi
@@ -33,12 +33,10 @@ for i in $(seq 1 24); do
   sleep 5
 done
 
-docker exec "$CONTAINER" sh -c "fc-list | grep -ci 'noto.*cjk'" | grep -qE '^[1-9]' \
-  && echo "CJK FONTS OK" || { echo "FAIL: 中文字体缺失"; exit 1; }
+docker exec "$CONTAINER" sh -c "fc-list | grep -ci 'noto.*cjk'" | grep -qE '^[1-9]'   && echo "CJK FONTS OK" || { echo "FAIL: 中文字体缺失"; exit 1; }
 
-docker exec "$CONTAINER" curl -fsS -X POST "http://127.0.0.1:3000/chromium/screenshot?token=$TOKEN" \
-  -H 'Content-Type: application/json' -d '{"url": "https://example.com"}' \
-  -o /tmp/fine-shot.png
+docker exec "$CONTAINER" node -e "
+fetch('http://127.0.0.1:3000/chromium/screenshot?token=$TOKEN',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://example.com'})}).then(async r=>{if(!r.ok)process.exit(1);const b=Buffer.from(await r.arrayBuffer());require('fs').writeFileSync('/tmp/fine-shot.png',b)}).catch(()=>process.exit(1))"   && echo "SHOT FETCH OK" || { echo "FAIL: 截图请求失败"; exit 1; }
 SIZE="$(docker exec "$CONTAINER" stat -c%s /tmp/fine-shot.png)"
 [ "$SIZE" -gt 10240 ] && echo "SCREENSHOT OK: ${SIZE} bytes" || { echo "FAIL: 截图过小/失败（${SIZE} bytes）"; exit 1; }
 
