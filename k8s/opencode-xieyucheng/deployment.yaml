@@ -1,0 +1,148 @@
+# k8s/opencode-xieyucheng 主 Deployment（由 k8s/opencode 复制；租户=xieyucheng，切流另议）。
+# 差异：namespace/TS 身份/secret 名按租户；nodeSelector 钉 41（.69 limits 已超配，41 空）。
+# digest pin 即行为版本（tools bb7c1087…/chrome 4ffc5390…，与 HW41 现跑一致）。
+# resources 是 HW41 事故教训的硬化（limits 必填）：.69 为 4C15G。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode
+  namespace: opencode-xieyucheng
+  labels:
+    app: opencode
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # 单副本+本地卷：滚动无意义，重建即切换（切流由 Caddy 做）。
+  selector:
+    matchLabels:
+      app: opencode
+  template:
+    metadata:
+      labels:
+        app: opencode
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-xieyucheng-langfuse-33b4
+      imagePullSecrets:
+        - name: swr-pull
+      # DNS 保持 kube-dns 默认：网关走公网域名，pod 不需要 tailnet 解析。
+      # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
+      initContainers:
+        - name: init-dirs
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
+          command: [sh, -c, "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      containers:
+        - name: opencode
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
+          command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
+          args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
+          ports:
+            - {name: http, containerPort: 4097}
+          env:
+            - {name: PIPELINE_MANAGED, value: "true"}
+            # 网关走公网域名（用户已修复公网后端；网关迁 k3s 后改集群内 Service）。
+            - {name: LITELLM_BASE_URL, value: "http://litellm-gateway.litellm.svc.cluster.local:4000"}
+            - {name: SSH_TARGETS, value: "mesh-hw-21 mesh-hw-41"}
+            - {name: SMTP_HOST, value: smtp.163.com}
+            - {name: SMTP_PORT, value: "465"}
+            - {name: SMTP_USER, value: 122306789@163.com}
+            - {name: SMTP_FROM, value: 122306789@163.com}
+            - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
+            - {name: BROWSER_CDP_URL, value: "http://127.0.0.1:9222"}
+            # kit 走 sidecar（CDP，上游 #114 已合；镜像内已无本地 chrome，见 docker-images#123）
+            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://127.0.0.1:9222"}
+            - name: LITELLM_API_KEY
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: LITELLM_API_KEY}}
+            - name: GH_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: GH_TOKEN}}
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OPENCODE_SERVER_PASSWORD}}
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: CLOUDFLARE_API_TOKEN}}
+            - name: CF_AI_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: CF_AI_TOKEN}}
+            - name: HCLOUD_AK
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_AK}}
+            - name: HCLOUD_SK
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_SK}}
+            - name: SMTP_PASS
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: SMTP_PASS}}
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+            - {name: entrypoint, mountPath: /entrypoint}
+          readinessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 1000m, memory: 2Gi}
+            limits: {cpu: 3000m, memory: 8Gi}
+        - name: browser
+          image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/chrome-cjk@sha256:4ffc5390fc0df74b80ca44d688b8e5a26dd5da648afd796a0e9a6a57e3a64a27
+          ports:
+            - {name: cdp, containerPort: 9222}
+          readinessProbe:
+            httpGet: {path: /json/version, port: 9222}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 500m, memory: 2Gi}
+      volumes:
+        # 41 上 local-path helper 镜像拉不动（docker.io 被墙）→ hostPath 直挂（单机 RWO 等价，kubelet DirectoryOrCreate）。
+        # yingxin 栈保持 PVC（.69 缓存有镜像，不动活数据）。
+        - name: prod-work
+          hostPath: {path: /var/lib/opencode-xieyucheng/work, type: DirectoryOrCreate}
+        - name: prod-data
+          hostPath: {path: /var/lib/opencode-xieyucheng/data, type: DirectoryOrCreate}
+        - name: entrypoint
+          configMap: {name: opencode-entrypoint, defaultMode: 0755}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode
+  namespace: opencode-xieyucheng
+  labels:
+    # ProxyClass 用 label 挂（非 annotation）。
+    tailscale.com/proxy-class: ha-a
+  annotations:
+    # 设备代理 A（钉 41 节点）：与 ha-b 双活，Caddy 双后端。
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: opencode-xieyucheng-ha-a
+    tailscale.com/tags: tag:k8s
+spec:
+  selector: {app: opencode}
+  ports:
+    - {name: http, port: 4097, targetPort: 4097}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-ha-b
+  namespace: opencode-xieyucheng
+  labels:
+    tailscale.com/proxy-class: ha-b
+  annotations:
+    # 设备代理 B（钉 69 节点）：与 ha-a 双活，Caddy 双后端。
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: opencode-xieyucheng-ha-b
+    tailscale.com/tags: tag:k8s
+spec:
+  selector: {app: opencode}
+  ports:
+    - {name: http, port: 4097, targetPort: 4097}

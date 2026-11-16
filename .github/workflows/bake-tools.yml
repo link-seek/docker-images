@@ -50,7 +50,7 @@ jobs:
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       k8s_app: opencode
-      k8s_manifest_repo: link-seek/infra
+      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
       k8s_manifest_path: k8s/opencode
       k8s_manifest_ref: main
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
