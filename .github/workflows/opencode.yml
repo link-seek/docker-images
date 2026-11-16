@@ -15,9 +15,40 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [assigned]
+    types: [assigned, opened]
 
 jobs:
+  triage:
+    # 自动分类：新 issue opened 即分拣打标（bake 归镜像仓，部署拒收指路 infra）。
+    # 不改代码、不开工，只评论 + 打标。修走下面的 opencode job。
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      - name: Run intake triage
+        uses: link-seek/opencode-github-bot@v0.7.2 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
+          KEY_FAST: ${{ secrets.KEY_FAST }}
+          KEY_BULK: ${{ secrets.KEY_BULK }}
+          JEV_MODEL: ${{ vars.JEV_MODEL }}
+        with:
+          model: ${{ vars.OPENCODE_MODEL }}
+          llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          github-token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+          mode: intake
+          issue-number: ${{ github.event.issue.number }}
+          recall-mode: keyword
+          collect-feedback: "false"
+
   opencode:
     # 非交互 CI：等人点允许会挂到 6h 默认超时（infra #108 实锤）。
     # 一次性 runner，操作面全放，40 分钟硬超时；secret 面保持最小，毒代码由 PR 人审拦。
