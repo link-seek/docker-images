@@ -25,6 +25,10 @@ spec:
       labels:
         app: opencode-team
     spec:
+      # trial 先钉 .69（zhangzhirui）：41 上 local-path helper 镜像 ImagePullBackOff（docker.io 被墙），
+      # PVC 调度到 41 永 Pending（实测）。41 镜像源修好后再摘固定。
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       containers:
