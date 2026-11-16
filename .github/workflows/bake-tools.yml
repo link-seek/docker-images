@@ -24,7 +24,7 @@ on:
   push:
     branches: [main]
     paths:
-      - Dockerfile.opencode-tools
+      - docker/opencode-tools/Dockerfile
       - docker/opencode-tools/**
       - .github/workflows/bake-tools.yml
       - .github/workflows/bake-stack.yml
@@ -40,7 +40,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: opencode-tools
-      dockerfile: Dockerfile.opencode-tools
+      dockerfile: docker/opencode-tools/Dockerfile
       ghcr_image: ghcr.io/link-seek/opencode-tools
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
       tag_mode: explicit

@@ -13,7 +13,7 @@
 
 OpenDesign 调 CLI 参数是按版本写死的（如 `--dir`、`--pure`），新版 opencode 会直接报错
 （`Unrecognized flag: --pure`，`--dir` 靠 shim 硬转）。所以 OD / opencode 版本必须成对升级。
-`Dockerfile.opendesign` 的 ARG 默认值（当前 `2.0.6` 配 `OD 0.24.1`）只给本地构建兜底，
+`docker/opendesign/Dockerfile` 的 ARG 默认值（当前 `2.0.6` 配 `OD 0.24.1`）只给本地构建兜底，
 CI 不读默认值：版本全由手动 dispatch 必填传入（周一巡检已关，审计靠 run 日志）。
 
 升级 opencode 的唯一入口：手动 `workflow_dispatch` 同时传 `od_tag` / `opencode_tag`，并先在测试容器里确认
@@ -36,7 +36,7 @@ services:
 
 说明：
 - 镜像里 `OPENCODE_CONFIG=/app/opencode/opencode.json`（默认 `opencode-go/muse-spark-1.3-contributor`，
-  内容镜像自 `xieyucheng123/opencode` 的 `docker/opencode.jsonc`，那边改了这边同步改）。
+  内容镜像自 `xieyucheng123/opencode` 的 `docker/opendesign/opencode.jsonc`，那边改了这边同步改）。
   放在 `/home/open-design` 之外是因为该目录会被宿主机 home 挂载遮住。
 - OD 选 Default（不传 `-m`）→ 走 jsonc 默认 muse-spark；OD 显式选模型（传 `-m`）→ 走网关对应模型。
   注意网关侧各模型协议不同（如 muse-spark 只支持 responses，走 OD 传 `-m` 的 chat 路径会 400），
@@ -57,7 +57,7 @@ Actions → bake-od → Run workflow，必填 `od_tag` / `opencode_tag`（combo 
 
 ## opencode-tools（glibc 线）
 
-第二条流水线：`Dockerfile.opencode-tools` + `bake-tools.yml` + `test-memory.yml`。
+第二条流水线：`docker/opencode-tools/Dockerfile` + `bake-tools.yml` + `test-memory.yml`。
 
 ```text
 opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
@@ -78,6 +78,46 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 ## 手动触发
 
 Actions → bake-tools → Run workflow，必填 `opencode_tag` / `opencode_mem_version`。
+
+## 布局约定（2026-11-16 起）
+
+* Dockerfile 进各自目录：`docker/<名>/Dockerfile`（构建上下文仍是仓根，`docker build -f docker/<名>/Dockerfile .`）。
+* `docker/<名>/` 放 hook 与配置（`fine-test.sh`、`goss-bake.yaml`、`preflight-env.conf` 等）。
+* `bake-stack.yml` 的 `dockerfile:` 传分目录路径；push 触发 `paths:` 同步改。
+
+## opencode-team（部门共用精简线）
+
+第三条流水线：`docker/opencode-team/Dockerfile` + `bake-team.yml` + `k8s/opencode-team/`。
+
+```text
+opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser + mem插件 + 邮件三件套
+  → ghcr.io/link-seek/opencode-team:<tag> + :latest
+  → SWR north-9 link-seek（同名，直推）
+```
+
+* 与 tools 的区别：不要 aliyun/hcloud/oci/wrangler/tailscale/本地 chrome；浏览器走独立 browserless Pod。
+* 预检（k3d+Flux，#505）：`k8s_app: opencode`，manifest 同仓 `k8s/opencode-team`；team digest 经 images 注入，
+  browserless 取 manifest tag。
+* 细测：pod 内 `agent-browser connect ws://browserless:3000/chromium?token=…` → open → snapshot → screenshot → close。
+
+## browserless-chrome-cjk（远程浏览器，独立 Pod）
+
+第四条流水线：`docker/browserless-cjk/Dockerfile` + `bake-browserless-cjk.yml`。
+
+```text
+ghcr.io/browserless/chromium:<tag> + fonts-noto-cjk/emoji → ghcr.io/link-seek/browserless-chrome-cjk:<tag>
+  → SWR north-9 link-seek（同名，直推）
+```
+
+* 仓库名带 chrome：bake-stack 新预检按镜像名含 chrome 抓 sidecar 行做 k3d import，改骨架影响全线，故命名适配。
+* 无 k8s 预检：归属 `k8s/opencode-team/`，由 bake-team 的 k3d 预检连带验证；本线细测只验单镜像（pressure + CJK + 截图）。
+
+## bootstrap 顺序（首发）
+
+1. dispatch `bake-browserless-cjk`（`browserless_tag=2.63.1`）→ 转正出 `:2.63.1`/`:latest`。
+2. dispatch `bake-team`（`opencode_tag=2.3.0`）→ 预检拉 browserless `:latest`，细测连通后转正。
+3. `k8s/opencode-team/deployment.yaml` 改 digest pin 发 PR（manifest 跟镜像走，同一仓同一 PR）。
+4. infra 仓加 `clusters/k3s/apps-opencode-team.yaml`（Flux 收编）+ pipeline mint `opencode-team-env` Secret → 对账上线试用。
 
 ## 分工：商家 vs 快递（2026-10-18，与 infra 仓 README 同源）
 

@@ -1,0 +1,13 @@
+# browserless-cjk 成品自检（dgoss）：服务能起 + /pressure 通（TOKEN 鉴权走 goss_docker_args 注入）。
+# TAG 由 bake-browserless-cjk.yml 经 --vars 注入（仅审计展示，不做版本断言）。
+command:
+  pressure:
+    exec: 'curl -fsS "http://127.0.0.1:3000/pressure?token=goss-ci-token"'
+    exit-status: 0
+    retry-timeout: 90000
+    stdout:
+      - 'pressure'
+
+  cjk-fonts:
+    exec: "fc-list | grep -ci 'noto.*cjk'"
+    exit-status: 0

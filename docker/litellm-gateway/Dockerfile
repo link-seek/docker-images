@@ -1,5 +1,5 @@
 # litellm-gateway：上游 litellm 官方镜像 + 本仓 guard/配置 bake 进去，开箱即用。
-# 用法：docker build -f Dockerfile.litellm-gateway -t <镜像> .
+# 用法：docker build -f docker/litellm-gateway/Dockerfile -t <镜像> .
 # 背景：之前 guard-*.py/config.yaml 靠 compose volume 挂载，部署仓和测试各维护一份影子配置，
 # 行为漂移无人发现（passthrough callback 未加载事故，2026-10-17）。bake 进镜像后行为=digest，CI 拉 digest 测的就是将要上线的字节。
 # 版本 pin（digest）：升级 = 改这行发 PR（跟 opencode-tools 的 pin 机制一致，禁止 tag）。

@@ -1,5 +1,5 @@
 # opencode-tools（glibc 线）：官方 opencode 二进制 + 自研工具层 + 记忆插件烘焙
-# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f Dockerfile.opencode-tools -t <镜像> .
+# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-tools/Dockerfile -t <镜像> .
 # 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
