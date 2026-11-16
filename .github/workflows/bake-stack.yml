@@ -680,9 +680,13 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
           SOURCE="${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
-          docker buildx imagetools create \
-            -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
-            "$SOURCE"
+          # 跨境推层偶发断流（PROTOCOL_ERROR），重试 3 次，间隔 60s
+          for i in 1 2 3; do
+            docker buildx imagetools create \
+              -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
+              "$SOURCE" && break || { echo "转正 SWR 第 $i 次失败"; sleep 60; }
+            [ "$i" -lt 3 ] || { echo "FAIL: 转正 SWR 3 次全红"; exit 1; }
+          done
           if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
             docker buildx imagetools create \
               -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \
