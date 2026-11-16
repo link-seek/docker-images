@@ -41,6 +41,7 @@
 #   k8s_container_name  容器名（默认回落 k8s_app；网关容器叫 litellm 时显式传）。
 #   k8s_preflight_command  预检覆盖命令（YAML flow 原样注入；默认 ["opencode"]；
 #                   网关传 '["litellm", "--config", ...]' 直跑主进程、跳过 entrypoint/tailscale）。
+#   k8s_skip_sidecar  无 sidecar 的应用传 true 跳过 sidecar import（默认 false；tools 有 browser sidecar，保持强制）。
 #   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
 #          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）
@@ -165,6 +166,10 @@ on:
         required: false
         type: string
         default: '["opencode"]'
+      k8s_skip_sidecar:
+        required: false
+        type: boolean
+        default: false
       k8s_manifest_repo:
         required: false
         type: string
@@ -595,16 +600,21 @@ jobs:
           # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；SWR 直拉 + 建 swr-pull secret 供 kubelet，二者缺一不可）
-          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}')"
-          [ -n "${SIDECAR_IMG:-}" ] || { echo "FAIL: manifest 里没找到 sidecar 镜像行"; exit 1; }
-          docker pull "$SIDECAR_IMG"
-          k3d image import "$SIDECAR_IMG" -c preflight
+          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
+          if [ -n "${SIDECAR_IMG:-}" ]; then
+            docker pull "$SIDECAR_IMG"
+            k3d image import "$SIDECAR_IMG" -c preflight
+          elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
+            echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
+          else
+            echo "FAIL: manifest 里没找到 sidecar 镜像行"; exit 1
+          fi
           kubectl -n "$NS" create secret docker-registry swr-pull \
             --docker-server="${{ env.SWR_REGISTRY }}" \
             --docker-username="${{ secrets.SWR_LOGIN_USER }}" \
             --docker-password="${{ secrets.SWR_LOGIN_PASS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
-          echo "SIDECAR OK: $SIDECAR_IMG"
+          [ -n "${SIDECAR_IMG:-}" ] && echo "SIDECAR OK: $SIDECAR_IMG" || true
           # Secret 预渲染（模板占位注入；SMTP 缺失直接红，提示补仓 secret）
           [ -n "${{ inputs.k8s_secret_env_file }}" ] || { echo "FAIL: k8s_secret_env_file 未传"; exit 1; }
           [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }

@@ -42,6 +42,7 @@ jobs:
       k8s_manifest_ref: main
       k8s_deploy_name: litellm-gateway
       k8s_container_name: litellm
+      k8s_skip_sidecar: true
       k8s_preflight_command: '["litellm", "--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]'
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
       k8s_secret_env_file: docker/litellm-gateway/preflight-env.conf
