@@ -5,10 +5,17 @@ name: bake-gateway
 
 on:
   workflow_dispatch:
+    inputs:
+      e2e_cases:
+        description: "E2E 名单（空=默认跑 models-list；skip=只验 identity）"
+        required: false
+        type: string
+        default: ""
   push:
     branches: [main]
     paths:
       - docker/litellm-gateway/Dockerfile
+      - k8s/litellm/**
       - litellm-gateway/**
       - docker/litellm-gateway/**
       - .github/workflows/bake-gateway.yml
@@ -27,9 +34,21 @@ jobs:
       ghcr_image: ghcr.io/link-seek/litellm-gateway
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
       tag_mode: date-sha
-      infra_stack_dir: stacks/litellm-gateway
-      canary_name: litellm-guard-canary
+      push_temp_to_ghcr: true
+      ghcr_temp_only: true
+      k8s_app: litellm-gateway
+      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
+      k8s_manifest_path: k8s/litellm
+      k8s_manifest_ref: main
+      k8s_deploy_name: litellm-gateway
+      k8s_container_name: litellm
+      k8s_preflight_command: '["litellm", "--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]'
+      k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
+      k8s_secret_env_file: docker/litellm-gateway/preflight-env.conf
+      k8s_secret_name: litellm-env
+      k8s_namespace: litellm
       fine_test_hook: docker/litellm-gateway/fine-test.sh
+      e2e_cases: ${{ inputs.e2e_cases }}
       sync_from_repo: link-seek/infra # 过渡：正本迁回商家后删
       sync_paths: |
         stacks/litellm-gateway/config
@@ -42,3 +61,4 @@ jobs:
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
       TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}
