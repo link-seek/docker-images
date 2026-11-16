@@ -621,6 +621,8 @@ jobs:
                   template:
                     spec:
                       containers:
+                      - name: browser
+                        \$patch: delete
                       - name: $APP
                         command: ["opencode"]
                         volumeMounts:
