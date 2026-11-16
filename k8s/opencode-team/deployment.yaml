@@ -12,19 +12,18 @@ metadata:
   name: opencode
   namespace: opencode-team
   labels:
-    app: opencode
+    app: opencode-team
 spec:
   replicas: 1
   strategy:
     type: Recreate # 单副本+本地卷：滚动无意义，重建即切换。
-  # pod 标签必须与 Deployment 同名（app=opencode）：verify 按 label 等 Ready，名实不符则 no matching resources。
   selector:
     matchLabels:
-      app: opencode
+      app: opencode-team
   template:
     metadata:
       labels:
-        app: opencode
+        app: opencode-team
     spec:
       # trial 先钉 .69（zhangzhirui）：41 上 local-path helper 镜像 ImagePullBackOff（docker.io 被墙），
       # PVC 调度到 41 永 Pending（实测）。41 镜像源修好后再摘固定。
