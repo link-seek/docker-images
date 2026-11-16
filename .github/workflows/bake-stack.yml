@@ -654,10 +654,6 @@ jobs:
           kubectl -n "$NS" describe pods 2>&1 | grep -aE "Name:|Image:|Status:|Reason:|Message:|Failed|Error|Warning" | head -30 || true
           kubectl -n "$NS" get events --sort-by=.lastTimestamp 2>&1 | tail -8 || true
 
-      - name: 下线收尾-k3d（新预检；ephemeral 簇即焚）
-        if: always() && env.skip != 'true' && inputs.k8s_app != ''
-        run: k3d cluster delete preflight || true
-
       - name: 本地细测（hook；实现按接口自带 verdict）
         if: env.skip != 'true' && inputs.fine_test_hook != ''
         env:
@@ -673,6 +669,10 @@ jobs:
           set -euo pipefail
           export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}" TEMP_TAG
           bash "${{ inputs.fine_test_hook }}"
+
+      - name: 下线收尾-k3d（新预检；ephemeral 簇即焚）
+        if: always() && env.skip != 'true' && inputs.k8s_app != ''
+        run: k3d cluster delete preflight || true
 
       - name: temp digest 转正式版（retag 不 rebuild；非 main 分支只试不发）
         if: env.skip != 'true' && github.ref == 'refs/heads/main'
