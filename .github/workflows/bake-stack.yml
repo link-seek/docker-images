@@ -625,10 +625,10 @@ jobs:
                         command: ["opencode"]
                         volumeMounts:
                         - mountPath: /dev/net/tun
-                          $patch: delete
+                          \$patch: delete
                     volumes:
                     - name: tun
-                      $patch: delete
+                      \$patch: delete
           EOF
           printf '  images:\n%s\n' "$IMAGES_YAML" >> /tmp/preflight-ks.yaml
           kubectl apply -f /tmp/preflight-ks.yaml
