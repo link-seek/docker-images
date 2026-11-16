@@ -81,10 +81,13 @@ spec:
             requests: {cpu: 1000m, memory: 2Gi}
             limits: {cpu: 3000m, memory: 8Gi}
       volumes:
+        # hostPath 直挂（照 opencode-xieyucheng）：local-path helper 在 41 ImagePullBackOff、
+        # 在 .69 上 create 也超时（实测），PVC 此刻全簇不可用；单机 RWO 等价，kubelet DirectoryOrCreate。
+        # 代价：数据跟节点走（已钉 .69）；41 镜像源/local-path 修好后再评估迁回 PVC。
         - name: prod-work
-          persistentVolumeClaim: {claimName: prod-work}
+          hostPath: {path: /var/lib/opencode-team/work, type: DirectoryOrCreate}
         - name: prod-data
-          persistentVolumeClaim: {claimName: prod-data}
+          hostPath: {path: /var/lib/opencode-team/data, type: DirectoryOrCreate}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
 ---
