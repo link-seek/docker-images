@@ -1,0 +1,17 @@
+# k8s/opencode-xieyucheng — 谢钰程实例（由 k8s/opencode 复制，租户隔离：独立 ns/PVC/TS 身份）。
+# 翻译对照：
+# - compose opencode-prod+ browser 双 service → 同一 Pod 双 container（同 localhost，
+#   BROWSER_CDP_URL 从 docker0-hack http://172.17.0.1:9224 改回 http://127.0.0.1:9222）。
+# - 容器内 userspace tailscaled 保留（与 compose 同语义）：Pod 即独立 tailnet 节点
+#   hostname opencode-k3s，tag:opencode；Caddy 沿用 tag:mesh→tag:opencode:4097 现成 grant，
+#   operator/NodePort 都不需要（P-later 优化项）。
+# - tailscale-state 卷 → emptyDir（join key 为 reusable，重启 re-up 即可；稳定后再抠）。
+# - ./config/home/.aliyun/.oci 与 /old-workspace：trial 不带，切流 checklist 补（见 README）。
+# - 镜像 digest pin 即行为版本（与旧线同语义）：升级=改本文件发 PR。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opencode-xieyucheng
+  labels:
+    app.kubernetes.io/managed-by: k3s-apply
+    app.kubernetes.io/name: opencode-xieyucheng-xieyucheng
