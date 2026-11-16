@@ -29,7 +29,7 @@ spec:
         - name: swr-pull
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team:2.3.0
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:c95dcb12db26cec65b594a520755ea090665558673625226bcaf54a5ee22e65a
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
@@ -110,7 +110,7 @@ spec:
         - name: swr-pull
       containers:
         - name: browserless
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk:2.63.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk@sha256:d9040011a12b23af21637e21be2b22e6ba144ad4b5f458dbc803a367aca9e92d
           ports:
             - {name: http, containerPort: 3000}
           env:
