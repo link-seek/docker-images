@@ -57,6 +57,11 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: LITELLM_API_KEY}}
             - name: MAAS_KEY
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: MAAS_KEY}}
+            - name: OBS_AK
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_AK}}
+            - name: OBS_SK
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_SK}}
+            - {name: OBS_ENDPOINT, value: "https://obs.cn-north-4.myhuaweicloud.com"}
             - name: GH_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
