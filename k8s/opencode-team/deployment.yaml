@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        cognee-mcp-rev: "7ca5f06"
+        cognee-mcp-rev: "9437d3ea"
       labels:
         app: opencode-team
     spec:
