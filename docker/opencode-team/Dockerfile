@@ -70,9 +70,11 @@ RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" \
 ARG OD_MCP_VERSION=0.4.0
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md \
- && npm install -g "@feimacode/open-design-agent-kit-mcp@${OD_MCP_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.npm/_npx
+RUN npm install -g "@feimacode/open-design-agent-kit-mcp@${OD_MCP_VERSION}" \
  && command -v open-design-mcp \
- && timeout 25 open-design-mcp --help
+ && timeout 25 open-design-mcp --help \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/*
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
@@ -88,7 +90,8 @@ COPY docker/opencode-team/opencode.jsonc /root/.config/opencode/opencode.json
 ARG OPENCODE_MEM_VERSION=2.41.1
 RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
- && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
+ && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.cache
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙 markdown+premailer）
