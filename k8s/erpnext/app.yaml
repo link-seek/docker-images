@@ -32,7 +32,7 @@ spec:
         app: erpnext-gunicorn
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -123,7 +123,7 @@ spec:
         app: erpnext-nginx
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -211,7 +211,7 @@ spec:
         app: erpnext-scheduler
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -266,7 +266,7 @@ spec:
         app: erpnext-socketio
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -357,7 +357,7 @@ spec:
         app: erpnext-worker-default
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -412,7 +412,7 @@ spec:
         app: erpnext-worker-long
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -467,7 +467,7 @@ spec:
         app: erpnext-worker-short
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext

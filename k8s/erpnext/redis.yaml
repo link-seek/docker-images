@@ -47,7 +47,7 @@ spec:
         app: erpnext
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
@@ -117,7 +117,7 @@ spec:
         app: erpnext
     spec:
       nodeSelector:
-        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+        kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
       serviceAccountName: erpnext
