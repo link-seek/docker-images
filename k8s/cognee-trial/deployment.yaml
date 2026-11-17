@@ -20,6 +20,8 @@ spec:
       app: cognee
   template:
     metadata:
+      annotations:
+        cognee-trial-restart: "2026-11-17T0306-secret-live"
       labels:
         app: cognee
     spec:
