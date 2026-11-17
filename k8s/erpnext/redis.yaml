@@ -55,7 +55,7 @@ spec:
         - name: redis
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis@sha256:740ccf999c0ed002bef18e0b3faeeb48ad5a25f1090634386c50b82ef3833c8f
           imagePullPolicy: IfNotPresent
-          args: ["redis-server", "--appendonly", "no", "--save", ""]
+          args: ["redis-server", "--appendonly", "no", "--save", "", "--protected-mode", "no"]
           ports:
             - name: redis
               containerPort: 6379
@@ -125,7 +125,7 @@ spec:
         - name: redis
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis@sha256:740ccf999c0ed002bef18e0b3faeeb48ad5a25f1090634386c50b82ef3833c8f
           imagePullPolicy: IfNotPresent
-          args: ["redis-server", "--appendonly", "no", "--save", ""]
+          args: ["redis-server", "--appendonly", "no", "--save", "", "--protected-mode", "no"]
           ports:
             - name: redis
               containerPort: 6379
