@@ -653,7 +653,7 @@ jobs:
           fi
           # OCI 钥匙真伪直验（runner 侧，用刚打的镜像跑 oci-cli；pod 内由 case-oci 覆盖）
           if [ -n "${OCI_KEY:-}" ]; then
-            docker run --rm \
+            docker run --rm --entrypoint oci \
               -e OCI_CLI_USER="$OCI_U" -e OCI_CLI_FINGERPRINT="$OCI_FP" \
               -e OCI_CLI_TENANCY="$OCI_T" -e OCI_CLI_REGION="$OCI_R" \
               -e OCI_CLI_KEY_CONTENT="$OCI_KEY" \
