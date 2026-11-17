@@ -1,0 +1,155 @@
+name: verify-cfos-proxy
+
+# 方案1 ephemeral验证：runner内起 backend(run-local) + Caddy反代验同源，零生产触碰，跑完即焚。
+# 不推镜像、不加网、不碰 hw41；结论只看 run 日志 PASS 行。
+
+on:
+  workflow_dispatch:
+    inputs:
+      cfos_sha:
+        description: "link-seek/cloudflare-os starter commit（默认 Dockerfile pin）"
+        required: false
+        default: "fe4c68bdec67d3e9467515bac2c848df4cb91b9d"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        run: |
+          set -euo pipefail
+          npm install -g pnpm@11.17.0
+          node --version
+          pnpm --version
+
+      - name: Clone starter + submodule
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/cfos
+          gh repo clone link-seek/cloudflare-os /tmp/cfos
+          cd /tmp/cfos
+          git checkout -q "${{ inputs.cfos_sha }}"
+          git submodule update --init --depth 1
+          git rev-parse HEAD
+          git -C cloudflare-os rev-parse HEAD
+
+      - name: Install deps
+        working-directory: /tmp/cfos
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --dir cloudflare-os exec wrangler --version
+
+      - name: Start backend (run-local, background)
+        working-directory: /tmp/cfos
+        run: |
+          set -euo pipefail
+          # run-local: 装依赖→vite全量构建→workerd on :8787，前端 dist 由后端同源服务
+          nohup pnpm --dir cloudflare-os run-local > /tmp/runlocal.log 2>&1 &
+          echo $! > /tmp/runlocal.pid
+          echo "run-local pid: $(cat /tmp/runlocal.pid)"
+
+      - name: Wait backend :8787
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -fsS -m 10 http://127.0.0.1:8787/ -o /tmp/direct.html; then
+              echo "BACKEND UP after ${i}x10s, bytes: $(wc -c < /tmp/direct.html)"
+              exit 0
+            fi
+            echo "wait backend ${i}/60 ..."
+            sleep 10
+          done
+          echo "FAIL: backend :8787 10分钟未起"
+          tail -n 100 /tmp/runlocal.log || true
+          exit 1
+
+      - name: Install Caddy
+        run: |
+          set -euo pipefail
+          CADDY_VER="2.8.4"
+          curl -fsSL --retry 3 -o /tmp/caddy.tar.gz \
+            "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VER}/caddy_${CADDY_VER}_linux_amd64.tar.gz"
+          tar -xzf /tmp/caddy.tar.gz -C /tmp caddy
+          sudo install -m 0755 /tmp/caddy /usr/local/bin/caddy
+          caddy version
+
+      - name: Start Caddy reverse_proxy (same-origin illusion)
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            ':8080 {' \
+            '  reverse_proxy 127.0.0.1:8787' \
+            '  log {' \
+            '    output stdout' \
+            '  }' \
+            '}' > /tmp/Caddyfile
+          cat /tmp/Caddyfile
+          nohup caddy run --adapter caddyfile --config /tmp/Caddyfile > /tmp/caddy.log 2>&1 &
+          echo $! > /tmp/caddy.pid
+          sleep 3
+          curl -fsS -m 10 http://127.0.0.1:8080/ -o /tmp/via.html
+          echo "CADDY UP, bytes: $(wc -c < /tmp/via.html)"
+
+      - name: Verify same-origin (direct vs via-Caddy must match)
+        run: |
+          set -euo pipefail
+          echo "=== 1) / status+body 一致 ==="
+          D_CODE="$(curl -sS -o /tmp/d.html -w '%{http_code}' -m 15 http://127.0.0.1:8787/)"
+          V_CODE="$(curl -sS -o /tmp/v.html -w '%{http_code}' -m 15 http://127.0.0.1:8080/)"
+          echo "direct=$D_CODE via=$V_CODE direct_bytes=$(wc -c < /tmp/d.html) via_bytes=$(wc -c < /tmp/v.html)"
+          [ "$D_CODE" = "200" ] || { echo "FAIL: backend / 非200 ($D_CODE)"; exit 1; }
+          [ "$V_CODE" = "200" ] || { echo "FAIL: 经Caddy / 非200 ($V_CODE)"; tail -n 50 /tmp/caddy.log || true; exit 1; }
+          cmp -s /tmp/d.html /tmp/v.html && echo "BODY IDENTICAL OK" || { echo "FAIL: 直连与经Caddy body 不一致"; exit 1; }
+          echo "PASS: / same-origin"
+
+          echo "=== 2) http 代理路径可达（非502即到后端） ==="
+          for p in /api/site-logo /blueprint-screenshot /api/client-errors; do
+            C="$(curl -sS -o /dev/null -w '%{http_code}' -m 15 "http://127.0.0.1:8080${p}" || echo 000)"
+            echo "$p via-Caddy=$C"
+            [ "$C" != "502" ] || { echo "FAIL: $p 经Caddy 502（反代没打通）"; exit 1; }
+            [ "$C" != "000" ] || { echo "FAIL: $p 连接失败"; exit 1; }
+          done
+          echo "PASS: http paths proxied"
+
+          echo "=== 3) WS /api 升级行为一致（直连 vs 经Caddy） ==="
+          ws_code() {
+            curl -sS -o /dev/null -w '%{http_code}' -m 15 \
+              -H "Connection: Upgrade" -H "Upgrade: websocket" \
+              -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+              "$1/api" || echo 000
+          }
+          D_WS="$(ws_code http://127.0.0.1:8787)"
+          V_WS="$(ws_code http://127.0.0.1:8080)"
+          echo "direct_ws=$D_WS via_ws=$V_WS"
+          [ "$V_WS" != "502" ] || { echo "FAIL: WS 经Caddy 502"; exit 1; }
+          [ "$D_WS" = "$V_WS" ] || { echo "FAIL: WS 状态直连($D_WS)与经Caddy($V_WS)不一致"; exit 1; }
+          echo "PASS: ws /api proxied (both $V_WS)"
+
+          echo "VERIFY PASS: Caddy反代同源，零改代码可行"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "===== runlocal tail ====="; tail -n 100 /tmp/runlocal.log || true
+          echo "===== caddy tail ====="; tail -n 100 /tmp/caddy.log || true
+
+      - name: Cleanup (ephemeral, no residue)
+        if: always()
+        run: |
+          kill "$(cat /tmp/caddy.pid 2>/dev/null || echo 0)" 2>/dev/null || true
+          kill "$(cat /tmp/runlocal.pid 2>/dev/null || echo 0)" 2>/dev/null || true
+          pkill -f run-local || true
+          pkill -f wrangler || true
+          echo cleaned
