@@ -621,10 +621,16 @@ jobs:
           k3d image import "${DIGEST_SOURCE}" -c preflight
           # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-          # sidecar 同簇（CDP e2e 用；SWR 直拉 + 建 swr-pull secret 供 kubelet，二者缺一不可）
+          # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
           if [ -n "${SIDECAR_IMG:-}" ]; then
-            docker pull "$SIDECAR_IMG"
+            # runner 在境外：SWR（境内）直拉 1GB+ sidecar 跨洋慢；GHCR 有同 digest（bake 双推，字节相同），
+            # 走 GHCR 拉再 tag 回 manifest 原名，kubelet 匹配行为与原来一字不差，生产仍用 SWR。
+            # 仅 link-seek 名命中有 GHCR 镜像（ghcr.io 上线 11-16 起双推）；其它命名回落 SWR 直拉。
+            PULL_IMG="$SIDECAR_IMG"
+            case "$SIDECAR_IMG" in swr.*/link-seek/*) PULL_IMG="ghcr.io/${SIDECAR_IMG#*/}";; esac
+            docker pull "$PULL_IMG"
+            [ "$PULL_IMG" != "$SIDECAR_IMG" ] && docker tag "$PULL_IMG" "$SIDECAR_IMG"
             k3d image import "$SIDECAR_IMG" -c preflight
           elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
