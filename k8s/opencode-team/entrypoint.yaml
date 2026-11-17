@@ -39,4 +39,9 @@ data:
         json.dump(d,open(p,'w'),indent=2)
         print('cognee-mcp-injected')
     PY
+    # obsutil 配置：env 全量（OBS_AK/OBS_SK 必填，OBS_ENDPOINT 缺省华北四；密钥不进镜像）。
+    if [ -n "${OBS_AK:-}" ] && [ -n "${OBS_SK:-}" ]; then
+      printf 'endpoint=%s\nak=%s\nsk=%s\ntoken=\n' "${OBS_ENDPOINT:-https://obs.cn-north-4.myhuaweicloud.com}" "$OBS_AK" "$OBS_SK" > /root/.obsutilconfig
+      chmod 600 /root/.obsutilconfig
+    fi
     exec opencode "$@"
