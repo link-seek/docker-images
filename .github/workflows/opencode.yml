@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       - name: Run intake triage
-        uses: link-seek/opencode-github-bot@v0.7.4 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
+        uses: link-seek/opencode-github-bot@v0.7.5 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
@@ -82,7 +82,7 @@ jobs:
 
       - name: Run OpenCode (review)
         if: github.event_name != 'issues'
-        uses: link-seek/opencode-github-bot@v0.7.4 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
+        uses: link-seek/opencode-github-bot@v0.7.5 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
@@ -98,7 +98,7 @@ jobs:
 
       - name: Run OpenCode for assigned issue
         if: github.event_name == 'issues'
-        uses: link-seek/opencode-github-bot@v0.7.4 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
+        uses: link-seek/opencode-github-bot@v0.7.5 # tracked: bot 0.7.2 (npm 默认)，升级改 tag 即可
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
