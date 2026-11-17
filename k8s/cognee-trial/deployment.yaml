@@ -41,7 +41,7 @@ spec:
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
             # Embedding：trial 先 fastembed 本地（零外部依赖），bge-m3 定版后切
             - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
+            - {name: EMBEDDING_MODEL, value: "BOGUS/probe-123"}
             - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
