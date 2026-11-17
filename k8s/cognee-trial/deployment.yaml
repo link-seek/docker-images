@@ -35,7 +35,7 @@ spec:
             - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
             # LLM：TEXT_MODEL（beam-free）经 litellm 网关
             - {name: LLM_PROVIDER, value: "custom"}
-            - {name: LLM_MODEL, value: "openai/beam-free"}
+            - {name: LLM_MODEL, value: "openai/muse-spark-1.3-contributor"} # TEXT_MODEL 临时改 Go 档（beam-free 日配额烧干；定版换回变量值）
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
