@@ -52,3 +52,7 @@ command:
     timeout: 60000
     stderr:
       - '[open-design]'
+
+  maas-provider:
+    exec: "grep -q huawei-maas /root/.config/opencode/opencode.json && grep -q deepseek-v4.1-flash-1017 /root/.config/opencode/opencode.json"
+    exit-status: 0

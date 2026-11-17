@@ -31,6 +31,21 @@ identity() { # 货对单：跑的必须是刚打出来的 digest
   esac
 }
 
+
+maas_reach() { # MAAS 端点可达（dummy key → 401/403 预期；只验 DNS/TLS，不耗 key）
+  $K8S_EXEC python3 -c "
+import urllib.request, urllib.error
+r = urllib.request.Request('https://api.modelarts-maas.com/v2/models', headers={'Authorization': 'Bearer dummy-preflight'})
+try:
+    urllib.request.urlopen(r, timeout=20)
+    print('UNEXPECTED 200'); raise SystemExit(1)
+except urllib.error.HTTPError as e:
+    print('MAAS REACHABLE, status', e.code)
+    raise SystemExit(0 if e.code in (401, 403) else 1)
+"
+  echo "E2E PASS: maas-reach"
+}
+
 smoke() { # 内置兜底：版本 + skill 文件 + MCP 烘焙可用（快、无网、无模型；2026-11-17 脏缓存教训）
   $K8S_EXEC opencode --version
   $K8S_EXEC test -f /root/.agents/skills/open-design/SKILL.md
@@ -55,6 +70,7 @@ link() { # 全链路：agent-browser 经 CDP 连 browserless（example.com 外�
 
 identity
 smoke
+maas_reach
 if [ "${E2E_CASES:-}" = "skip" ]; then
   echo "E2E SKIP: E2E_CASES=skip，只认版本+连通"
 else
