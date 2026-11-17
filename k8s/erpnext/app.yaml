@@ -29,6 +29,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-gunicorn
         app.kubernetes.io/instance: erpnext-gunicorn
+        app: erpnext-gunicorn
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -119,6 +120,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-nginx
         app.kubernetes.io/instance: erpnext-nginx
+        app: erpnext-nginx
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -206,6 +208,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-scheduler
         app.kubernetes.io/instance: erpnext-scheduler
+        app: erpnext-scheduler
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -260,6 +263,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-socketio
         app.kubernetes.io/instance: erpnext-socketio
+        app: erpnext-socketio
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -350,6 +354,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-worker-default
         app.kubernetes.io/instance: erpnext-worker-default
+        app: erpnext-worker-default
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -404,6 +409,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-worker-long
         app.kubernetes.io/instance: erpnext-worker-long
+        app: erpnext-worker-long
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
@@ -458,6 +464,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-worker-short
         app.kubernetes.io/instance: erpnext-worker-short
+        app: erpnext-worker-short
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui

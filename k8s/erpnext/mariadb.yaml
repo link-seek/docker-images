@@ -67,6 +67,7 @@ spec:
       labels:
         app.kubernetes.io/name: erpnext-mariadb-sts
         app.kubernetes.io/instance: erpnext
+        app: erpnext
     spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
