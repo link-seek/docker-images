@@ -1,0 +1,23 @@
+# k8s/opencode 数据卷（local-path-provisioner，k3s 自带；.69 单机）。
+# 对应 compose 的 prod-work（/workspace）与 prod-data（opencode 本地状态）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prod-work
+  namespace: opencode-yingxin
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prod-data
+  namespace: opencode-yingxin
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
