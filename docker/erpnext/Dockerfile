@@ -12,7 +12,7 @@ SHELL ["/bin/bash", "-c"]
 
 # CJK 字体（打印 PDF 中文必需）+ zh_CN locale； fiction：只加字体与 locale，不动 bench 代码。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      fonts-Noto-cjk fonts-Noto-cjk-extra locales \
+      fonts-noto-cjk fonts-noto-cjk-extra locales \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/^# *zh_CN.UTF-8/zh_CN.UTF-8/' /etc/locale.gen && locale-gen zh_CN.UTF-8 \
     && fc-cache -f >/dev/null \
