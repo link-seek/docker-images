@@ -4,9 +4,9 @@
 # - redis 不用 bitnami/dragonfly/valkey subchart，手写两个最小 Deployment（cache/queue，无 auth，emptyDir）；
 # - persistence.worker/sites：RWX→RWO（local-path 只支持 RWO；全 pod 钉 .69 同节点，共享卷安全）；
 # - storageClass：local-path（k3s 默认）；全负载 nodeSelector 钉 .69
-#  （ecs-ies-euleros-jmupermv-zhangzhirui；41 local-path helper 拉不动 docker.io，PVC 永 Pending，见 team 注释）；
+#  （ecs-ies-euleros-jmupervm-zhangzhirui；41 local-path helper 拉不动 docker.io，PVC 永 Pending，见 team 注释）；
 # - jobs 用固定名（chart 默认带时间戳，每次 Flux 对账都会新建 job，生产不可接受）；
-# - createSite 默认关→开（trial 要进登录页），admin 密码走 existingSecret（ertest-env…即 erpnext secret），不明文；
+# - createSite 默认关→开（trial 要进登录页），admin 密码走 existingSecret（即 Secret erpnext），不明文；
 # - HPA/ingress/httproute 不要（入口走 120 Caddy→tailnet operator，见 service.yaml）。
 # 镜像 tag 即行为版本：首 bake 出 tag 后改 digest pin 发 PR（与旧线同语义）。
 # Secret erpnext 不进仓（mariadb-root-password + admin-password）：Flux 对账前先经 pipeline mint，
