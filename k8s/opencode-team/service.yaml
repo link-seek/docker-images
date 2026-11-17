@@ -28,3 +28,17 @@ spec:
   selector: {app: browserless}
   ports:
     - {name: http, port: 3000, targetPort: 3000}
+---
+# opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP 直达；tailnet 口不动）。
+# 外端口 44097：ServiceLB 按 Service 端口占节点 hostPort，hw21/hw41 本机单机版已占 4097，避冲突。
+# 端口登记：team-vpc=44097；回滚=revert。
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-vpc
+  namespace: opencode-team
+spec:
+  type: LoadBalancer
+  selector: {app: opencode-team}
+  ports:
+    - {name: http, port: 44097, targetPort: 4097}
