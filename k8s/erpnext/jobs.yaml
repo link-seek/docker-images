@@ -1,5 +1,5 @@
 # 一次性 jobs（vendor 自 chart job-configure-bench.yaml + job-create-site.yaml）。
-# 偏离 chart：job 名用固定名 + 手动版本后缀（当前 -r3），原因有二：
+# 偏离 chart：job 名用固定名 + 手动版本后缀（conf-bench -r3，create-site -r4），原因有二：
 #   a) Flux 对静态文件只在 git 变更时对账，无重复建 job 之忧；
 #   b) Job 的 spec.template 不可变，改模板必须换名重建，prune 自动清旧的（旧 Pending/Failed job 无完成记录可丢）。
 #   改 job 模板时务必同步 bump 后缀，否则整单 Flux 卡死（2026-11-17 实锤：dry-run Invalid）。
@@ -94,7 +94,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: erpnext-create-site-r3
+  name: erpnext-create-site-r4
   namespace: erpnext
   labels:
     helm.sh/chart: erpnext-8.0.14
@@ -159,6 +159,7 @@ spec:
             - >
               set -x;
               set -o pipefail;
+              rm -rf "sites/${SITE_NAME}" currentsite.txt;
 
               bench_output=$(bench new-site "${SITE_NAME}" \
                 --no-mariadb-socket \
