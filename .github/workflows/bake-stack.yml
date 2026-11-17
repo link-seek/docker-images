@@ -50,7 +50,7 @@
 # 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
 # 安全门：只有 main 分支才转正式 tag；分支 dispatch 只跑到细测（TRIAL-ONLY），合前可验骨架本身。
-# 轮询门：gh run watch --interval 不得小于 15s（短轮询撞次级限流；骨架内已用 20s）。
+# 轮询门：gh run watch --interval 默认 60s，急活 30s，底线 15s（短轮询撞次级限流；骨架内已用 60s）。
 # 版本全由上游 resolve 定（dispatch 参数或自动最新），不读 pin 不回写；审计靠 run 日志。
 
 on:
@@ -555,7 +555,7 @@ jobs:
           done
           [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现，或无 node_tag=$EXPECTED_NODE_TAG + digest=$EXPECTED_DIGEST 的可核对 run（fail-closed）"; exit 1; }
           echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID (node_tag=$EXPECTED_NODE_TAG, digest=$EXPECTED_DIGEST)"
-          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 20 --exit-status \
+          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 60 --exit-status \
             || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
           echo PREFLIGHT-GREEN
 
