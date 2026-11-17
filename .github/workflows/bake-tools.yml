@@ -20,7 +20,12 @@ on:
         description: "E2E 名单（空=full 全量；skip跳过；full全跑；逗号名单指定）"
         required: false
         type: string
-        default: ""
+        default: 
+      force_retag:
+        description: "版本 tag 已存在且 digest 不同时强行挪 tag（旧 pin 会断；默认红）"
+        required: false
+        type: boolean
+        default: false""
   push:
     branches: [main]
     paths:
@@ -45,6 +50,7 @@ jobs:
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
       tag_mode: explicit
       explicit_tag: ${{ inputs.opencode_tag }}
+      force_retag: ${{ inputs.force_retag }}
       build_args: |
         OPENCODE_TAG=${{ inputs.opencode_tag }}
       push_temp_to_ghcr: true

@@ -171,6 +171,10 @@ on:
         required: false
         type: boolean
         default: false
+      force_retag:
+        required: false
+        type: boolean
+        default: false
       k8s_manifest_repo:
         required: false
         type: string
@@ -773,6 +777,19 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
           SOURCE="${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
+          NEW_DIGEST="${DIGEST:?DIGEST 未设置}"
+          # 版本 tag 不可变（digest pin 的前提；2026-11-17 d4f668b6 被 SWR 回收事故）：
+          # 已存在的版本 tag 若指向不同 digest，直接红，逼出新版本或显式 force；
+          # latest 照旧浮动。
+          EXISTING="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:$TAG" --format '{{json .Manifest}}' 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null || true)"
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "$NEW_DIGEST" ]; then
+            if [ "${{ inputs.force_retag }}" = "true" ]; then
+              echo "WARN: 版本 tag $TAG 已存在（$EXISTING），force_retag 强行挪到 $NEW_DIGEST；旧 digest 引用方会断"
+            else
+              echo "FAIL: 版本 tag $TAG 已存在且指向 $EXISTING ≠ 本次 $NEW_DIGEST；版本 tag 不可变。请发新版本，或显式 force_retag=true（旧 pin 会断，审慎）"
+              exit 1
+            fi
+          fi
           # 跨境推层偶发断流（PROTOCOL_ERROR），重试 3 次，间隔 60s
           for i in 1 2 3; do
             docker buildx imagetools create \

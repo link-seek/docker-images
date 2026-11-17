@@ -6,6 +6,11 @@ name: bake-gateway
 on:
   workflow_dispatch:
     inputs:
+      force_retag:
+        description: "版本 tag 已存在且 digest 不同时强行挪 tag（旧 pin 会断；默认红）"
+        required: false
+        type: boolean
+        default: false
       e2e_cases:
         description: "E2E 名单（空=默认跑 models-list；skip=只验 identity）"
         required: false
@@ -34,6 +39,7 @@ jobs:
       ghcr_image: ghcr.io/link-seek/litellm-gateway
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
       tag_mode: date-sha
+      force_retag: ${{ inputs.force_retag }}
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       k8s_app: litellm-gateway
