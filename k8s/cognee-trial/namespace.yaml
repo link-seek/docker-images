@@ -1,0 +1,9 @@
+# k8s/cognee-trial — 组织记忆中央 trial（单用户模式，无鉴权；opencode 侧不动）。
+# 数据 emptyDir（trial 一次性，recreate 即清空）；定型后换 PVC + EBAC + 一 ns 一 MCP。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cognee-trial
+  labels:
+    app.kubernetes.io/managed-by: flux
+    app.kubernetes.io/name: cognee-trial
