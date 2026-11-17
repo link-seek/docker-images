@@ -1,5 +1,5 @@
 # MariaDB（vendor 自 chart statefulset-mariadb.yaml + service-mariadb.yaml，mariadb-sts.enabled=true 等价）。
-# image：SWR 常驻官方镜像（url2hc 转入，expire 0）：swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb:10.6
+# image：SWR 常驻官方镜像（url2hc 转入，expire 0）：swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb@sha256:b820ae982bd8a8d9b79c565e033049a93f06733e3e10d04d9e7404702df9f39d
 # root 密码走 Secret erpnext/mariadb-root-password（pipeline mint，不进仓）。
 # my.cnf 照 chart 8.0.14 values 原样（utf8mb4 + 跳过压缩，ERPNext 建站必需）。
 apiVersion: v1
@@ -77,7 +77,7 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: mariadb
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb:10.6
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb@sha256:b820ae982bd8a8d9b79c565e033049a93f06733e3e10d04d9e7404702df9f39d
           imagePullPolicy: IfNotPresent
           env:
             - name: MARIADB_ROOT_PASSWORD

@@ -1,5 +1,7 @@
 # 应用工作负载（vendor 自 chart 8.0.14 deployment-*.yaml，release 名 erpnext）。
-# 全员同一镜像：erpnext-cn 派生（首 bake 前为 tag 占位，bake 转正后改 digest pin 发 PR）。
+# 全员同一镜像：官方原装 SWR 镜像 digest pin（url2hc 转入，expire 0）。
+# 派生 erpnext-cn 的 bake 门被上游自带漏洞拦住（npm/esbuild 需重建前端，大手术），trial 先用官方 digest 跑通；
+# 派生 hardening（apt upgrade 已进 Dockerfile，pip/npm 升级 + .trivyignore 认领另行迭代）转正后再切回 erpnext-cn digest。
 # 偏离 chart：全员钉 .69（nodeSelector），topologySpreadConstraints 删（单副本 trial 无意义），
 # resources 全 {}（chart 默认），HPA 不要。
 # sites-dir 挂 PVC erpnext（RWO，.69 同节点共享）；logs 保持 emptyDir（chart 默认关持久化）。
@@ -37,7 +39,7 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: gunicorn
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           securityContext:
             capabilities:
@@ -150,7 +152,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
@@ -218,7 +220,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
@@ -272,7 +274,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
@@ -362,7 +364,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
@@ -416,7 +418,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
@@ -470,7 +472,7 @@ spec:
             capabilities:
               add:
                 - CAP_CHOWN
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: sites-dir
