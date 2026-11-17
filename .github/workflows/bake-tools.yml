@@ -74,3 +74,5 @@ jobs:
       OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
       OCI_REGION: ${{ secrets.OCI_REGION }}
       OCI_API_PRIVATE_KEY: ${{ secrets.OCI_API_PRIVATE_KEY }}
+      ALI_AK: ${{ secrets.ALI_AK }}
+      ALI_SK: ${{ secrets.ALI_SK }}

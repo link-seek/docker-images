@@ -71,6 +71,11 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-env, key: TS_JOIN_KEY}}
             - name: SMTP_PASS
               valueFrom: {secretKeyRef: {name: opencode-env, key: SMTP_PASS}}
+            # 阿里云身份（yingxin 生产专用；CLI 原生 env 名，开箱即用）
+            - name: ALIBABACLOUD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: opencode-env, key: ALIBABACLOUD_ACCESS_KEY_ID}}
+            - name: ALIBABACLOUD_ACCESS_KEY_SECRET
+              valueFrom: {secretKeyRef: {name: opencode-env, key: ALIBABACLOUD_ACCESS_KEY_SECRET}}
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
             - {name: prod-data, mountPath: /root/.local/share/opencode}
