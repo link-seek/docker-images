@@ -109,7 +109,7 @@ command:
     exec: "timeout 25 open-design-mcp --help"
     exit-status: 0
     timeout: 60000
-    stdout:
+    stderr:
       - '[open-design]'
 
   msmtp:
