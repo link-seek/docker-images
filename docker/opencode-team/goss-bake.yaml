@@ -1,0 +1,54 @@
+# opencode-team 成品自检（dgoss，tools 的子集：无 tailscale/本地 chrome，浏览器走外部 browserless，运行时测）。
+# 用法：GOSS_FILE=goss-bake.yaml GOSS_VARS=<vars> dgoss run ... <image> serve ...
+# TAG 由 bake-team.yml 经 --vars 注入，避免版本号在仓内两处手抄。
+command:
+  opencode-version:
+    exec: "opencode --version"
+    exit-status: 0
+    stdout:
+      - '{{ .Vars.TAG }}'
+
+  node:
+    exec: "node --version"
+    exit-status: 0
+
+  gh:
+    exec: "gh --version"
+    exit-status: 0
+
+  agent-browser:
+    exec: "agent-browser --version"
+    exit-status: 0
+
+  send-mail:
+    exec: "send-mail --help"
+    exit-status: 0
+    stdout:
+      - '-m'
+
+  fetch-mail:
+    exec: "fetch-mail --help"
+    exit-status: 0
+    stdout:
+      - 'list'
+
+  md2html:
+    exec: "python3 /usr/local/lib/send-mail/md2html.py"
+    exit-status: 2
+
+  design-skill:
+    exec: "test -f /root/.agents/skills/open-design/SKILL.md && grep -c prepare_open_design_brief /root/.agents/skills/open-design/SKILL.md"
+    exit-status: 0
+
+  design-mcp-binary:
+    exec: "command -v open-design-mcp"
+    exit-status: 0
+    stdout:
+      - 'open-design-mcp'
+
+  design-mcp-startup:
+    exec: "timeout 25 open-design-mcp --help"
+    exit-status: 0
+    timeout: 60000
+    stdout:
+      - '[open-design]'

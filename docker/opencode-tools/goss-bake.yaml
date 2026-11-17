@@ -88,6 +88,20 @@ command:
     timeout: 180000
     stdout:
       - 'open-design'
+      - 'open-design-mcp'
+
+  design-mcp-binary:
+    exec: "command -v open-design-mcp"
+    exit-status: 0
+    stdout:
+      - 'open-design-mcp'
+
+  design-mcp-startup:
+    exec: "timeout 25 open-design-mcp --help"
+    exit-status: 0
+    timeout: 60000
+    stdout:
+      - '[open-design]'
 
   msmtp:
     exec: "msmtp --version"
@@ -97,7 +111,7 @@ file:
   /root/.config/opencode/opencode.json:
     exists: true
     contents:
-      - '@feimacode/open-design-agent-kit-mcp'
+      - 'open-design-mcp'
 
   /root/.agents/skills/open-design/SKILL.md:
     exists: true

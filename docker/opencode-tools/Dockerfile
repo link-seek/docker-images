@@ -1,5 +1,5 @@
 # opencode-tools（glibc 线）：官方 opencode 二进制 + 自研工具层 + 记忆插件烘焙
-# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f Dockerfile.opencode-tools -t <镜像> .
+# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-tools/Dockerfile -t <镜像> .
 # 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
@@ -103,12 +103,16 @@ RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && wrangler --version \
  && agent-browser --version
 
-# 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
-# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
-# - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
-# - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
+# 设计能力（feimacode/open-design-agent-kit，社区包）：
+# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills），浮动跟随，出问题再定。
+# - MCP server：烘焙进镜像（本地二进制直调，不走运行时 npx 现下；2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
+# - 版本 pin：ARG OD_MCP_VERSION 单源头（与 OPENCODE_MEM_VERSION 同 pattern）；bump=改这行发 PR。
+ARG OD_MCP_VERSION=0.4.0
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
- && test -f /root/.agents/skills/open-design/SKILL.md
+  && test -f /root/.agents/skills/open-design/SKILL.md \
+  && npm install -g "@feimacode/open-design-agent-kit-mcp@${OD_MCP_VERSION}" \
+  && command -v open-design-mcp \
+  && timeout 25 open-design-mcp --help
 
 # tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
