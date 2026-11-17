@@ -1,0 +1,59 @@
+# k8s/cognee-trial 主 Deployment（GH runner 已验镜像可 boot：/health 200，见 url2hc#6）。
+# digest pin 即行为版本（SWR link-seek/cognee-mcp:main，2026-11-17 全绿 run 43992077955）。
+# trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、无 Secret（单用户模式，LLM 后续接）、数据 emptyDir。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cognee
+  namespace: cognee-trial
+  labels:
+    app: cognee
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # 单副本+本地卷：滚动无意义
+  selector:
+    matchLabels:
+      app: cognee
+  template:
+    metadata:
+      labels:
+        app: cognee
+    spec:
+      containers:
+        - name: cognee
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp@sha256:0e2db68d78e791bf6503de0922373a461e2ac7a92e2a3d6f08972f0a91b5fb01
+          ports:
+            - {name: http, containerPort: 8000}
+          env:
+            - {name: TRANSPORT_MODE, value: "http"}
+          volumeMounts:
+            - {name: data, mountPath: /root/.cognee_system}
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cognee
+  namespace: cognee-trial
+  labels:
+    app: cognee
+spec:
+  selector: {app: cognee}
+  ports:
+    - {name: http, port: 8000, targetPort: 8000}
