@@ -222,6 +222,10 @@ on:
         required: false
       OCI_API_PRIVATE_KEY:
         required: false
+      ALI_AK:
+        required: false
+      ALI_SK:
+        required: false
 
 permissions:
   contents: read
@@ -601,6 +605,8 @@ jobs:
           OCI_T: ${{ secrets.OCI_TENANCY_OCID }}
           OCI_R: ${{ secrets.OCI_REGION }}
           OCI_KEY: ${{ secrets.OCI_API_PRIVATE_KEY }}
+          ALI_U: ${{ secrets.ALI_AK }}
+          ALI_S: ${{ secrets.ALI_SK }}
         run: |
           set -euo pipefail
           NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
@@ -634,7 +640,7 @@ jobs:
           # Secret 预渲染（模板占位注入；SMTP 缺失直接红，提示补仓 secret）
           [ -n "${{ inputs.k8s_secret_env_file }}" ] || { echo "FAIL: k8s_secret_env_file 未传"; exit 1; }
           [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }
-          sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" \
+          sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" -e "s/__ALI_AK__/${ALI_U:-}/g" -e "s/__ALI_SK__/${ALI_S:-}/g" \
             "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
           kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
             --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
@@ -647,6 +653,14 @@ jobs:
               -e OCI_CLI_KEY_CONTENT="$OCI_KEY" \
               "$DIGEST_SOURCE" iam availability-domain list \
               --compartment-id "$OCI_T" --output json | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d.get('data'),list) and len(d['data'])>0; print('OCI PROBE OK: ADs', len(d['data']))"
+          fi
+          # 阿里云钥匙真伪直验（runner 侧，用刚打的镜像跑 aliyun-cli；pod 内由 case-aliyun 覆盖）
+          if [ -n "${ALI_U:-}" ] && [ -n "${ALI_S:-}" ]; then
+            docker run --rm --entrypoint aliyun \
+              -e ALIBABACLOUD_ACCESS_KEY_ID="$ALI_U" -e ALIBABACLOUD_ACCESS_KEY_SECRET="$ALI_S" \
+              -e ALIBABACLOUD_REGION_ID=cn-hangzhou \
+              "$DIGEST_SOURCE" ecs DescribeInstances \
+              --RegionId cn-hangzhou --PageSize 1 | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'Instances' in d, d; print('ALI PROBE OK: TotalCount', d.get('TotalCount'))"
           fi
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
           SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
