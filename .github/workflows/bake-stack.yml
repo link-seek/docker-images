@@ -45,7 +45,7 @@
 #   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
 #          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
-#          OCI_*（新预检 oci 用例；KEY_CONTENT 走 --from-file，不进 env-file；没传则 case-oci 自跳）
+#          OCI_*（runner 侧探针直验钥匙；标识符在 manifest 明文，secret 只留 KEY_CONTENT；没传则跳过）
 #
 # 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
@@ -635,22 +635,10 @@ jobs:
           [ -n "${{ inputs.k8s_secret_env_file }}" ] || { echo "FAIL: k8s_secret_env_file 未传"; exit 1; }
           [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }
           sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" \
-            -e "s/__OCI_USER__/${OCI_U:-}/g" -e "s/__OCI_FINGERPRINT__/${OCI_FP:-}/g" \
-            -e "s/__OCI_TENANCY__/${OCI_T:-}/g" -e "s/__OCI_REGION__/${OCI_R:-}/g" \
             "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
           kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
             --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
           rm -f /tmp/preflight-secret.env
-          # kubectl 禁止 from-env-file 混 from-file：KEY_CONTENT 改 patch 追加（merge 不剪枝，幂等）
-          if [ -n "${OCI_KEY:-}" ]; then
-            printf '%s' "$OCI_KEY" > /tmp/oci-key.pem && chmod 600 /tmp/oci-key.pem
-            OCI_B64="$(base64 -w0 /tmp/oci-key.pem)"
-            [ -n "$OCI_B64" ] || { echo "FAIL: OCI KEY 为空"; exit 1; }
-            kubectl -n "$NS" patch secret "${{ inputs.k8s_secret_name }}" \
-              -p "{\"data\":{\"OCI_CLI_KEY_CONTENT\":\"$OCI_B64\"}}"
-            echo "OCI KEY PATCHED: ${{ inputs.k8s_secret_name }}"
-            rm -f /tmp/oci-key.pem
-          fi
           # OCI 钥匙真伪直验（runner 侧，用刚打的镜像跑 oci-cli；pod 内由 case-oci 覆盖）
           if [ -n "${OCI_KEY:-}" ]; then
             docker run --rm --entrypoint oci \
