@@ -638,14 +638,19 @@ jobs:
             -e "s/__OCI_USER__/${OCI_U:-}/g" -e "s/__OCI_FINGERPRINT__/${OCI_FP:-}/g" \
             -e "s/__OCI_TENANCY__/${OCI_T:-}/g" -e "s/__OCI_REGION__/${OCI_R:-}/g" \
             "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
-          OCI_ARG=""
+          kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
+            --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
+          rm -f /tmp/preflight-secret.env
+          # kubectl 禁止 from-env-file 混 from-file：KEY_CONTENT 改 patch 追加（merge 不剪枝，幂等）
           if [ -n "${OCI_KEY:-}" ]; then
             printf '%s' "$OCI_KEY" > /tmp/oci-key.pem && chmod 600 /tmp/oci-key.pem
-            OCI_ARG="--from-file=OCI_CLI_KEY_CONTENT=/tmp/oci-key.pem"
+            OCI_B64="$(base64 -w0 /tmp/oci-key.pem)"
+            [ -n "$OCI_B64" ] || { echo "FAIL: OCI KEY 为空"; exit 1; }
+            kubectl -n "$NS" patch secret "${{ inputs.k8s_secret_name }}" \
+              -p "{\"data\":{\"OCI_CLI_KEY_CONTENT\":\"$OCI_B64\"}}"
+            echo "OCI KEY PATCHED: ${{ inputs.k8s_secret_name }}"
+            rm -f /tmp/oci-key.pem
           fi
-          kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
-            --from-env-file=/tmp/preflight-secret.env $OCI_ARG --dry-run=client -o yaml | kubectl apply -f -
-          rm -f /tmp/preflight-secret.env /tmp/oci-key.pem
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
           SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
           SRC_REF="${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}"
