@@ -219,6 +219,9 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: scheduler
+          args:
+            - bench
+            - schedule
           securityContext:
             capabilities:
               add:
@@ -274,6 +277,9 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: socketio
+          args:
+            - node
+            - /home/frappe/frappe-bench/apps/frappe/socketio.js
           securityContext:
             capabilities:
               add:
@@ -365,6 +371,11 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: worker-default
+          args:
+            - bench
+            - worker
+            - --queue
+            - default
           securityContext:
             capabilities:
               add:
@@ -420,6 +431,11 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: worker-long
+          args:
+            - bench
+            - worker
+            - --queue
+            - "long,default,short"
           securityContext:
             capabilities:
               add:
@@ -475,6 +491,11 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: worker-short
+          args:
+            - bench
+            - worker
+            - --queue
+            - "short,default"
           securityContext:
             capabilities:
               add:

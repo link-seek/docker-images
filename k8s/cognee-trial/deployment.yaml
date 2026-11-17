@@ -43,14 +43,11 @@ spec:
             # custom provider 经 LiteLLM 走 /v1/embeddings；key 用 Secret 内 CF_AI_TOKEN（pipeline 现签，不进仓）。
             # fastembed-local 已判死（.69 上起 onnx 即崩 worker，mock 也绕不开模型加载），不再用。
             - {name: EMBEDDING_PROVIDER, value: "custom"}
-            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"}
+            - {name: EMBEDDING_MODEL, value: "openai/@cf/baai/bge-m3"} # custom 经 LiteLLM 要按 openai/ 前缀路由（与 LLM 侧 openai/beam-free 同理），实际送到 CF 的仍是 @cf/baai/bge-m3
             - {name: EMBEDDING_DIMENSIONS, value: "1024"}
             - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
             - name: EMBEDDING_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true }}
-            - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
-            - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
           readinessProbe:
