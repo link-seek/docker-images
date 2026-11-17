@@ -4,8 +4,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - pvc.yaml
-  # mariadb.yaml 已摘除（STS 控制器 4 小时未滚动旧 pod-0，疑似 wedged；prune 删 STS+pod 后重建见下一步）。
-  # 数据无忧：mariadb 从未起服，PVC 是空的。
+  - mariadb.yaml
   - redis.yaml
   - app.yaml
   - service.yaml
