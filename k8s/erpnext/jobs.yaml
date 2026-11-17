@@ -1,0 +1,221 @@
+# 一次性 jobs（vendor 自 chart job-configure-bench.yaml + job-create-site.yaml）。
+# 偏离 chart：job 名固定（chart 默认带时间戳，每次 Flux 对账新建 job 不可接受）；
+# createSite 默认关→开（trial 要进登录页），admin 密码走 Secret erpnext/admin-password（不明文）；
+# backoffLimit 0→4（建站撞 MariaDB/redis 预热窗口可自愈，chart 默认 0 一次即死）；
+# 全员钉 .69（与 PVC/数据同节点）。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: erpnext-conf-bench
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      initContainers:
+        - name: frappe-bench-ownership
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c']
+          args:
+            - chown -R "1000:1000" /home/frappe/frappe-bench/sites /home/frappe/frappe-bench/logs
+          resources: {}
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: configure
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -c
+          args:
+            - >
+              ls -1 apps > sites/apps.txt;
+              [[ -f sites/common_site_config.json ]] || echo "{}" > sites/common_site_config.json;
+              bench set-config -gp db_port $DB_PORT;
+              bench set-config -g db_host $DB_HOST;
+              bench set-config -g redis_cache $REDIS_CACHE;
+              bench set-config -g redis_queue $REDIS_QUEUE;
+              bench set-config -g redis_socketio $REDIS_QUEUE;
+              bench set-config -gp socketio_port $SOCKETIO_PORT;
+          env:
+            - name: DB_HOST
+              value: erpnext-mariadb-sts
+            - name: DB_PORT
+              value: "3306"
+            - name: REDIS_CACHE
+              value: redis://erpnext-redis-cache:6379
+            - name: REDIS_QUEUE
+              value: redis://erpnext-redis-queue:6379
+            - name: SOCKETIO_PORT
+              value: "9000"
+          resources: {}
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+      restartPolicy: Never
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: erpnext-create-site
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      initContainers:
+        - name: validate-config
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - >
+              export start=`date +%s`;
+              until [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".db_host // empty"` ]] &&
+                [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_cache // empty"` ]] &&
+                [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_queue // empty"` ]];
+              do
+                echo "Waiting for sites/common_site_config.json to be created";
+                sleep 5;
+                if (( `date +%s`-start > 600 )); then
+                  echo "could not find sites/common_site_config.json with required keys";
+                  exit 1
+                fi
+              done;
+              echo "sites/common_site_config.json found";
+
+              echo "Waiting for database to be reachable...";
+              wait-for-it -t 180 $(DB_HOST):$(DB_PORT);
+              echo "Database is reachable.";
+          env:
+            - name: DB_HOST
+              value: erpnext-mariadb-sts
+            - name: DB_PORT
+              value: "3306"
+          resources: {}
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+      containers:
+        - name: create-site
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - >
+              set -x;
+
+              bench_output=$(bench new-site ${SITE_NAME} \
+                --no-mariadb-socket \
+                --db-type=${DB_TYPE} \
+                --db-host=${DB_HOST} \
+                --db-port=${DB_PORT} \
+                --admin-password=${ADMIN_PASSWORD} \
+                --mariadb-root-username=${DB_ROOT_USER} \
+                --mariadb-root-password=${DB_ROOT_PASSWORD} \
+                --install-app=erpnext \
+               | tee /dev/stderr);
+
+              bench_exit_status=$?;
+
+              if [ $bench_exit_status -ne 0 ]; then
+                  if [[ $bench_output == *"already exists"* ]]; then
+                      echo "Site already exists, continuing...";
+                  else
+                      echo "An error occurred in bench new-site: $bench_output"
+                      exit $bench_exit_status;
+                  fi
+              fi
+
+              set -e;
+
+              rm -f currentsite.txt
+          env:
+            - name: SITE_NAME
+              value: erp.xieyucheng.top
+            - name: DB_TYPE
+              value: mariadb
+            - name: DB_HOST
+              value: erpnext-mariadb-sts
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_ROOT_USER
+              value: root
+            - name: DB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: mariadb-root-password
+                  name: erpnext
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: admin-password
+                  name: erpnext
+          resources: {}
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+      restartPolicy: Never
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}

@@ -1,0 +1,19 @@
+# sites 共享卷（chart persistence.worker）：gunicorn/nginx/worker/scheduler/socketio + jobs 共用。
+# 偏离 chart：accessModes RWX→RWO（local-path 不支持 RWX）；storageClass local-path（k3s 默认）。
+# 全消费者钉 .69 同节点，RWO 共享安全。logs 卷 chart 默认关→保持关（emptyDir）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: erpnext
+  namespace: erpnext
+  labels:
+    app: erpnext
+    chart: erpnext-8.0.14
+    heritage: Flux
+    release: erpnext
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 8Gi
