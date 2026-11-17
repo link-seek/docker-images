@@ -1,0 +1,487 @@
+# 应用工作负载（vendor 自 chart 8.0.14 deployment-*.yaml，release 名 erpnext）。
+# 全员同一镜像：erpnext-cn 派生（首 bake 前为 tag 占位，bake 转正后改 digest pin 发 PR）。
+# 偏离 chart：全员钉 .69（nodeSelector），topologySpreadConstraints 删（单副本 trial 无意义），
+# resources 全 {}（chart 默认），HPA 不要。
+# sites-dir 挂 PVC erpnext（RWO，.69 同节点共享）；logs 保持 emptyDir（chart 默认关持久化）。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-gunicorn
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-gunicorn
+      app.kubernetes.io/instance: erpnext-gunicorn
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-gunicorn
+        app.kubernetes.io/instance: erpnext-gunicorn
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: gunicorn
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erpnext-gunicorn
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: erpnext-gunicorn
+    app.kubernetes.io/instance: erpnext-gunicorn
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-nginx
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-nginx
+      app.kubernetes.io/instance: erpnext-nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-nginx
+        app.kubernetes.io/instance: erpnext-nginx
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: nginx
+          args:
+            - nginx-entrypoint.sh
+          env:
+            - name: BACKEND
+              value: erpnext-gunicorn:8000
+            - name: SOCKETIO
+              value: erpnext-socketio:9000
+            - name: UPSTREAM_REAL_IP_ADDRESS
+              value: "127.0.0.1"
+            - name: UPSTREAM_REAL_IP_RECURSIVE
+              value: "off"
+            - name: UPSTREAM_REAL_IP_HEADER
+              value: X-Forwarded-For
+            - name: FRAPPE_SITE_NAME_HEADER
+              value: $host
+            - name: PROXY_READ_TIMEOUT
+              value: "120"
+            - name: CLIENT_MAX_BODY_SIZE
+              value: 50m
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-scheduler
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-scheduler
+      app.kubernetes.io/instance: erpnext-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-scheduler
+        app.kubernetes.io/instance: erpnext-scheduler
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: scheduler
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-socketio
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-socketio
+      app.kubernetes.io/instance: erpnext-socketio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-socketio
+        app.kubernetes.io/instance: erpnext-socketio
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: socketio
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erpnext-socketio
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: erpnext-socketio
+    app.kubernetes.io/instance: erpnext-socketio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-worker-default
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-worker-default
+      app.kubernetes.io/instance: erpnext-worker-default
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-worker-default
+        app.kubernetes.io/instance: erpnext-worker-default
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: worker-default
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-worker-long
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-worker-long
+      app.kubernetes.io/instance: erpnext-worker-long
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-worker-long
+        app.kubernetes.io/instance: erpnext-worker-long
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: worker-long
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erpnext-worker-short
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-worker-short
+      app.kubernetes.io/instance: erpnext-worker-short
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-worker-short
+        app.kubernetes.io/instance: erpnext-worker-short
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: worker-short
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sites-dir
+              mountPath: /home/frappe/frappe-bench/sites
+            - name: logs
+              mountPath: /home/frappe/frappe-bench/logs
+          resources: {}
+      volumes:
+        - name: sites-dir
+          persistentVolumeClaim:
+            claimName: erpnext
+            readOnly: false
+        - name: logs
+          emptyDir: {}
