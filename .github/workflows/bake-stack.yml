@@ -625,13 +625,16 @@ jobs:
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
           if [ -n "${SIDECAR_IMG:-}" ]; then
             # runner 在境外：SWR（境内）直拉 1GB+ sidecar 跨洋慢；GHCR 有同 digest（bake 双推，字节相同），
-            # 走 GHCR 拉再 tag 回 manifest 原名，kubelet 匹配行为与原来一字不差，生产仍用 SWR。
-            # 仅 link-seek 名命中有 GHCR 镜像（ghcr.io 上线 11-16 起双推）；其它命名回落 SWR 直拉。
+            # 走 GHCR 拉（docker tag 不接受 digest 目标，不用 tag）；manifest 侧用下面的 images 映射到 GHCR 同 digest，
+            # 生产 manifest 一字不动。仅 link-seek 命名有 GHCR 镜像；其它回落 SWR 直拉（原行为）。
             PULL_IMG="$SIDECAR_IMG"
-            case "$SIDECAR_IMG" in swr.*/link-seek/*) PULL_IMG="ghcr.io/${SIDECAR_IMG#*/}";; esac
+            SIDECAR_PATCH=""
+            case "$SIDECAR_IMG" in swr.*/link-seek/*@sha256:*)
+              PULL_IMG="ghcr.io/${SIDECAR_IMG#*/}"
+              SIDECAR_PATCH="$(printf '    - name: %s\n      newName: %s\n      digest: "%s"\n' "${SIDECAR_IMG%%@*}" "${PULL_IMG%%@*}" "${SIDECAR_IMG##*@}")"
+            ;; esac
             docker pull "$PULL_IMG"
-            [ "$PULL_IMG" != "$SIDECAR_IMG" ] && docker tag "$PULL_IMG" "$SIDECAR_IMG"
-            k3d image import "$SIDECAR_IMG" -c preflight
+            k3d image import "$PULL_IMG" -c preflight
           elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
           else
@@ -678,6 +681,8 @@ jobs:
             printf '    - name: %s\n      newName: %s\n      digest: "%s"\n' \
               "$n" "${DIGEST_SOURCE%%:*}" "${DIGEST:?DIGEST 未设置}"
           done)"
+          # sidecar 换道 GHCR（同 digest，见上）：kustomize images 追加映射，预检 manifests 免提交
+          [ -n "${SIDECAR_PATCH:-}" ] && IMAGES_YAML="$(printf '%s\n%s\n' "$IMAGES_YAML" "$SIDECAR_PATCH")"
           cat > /tmp/preflight-ks.yaml <<EOF
           apiVersion: kustomize.toolkit.fluxcd.io/v1
           kind: Kustomization
