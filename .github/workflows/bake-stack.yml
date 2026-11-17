@@ -29,6 +29,7 @@
 #   goss_docker_args  dgoss run 的 docker 参数（如 "--network host -e FOO=bar"）；空=默认。
 #   goss_command    容器内替代命令（如 "serve --port 4096 --hostname 127.0.0.1"）；空=镜像默认 CMD。
 #   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/空=full）；骨架只透传不解释。
+#   layer_size_limit_mb 单层体积上限 MB（默认 500，超即红；0=跳过）。
 #   k8s_app         新预检开关：应用名（如 opencode），非空=走 k3d+Flux 预检（#505）；
 #                   空=走老 img-preflight（DEPRECATED）。
 #   k8s_manifest_repo  manifest 所在仓（如 link-seek/infra，过渡用）；空=本仓。
@@ -171,6 +172,11 @@ on:
         required: false
         type: boolean
         default: false
+      layer_size_limit_mb:
+        description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过）"
+        required: false
+        type: string
+        default: "500"
       force_retag:
         required: false
         type: boolean
@@ -335,6 +341,36 @@ jobs:
           docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
+
+      - name: 单层体积门（>LIMIT_MB 即红，防跨境转正断流）
+        run: |
+          set -euo pipefail
+          LIMIT_MB="${{ inputs.layer_size_limit_mb }}"
+          if [ "$LIMIT_MB" = "0" ] || [ -z "$LIMIT_MB" ]; then echo "SKIP: layer gate off"; exit 0; fi
+          IMG="${{ env.SWR_IMAGE }}:${{ steps.build.outputs.tag }}"
+          docker history --no-trunc --format '{{.Size}}|{{.CreatedBy}}' "$IMG" | python3 -c "
+import sys, re
+limit = int('''$LIMIT_MB''')
+unit = {'B': 1, 'KB': 1024, 'MB': 1024**2, 'GB': 1024**3}
+bad = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line or '|' not in line:
+        continue
+    size, cmd = line.split('|', 1)
+    m = re.match(r'([0-9.]+)\s*([KMGT]?B)', size)
+    if not m:
+        continue
+    mb = float(m.group(1)) * unit[m.group(2)] / 1024**2
+    if mb > limit:
+        bad.append((mb, cmd[:100]))
+if bad:
+    print('FAIL: layers over %dMB:' % limit)
+    for mb, cmd in sorted(bad, reverse=True):
+        print('  %.0fMB  %s' % (mb, cmd))
+    sys.exit(1)
+print('LAYER OK: all layers < %dMB' % limit)
+"
 
 
       - name: 安装 goss/dgoss（pin 版，sha256 校验；goss_dir 为空跳过）
