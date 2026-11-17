@@ -3,5 +3,4 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - entrypoint.yaml
-  - pvc.yaml
   - deployment.yaml

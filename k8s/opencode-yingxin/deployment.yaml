@@ -99,9 +99,9 @@ spec:
             limits: {cpu: 500m, memory: 2Gi}
       volumes:
         - name: prod-work
-          persistentVolumeClaim: {claimName: prod-work}
+          hostPath: {path: /var/lib/opencode-yingxin/work, type: DirectoryOrCreate}
         - name: prod-data
-          persistentVolumeClaim: {claimName: prod-data}
+          hostPath: {path: /var/lib/opencode-yingxin/data, type: DirectoryOrCreate}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
 ---
@@ -118,7 +118,7 @@ metadata:
     tailscale.com/hostname: opencode-k3s
     tailscale.com/tags: tag:k8s
 spec:
-  selector: {app: opencode}
+  selector: {app: opencode-yingxin}
   ports:
     - {name: http, port: 4097, targetPort: 4097}
 ---
@@ -132,6 +132,6 @@ metadata:
   namespace: opencode-yingxin
 spec:
   type: LoadBalancer
-  selector: {app: opencode}
+  selector: {app: opencode-yingxin}
   ports:
     - {name: http, port: 44099, targetPort: 4097}
