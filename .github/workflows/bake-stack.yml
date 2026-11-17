@@ -721,6 +721,20 @@ jobs:
                       \$patch: delete
           EOF
           printf '  images:\n%s\n' "$IMAGES_YAML" >> /tmp/preflight-ks.yaml
+          # 生产钉节点（team 钉 .69 hostname）的 manifest 在单节点 k3d 里永 Pending；
+          # 预检簇无数据、无意义，只在 manifest 真含 nodeSelector 字段时才剥（tools 无此字段，走不到，行为不变）
+          if grep -q '^      nodeSelector:' "k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml"; then
+            printf '%s\n' \
+              'patchesJson6902:' \
+              '- target:' \
+              '    kind: Deployment' \
+              "    name: $DEPLOY" \
+              '  patch:' \
+              '  - op: remove' \
+              '    path: /spec/template/spec/nodeSelector' \
+              >> /tmp/preflight-ks.yaml
+            echo "NODSELECTOR STRIPPED for preflight (prod manifest untouched)"
+          fi
           kubectl apply -f /tmp/preflight-ks.yaml
           flux get kustomizations
           kubectl wait --for=condition=ready kustomization/$APP-preflight -n flux-system --timeout=300s || {
