@@ -44,7 +44,8 @@
 #   k8s_skip_sidecar  无 sidecar 的应用传 true 跳过 sidecar import（默认 false；tools 有 browser sidecar，保持强制）。
 #   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
 # secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
-#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）
+#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
+#          OCI_*（runner 侧探针直验钥匙；标识符在 manifest 明文，secret 只留 KEY_CONTENT；没传则跳过）
 #
 # 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
@@ -210,6 +211,16 @@ on:
       TS_API_KEY:
         required: true
       ENV_SMTP_PASS:
+        required: false
+      OCI_USER_OCID:
+        required: false
+      OCI_FINGERPRINT:
+        required: false
+      OCI_TENANCY_OCID:
+        required: false
+      OCI_REGION:
+        required: false
+      OCI_API_PRIVATE_KEY:
         required: false
 
 permissions:
@@ -585,6 +596,11 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SMTP_PASS: ${{ secrets.ENV_SMTP_PASS }}
+          OCI_U: ${{ secrets.OCI_USER_OCID }}
+          OCI_FP: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_T: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_R: ${{ secrets.OCI_REGION }}
+          OCI_KEY: ${{ secrets.OCI_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
@@ -623,6 +639,15 @@ jobs:
           kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
             --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
           rm -f /tmp/preflight-secret.env
+          # OCI 钥匙真伪直验（runner 侧，用刚打的镜像跑 oci-cli；pod 内由 case-oci 覆盖）
+          if [ -n "${OCI_KEY:-}" ]; then
+            docker run --rm --entrypoint oci \
+              -e OCI_CLI_USER="$OCI_U" -e OCI_CLI_FINGERPRINT="$OCI_FP" \
+              -e OCI_CLI_TENANCY="$OCI_T" -e OCI_CLI_REGION="$OCI_R" \
+              -e OCI_CLI_KEY_CONTENT="$OCI_KEY" \
+              "$DIGEST_SOURCE" iam availability-domain list \
+              --compartment-id "$OCI_T" --output json | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d.get('data'),list) and len(d['data'])>0; print('OCI PROBE OK: ADs', len(d['data']))"
+          fi
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
           SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
           SRC_REF="${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}"
