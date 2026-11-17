@@ -1,0 +1,70 @@
+name: bake-erpnext
+# 薄调用：erpnext-cn 只声明参数，构建/自检/预检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
+# 派生镜像：官方 frappe/erpnext + CJK 字体 + zh_CN（docker/erpnext/Dockerfile）。
+# base 版本由手动 dispatch 必填传入（BASE_TAG，如 v15.94.1）；产出 tag 与 base 同值，digest pin 首 bake 后发 PR。
+# 新预检（k3d+Flux，#505）：manifest 同仓 k8s/erpnext；erpnext-cn digest 经 images 注入；
+# 探针 deploy=erpnext-nginx（前门），command '[]' 走镜像默认 entrypoint + deployment 自带 args。
+# 细测 hook 用 kubectl 打 k3d 里同货 pod：identity + bench/nginx/CJK smoke + Host 头 /login 全链路。
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_tag:
+        description: "官方 base 版本（必填，如 v15.94.1）"
+        required: true
+        type: string
+      e2e_cases:
+        description: "E2E 名单（skip=只验版本+连通；空/full=全链路；含建站后 /login 200 断言）"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - docker/erpnext/Dockerfile
+      - docker/erpnext/**
+      - k8s/erpnext/**
+      - .github/workflows/bake-erpnext.yml
+      - .github/workflows/bake-stack.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: erpnext-cn
+      dockerfile: docker/erpnext/Dockerfile
+      ghcr_image: ghcr.io/link-seek/erpnext-cn
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.base_tag }}
+      build_args: |
+        BASE_TAG=${{ inputs.base_tag }}
+      push_temp_to_ghcr: true
+      ghcr_temp_only: true
+      k8s_app: erpnext
+      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
+      k8s_manifest_path: k8s/erpnext
+      k8s_manifest_ref: main
+      k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn
+      k8s_deploy_name: erpnext-nginx
+      k8s_container_name: nginx
+      k8s_preflight_command: '[]'
+      k8s_skip_sidecar: true
+      k8s_secret_env_file: docker/erpnext/preflight-env.conf
+      k8s_secret_name: erpnext
+      k8s_namespace: erpnext
+      fine_test_hook: docker/erpnext/fine-test.sh
+      e2e_cases: ${{ inputs.e2e_cases }}
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}

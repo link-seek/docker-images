@@ -109,12 +109,16 @@ RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && agent-browser --version \
  && npm cache clean --force && rm -rf /root/.npm
 
-# 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
-# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
-# - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
-# - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
+# 设计能力（feimacode/open-design-agent-kit，社区包）：
+# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills），浮动跟随，出问题再定。
+# - MCP server：烘焙进镜像（本地二进制直调，不走运行时 npx 现下；2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
+# - 版本 pin：ARG OD_MCP_VERSION 单源头（与 OPENCODE_MEM_VERSION 同 pattern）；bump=改这行发 PR。
+ARG OD_MCP_VERSION=0.4.0
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md \
+ && npm install -g "@feimacode/open-design-agent-kit-mcp@${OD_MCP_VERSION}" \
+ && command -v open-design-mcp \
+ && timeout 25 open-design-mcp --help \
  && npm cache clean --force && rm -rf /root/.npm
 
 # tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）

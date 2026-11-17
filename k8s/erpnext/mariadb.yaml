@@ -1,0 +1,125 @@
+# MariaDB（vendor 自 chart statefulset-mariadb.yaml + service-mariadb.yaml，mariadb-sts.enabled=true 等价）。
+# image：SWR 常驻官方镜像（url2hc 转入，expire 0）：swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb@sha256:b820ae982bd8a8d9b79c565e033049a93f06733e3e10d04d9e7404702df9f39d
+# root 密码走 Secret erpnext/mariadb-root-password（pipeline mint，不进仓）。
+# my.cnf 照 chart 8.0.14 values 原样（utf8mb4 + 跳过压缩，ERPNext 建站必需）。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erpnext-mariadb-sts
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+data:
+  my.cnf: |
+    [mysqld]
+    skip-character-set-client-handshake
+    skip-innodb-read-only-compressed
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_unicode_ci
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erpnext-mariadb-sts
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+  selector:
+    app.kubernetes.io/name: erpnext-mariadb-sts
+    app.kubernetes.io/instance: erpnext
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: erpnext-mariadb-sts
+  namespace: erpnext
+  labels:
+    helm.sh/chart: erpnext-8.0.14
+    app.kubernetes.io/name: erpnext
+    app.kubernetes.io/instance: erpnext
+    app.kubernetes.io/version: v15.94.1
+    app.kubernetes.io/managed-by: Flux
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: erpnext-mariadb-sts
+      app.kubernetes.io/instance: erpnext
+  serviceName: erpnext-mariadb-sts
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: erpnext-mariadb-sts
+        app.kubernetes.io/instance: erpnext
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ecs-ies-euleros-jmupermv-zhangzhirui
+      imagePullSecrets:
+        - name: swr-pull
+      serviceAccountName: erpnext
+      securityContext:
+        supplementalGroups: [1000]
+      containers:
+        - name: mariadb
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-mariadb@sha256:b820ae982bd8a8d9b79c565e033049a93f06733e3e10d04d9e7404702df9f39d
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erpnext
+                  key: mariadb-root-password
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: config
+              mountPath: /etc/mysql/conf.d/my.cnf
+              subPath: my.cnf
+          securityContext:
+            capabilities:
+              add:
+                - CAP_CHOWN
+      volumes:
+        - name: config
+          configMap:
+            name: erpnext-mariadb-sts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
