@@ -29,7 +29,7 @@ spec:
       # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
       initContainers:
         - name: init-dirs
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
           command: [sh, -c, "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
@@ -39,7 +39,7 @@ spec:
             limits: {cpu: 500m, memory: 512Mi}
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
