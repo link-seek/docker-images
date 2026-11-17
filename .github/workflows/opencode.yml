@@ -37,8 +37,6 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
-          KEY_FAST: ${{ secrets.KEY_FAST }}
-          KEY_BULK: ${{ secrets.KEY_BULK }}
           JEV_MODEL: ${{ vars.JEV_MODEL }}
         with:
           model: ${{ vars.OPENCODE_MODEL }}
@@ -88,8 +86,6 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
-          KEY_FAST: ${{ secrets.KEY_FAST }}
-          KEY_BULK: ${{ secrets.KEY_BULK }}
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
@@ -106,8 +102,6 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_API_KEY_BULK: ${{ secrets.OPENCODE_API_KEY_BULK }}
-          KEY_FAST: ${{ secrets.KEY_FAST }}
-          KEY_BULK: ${{ secrets.KEY_BULK }}
         with:
           model: ${{ vars.OPENCODE_MODEL }} # 引擎ID走org变量，一改全仓所有流水线生效
           llm-api-key: ${{ secrets.OPENCODE_API_KEY }}
