@@ -1,5 +1,5 @@
 # k8s/cognee-trial 主 Deployment（GH runner 已验镜像可 boot：/health 200，见 url2hc#6）。
-# digest pin 即行为版本（trial 自烘焙 cognee-mcp-trial:20261117-fastembed，digest 3d33c41c，url2hc run 44009638401；fastembed 权重已烘进镜像，簇内无 HF 出口）。
+# digest pin 即行为版本（trial 自烘焙 cognee-mcp-trial:20261117-fastembed，digest 5e6d33f5，url2hc run 44013862171；fastembed 显式 FASTEMBED_CACHE_PATH=/app/fastembed-cache，离线 dims=384 实证）。
 # trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、数据 emptyDir。
 # LLM 接线（TEXT_MODEL=beam-free，EMBEDDING 初期 fastembed 本地，bge-m3 后续切）：
 # - LLM 经 litellm 网关 OpenAI 兼容（custom + openai/ 前缀 + /v1 endpoint）；
@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: cognee
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp-trial@sha256:3d33c41c0d4f00c306d7faaaf4459f8c7b02742da7cdecd9e001be7122225543
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp-trial@sha256:5e6d33f5159b3fa4dd81aca21882d30bb1d0a684331578a9ae58a3bc76ff50ae
           ports:
             - {name: http, containerPort: 8000}
           env:
@@ -39,9 +39,10 @@ spec:
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
-            # Embedding：trial 先 fastembed 本地（零外部依赖），bge-m3 定版后切
+            # Embedding：trial 先 fastembed 本地（权重烘进镜像 /app/fastembed-cache，FASTEMBED_CACHE_PATH 显式指定，bge-m3 定版后切）
+            - {name: FASTEMBED_CACHE_PATH, value: "/app/fastembed-cache"}
             - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BOGUS/probe-123"}
+            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
             - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
