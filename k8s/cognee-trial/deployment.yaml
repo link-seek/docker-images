@@ -35,22 +35,19 @@ spec:
             - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
             # LLM：TEXT_MODEL（beam-free）经 litellm 网关
             - {name: LLM_PROVIDER, value: "custom"}
-            - {name: LLM_MODEL, value: "openai/beam-free"}
+            - {name: LLM_MODEL, value: "openai/muse-spark-1.3-contributor"} # TEXT_MODEL 临时改 Go 档（beam-free 日配额烧干；定版换回变量值）
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
             # Embedding：CF Workers AI OpenAI 兼容端点（@cf/baai/bge-m3，1024 维，与 EMBEDDING_MODEL 变量一致）；
             # custom provider 经 LiteLLM 走 /v1/embeddings；key 用 Secret 内 CF_AI_TOKEN（pipeline 现签，不进仓）。
             # fastembed-local 已判死（.69 上起 onnx 即崩 worker，mock 也绕不开模型加载），不再用。
-            - {name: EMBEDDING_PROVIDER, value: "custom"}
-            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"}
+            - {name: EMBEDDING_PROVIDER, value: "openai_compatible"} # 裸 openai client 直调 CF，不经 LiteLLM（避 dimensions 守卫）
+            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"} # 裸 client 原样转发 model 名给 CF
             - {name: EMBEDDING_DIMENSIONS, value: "1024"}
             - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
             - name: EMBEDDING_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true }}
-            - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
-            - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
           readinessProbe:
