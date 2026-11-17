@@ -1,12 +1,15 @@
 # 一次性 jobs（vendor 自 chart job-configure-bench.yaml + job-create-site.yaml）。
-# 偏离 chart：job 名固定（chart 默认带时间戳，每次 Flux 对账新建 job 不可接受）；
+# 偏离 chart：job 名用固定名 + 手动版本后缀（-r2），原因有二：
+#   a) Flux 对静态文件只在 git 变更时对账，无重复建 job 之忧；
+#   b) Job 的 spec.template 不可变，改模板必须换名重建，prune 自动清旧的（旧 Pending job 无完成记录可丢）。
+#   改 job 模板时务必同步 bump 后缀，否则整单 Flux 卡死（2026-11-17 实锤：dry-run Invalid）。
 # createSite 默认关→开（trial 要进登录页），admin 密码走 Secret erpnext/admin-password（不明文）；
 # backoffLimit 0→4（建站撞 MariaDB/redis 预热窗口可自愈，chart 默认 0 一次即死）；
 # 全员钉 .69（与 PVC/数据同节点）。
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: erpnext-conf-bench
+  name: erpnext-conf-bench-r2
   namespace: erpnext
   labels:
     helm.sh/chart: erpnext-8.0.14
@@ -91,7 +94,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: erpnext-create-site
+  name: erpnext-create-site-r2
   namespace: erpnext
   labels:
     helm.sh/chart: erpnext-8.0.14
