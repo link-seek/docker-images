@@ -6,15 +6,15 @@
   // 插件版本单源头：只看 Dockerfile 的 ARG OPENCODE_MEM_VERSION（构建时 sed 注入下行占位符，
   // 本文件不手写版本号）；版本前移只走 digest pin 流程，不接受 floating。
   "plugins": ["opencode-mem@__OPENCODE_MEM_VERSION__"],
-  // 设计 MCP（feimacode/open-design-agent-kit-mcp，不烘焙，npx 随调随下；
+  // 设计 MCP（feimacode/open-design-agent-kit-mcp，烘焙进镜像走本地二进制直调；
   // 2.1.4 实测：timeout 必须是完整对象（含 catalog），缺键整段 mcp 被静默丢弃；
   // 数字也行（会展开成三键同值），但对象保留 startup<execution 的分级意图）。
-  // npx 首启要下载（startup 给足），生成类工具跑得久（execution 给足）；密钥不进镜像（模型走网关，MCP server 本身不调模型）。
+  // 版本见 Dockerfile ARG OD_MCP_VERSION；本地二进制无下载等待（startup 照给，防冷机慢），生成类工具跑得久（execution 给足）；密钥不进镜像（模型走网关，MCP server 本身不调模型）。
   "mcp": {
     "servers": {
       "open-design": {
         "type": "local",
-        "command": ["npx", "-y", "@feimacode/open-design-agent-kit-mcp"],
+        "command": ["open-design-mcp"],
         "timeout": {
           "startup": 120000,
           "catalog": 180000,

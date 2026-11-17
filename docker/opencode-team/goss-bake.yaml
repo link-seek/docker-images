@@ -39,3 +39,16 @@ command:
   design-skill:
     exec: "test -f /root/.agents/skills/open-design/SKILL.md && grep -c prepare_open_design_brief /root/.agents/skills/open-design/SKILL.md"
     exit-status: 0
+
+  design-mcp-binary:
+    exec: "command -v open-design-mcp"
+    exit-status: 0
+    stdout:
+      - 'open-design-mcp'
+
+  design-mcp-startup:
+    exec: "timeout 25 open-design-mcp --help"
+    exit-status: 0
+    timeout: 60000
+    stdout:
+      - '[open-design]'
