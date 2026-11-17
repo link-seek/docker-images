@@ -43,6 +43,9 @@ spec:
             # custom provider 经 LiteLLM 走 /v1/embeddings；key 用 Secret 内 CF_AI_TOKEN（pipeline 现签，不进仓）。
             # fastembed-local 已判死（.69 上起 onnx 即崩 worker，mock 也绕不开模型加载），不再用。
             - {name: EMBEDDING_PROVIDER, value: "openai_compatible"} # 裸 openai client 直调 CF，不经 LiteLLM（避 dimensions 守卫）
+            # DNS-rebinding 守卫放行簇内短名/FQDN（官方 MCP_ALLOWED_HOSTS，:* 端口 glob 必填；不加 team 经 Service 名打过来 421）。
+            # 只放行 cognee 自家名，不关总闸。
+            - {name: MCP_ALLOWED_HOSTS, value: "cognee:*,cognee.cognee-trial:*,cognee.cognee-trial.svc:*,cognee.cognee-trial.svc.cluster.local:*"}
             - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"} # 裸 client 原样转发 model 名给 CF
             - {name: EMBEDDING_DIMENSIONS, value: "1024"}
             - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
