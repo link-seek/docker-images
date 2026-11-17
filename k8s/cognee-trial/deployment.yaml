@@ -1,6 +1,9 @@
 # k8s/cognee-trial 主 Deployment（GH runner 已验镜像可 boot：/health 200，见 url2hc#6）。
 # digest pin 即行为版本（SWR link-seek/cognee-mcp:main，2026-11-17 全绿 run 43992077955）。
-# trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、无 Secret（单用户模式，LLM 后续接）、数据 emptyDir。
+# trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、数据 emptyDir。
+# LLM 接线（TEXT_MODEL=beam-free，EMBEDDING 初期 fastembed 本地，bge-m3 后续切）：
+# - LLM 经 litellm 网关 OpenAI 兼容（custom + openai/ 前缀 + /v1 endpoint）；
+# - key 走 cognee-trial-env Secret（pipeline mint，Flux 不碰），与生产 Secret 隔离。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,6 +30,17 @@ spec:
             - {name: http, containerPort: 8000}
           env:
             - {name: TRANSPORT_MODE, value: "http"}
+            - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
+            # LLM：TEXT_MODEL（beam-free）经 litellm 网关
+            - {name: LLM_PROVIDER, value: "custom"}
+            - {name: LLM_MODEL, value: "openai/beam-free"}
+            - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
+            - name: LLM_API_KEY
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
+            # Embedding：trial 先 fastembed 本地（零外部依赖），bge-m3 定版后切
+            - {name: EMBEDDING_PROVIDER, value: "fastembed"}
+            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
+            - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
           readinessProbe:
