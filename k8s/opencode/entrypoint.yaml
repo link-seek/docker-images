@@ -17,36 +17,7 @@ data:
     fi
     yes | hcloud configure set --cli-access-key="${HCLOUD_AK}" --cli-secret-key="${HCLOUD_SK}" --cli-region=cn-north-4 >/dev/null 2>&1 || true
     sed -i 's/"agreePrivacy": "false"/"agreePrivacy": "true"/' /root/.hcloud/config.json 2>/dev/null || true
-    mkdir -p /var/lib/tailscale /var/run/tailscale
-    # TUN 模式（pod 出 tailnet 必备；userspace 只管进不管出）。
-    tailscaled --tun=tailscale0 --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock >/var/log/tailscaled.log 2>&1 &
-    i=0
-    while [ ! -S /var/run/tailscale/tailscaled.sock ] && [ "$i" -lt 30 ]; do
-      i=$((i+1))
-      sleep 1
-    done
-    if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
-      echo "FATAL: tailscaled did not start" >&2
-      tail -n 50 /var/log/tailscaled.log >&2 || true
-      exit 1
-    fi
-    ts_status="$(tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null || true)"
-    ts_ip="$(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null | head -n 1 || true)"
-    if printf '%s' "$ts_status" | grep -q '"BackendState"[[:space:]]*:[[:space:]]*"Running"' && [ -n "$ts_ip" ]; then
-      echo "tailscale already Running ($ts_ip), skip up"
-    else
-      if [ -z "${TS_JOIN_KEY:-}" ]; then
-        echo "FATAL: TS_JOIN_KEY missing (rendered by k3s-apply line)." >&2
-        exit 1
-      fi
-      if ! timeout 120 tailscale --socket=/var/run/tailscale/tailscaled.sock up --authkey="$TS_JOIN_KEY" --hostname="${TS_HOSTNAME:-opencode-k3s}" --ssh --accept-routes=false --accept-dns=false; then
-        echo "FATAL: tailscale up failed" >&2
-        tail -n 50 /var/log/tailscaled.log >&2 || true
-        exit 1
-      fi
-      echo "tailscale up: $(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null || echo no-ip)"
-    fi
-    unset TS_JOIN_KEY
+    # 去容器 TS 身份（2026-11-17）：入网走 operator 代理，此处不再起 tailscaled（pilot 11-15 同款）。
     if [ ! -d /workspace/.git ]; then
       git init -b main /workspace >/dev/null 2>&1
       git -C /workspace config user.name opencode-prod
