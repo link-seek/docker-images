@@ -10,8 +10,11 @@ FROM swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext:${BASE_TAG}
 USER root
 SHELL ["/bin/bash", "-c"]
 
-# CJK 字体（打印 PDF 中文必需）+ zh_CN locale； fiction：只加字体与 locale，不动 bench 代码。
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# CJK 字体（打印 PDF 中文必需）+ zh_CN locale；注意：只加字体与 locale，不动 bench 代码。
+# 安全基线（Trivy 门）：base 是 Debian 12.2（2023 年），bookworm-security 已有大量高危修复；
+# 全量 upgrade（与 team 的定向升级不同：base 欠账太多，digest 即版本，漂移可接受）。
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
       fonts-noto-cjk fonts-noto-cjk-extra locales \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/^# *zh_CN.UTF-8/zh_CN.UTF-8/' /etc/locale.gen && locale-gen zh_CN.UTF-8 \

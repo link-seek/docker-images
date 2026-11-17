@@ -25,7 +25,7 @@ spec:
       serviceAccountName: erpnext
       initContainers:
         - name: frappe-bench-ownership
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           command: ['sh', '-c']
           args:
@@ -42,7 +42,7 @@ spec:
         supplementalGroups: [1000]
       containers:
         - name: configure
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           command:
             - bash
@@ -112,7 +112,7 @@ spec:
         supplementalGroups: [1000]
       initContainers:
         - name: validate-config
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
@@ -149,7 +149,7 @@ spec:
               mountPath: /home/frappe/frappe-bench/sites
       containers:
         - name: create-site
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn:v15.94.1
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
           imagePullPolicy: IfNotPresent
           command: ["bash", "-c"]
           args:
