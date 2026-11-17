@@ -1,6 +1,6 @@
 # Redis（手写最小版，替代 chart 的 bitnami/dragonfly/valkey subchart）。
 # trial 从简：无 auth（ClusterIP 仅集群内）、emptyDir（chart 默认 queue storage 也是关的，重启丢队列可接受，生产再加持久化）。
-# image：SWR 常驻官方镜像（url2hc 转入，expire 0）：swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis:7.0
+# image：SWR 常驻官方镜像（url2hc 转入，expire 0）：swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis@sha256:740ccf999c0ed002bef18e0b3faeeb48ad5a25f1090634386c50b82ef3833c8f
 # configure job 写入 sites/common_site_config.json：cache→erpnext-redis-cache:6379，queue/socketio→erpnext-redis-queue:6379。
 apiVersion: v1
 kind: Service
@@ -52,7 +52,7 @@ spec:
       serviceAccountName: erpnext
       containers:
         - name: redis
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis:7.0
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis@sha256:740ccf999c0ed002bef18e0b3faeeb48ad5a25f1090634386c50b82ef3833c8f
           imagePullPolicy: IfNotPresent
           args: ["redis-server", "--appendonly", "no", "--save", ""]
           ports:
@@ -121,7 +121,7 @@ spec:
       serviceAccountName: erpnext
       containers:
         - name: redis
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis:7.0
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-redis@sha256:740ccf999c0ed002bef18e0b3faeeb48ad5a25f1090634386c50b82ef3833c8f
           imagePullPolicy: IfNotPresent
           args: ["redis-server", "--appendonly", "no", "--save", ""]
           ports:
