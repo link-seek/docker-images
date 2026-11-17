@@ -1,0 +1,80 @@
+# k8s/litellm — 网关 k3s 版（翻译自 stacks/litellm-gateway/compose.yml）。
+# 无状态：只有 ts-state 卷；config/guard 全 bake 进镜像（digest 即行为版本）。
+# 灰度期 hostname=litellm-gateway-k3s（不抢 HW21 正式名）；Caddy 双挂加权。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-gateway
+  namespace: litellm
+  labels:
+    app: litellm-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # 单副本：切流由 Caddy 做，重建即切换。
+  selector:
+    matchLabels:
+      app: litellm-gateway
+  template:
+    metadata:
+      labels:
+        app: litellm-gateway
+    spec:
+      imagePullSecrets:
+        - name: swr-pull
+      # opencode.ai 经东京 SNI 中继出海：hostAliases 指 vm-proxy tailnet IP（100.73.221.121），
+      # 绕开坏掉的 edge flannel，不用改 CoreDNS、不碰网关配置。TLS SNI/证书端到端不变。
+      # 后续 edge pod 网络修好后可切回 ClusterIP Service。
+      hostAliases:
+        - ip: "100.73.221.121"
+          hostnames: ["opencode.ai"]
+      containers:
+        - name: litellm
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway@sha256:29d2b796e48eb7ea5222ef51bc19dc72eb4361323d6a15b4809ee09c752dc767
+          command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
+          args: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+          ports:
+            - {name: http, containerPort: 4000}
+          env:
+            - {name: PIPELINE_MANAGED, value: "true"}
+            - {name: TS_HOSTNAME, value: litellm-gateway-k3s}
+            - {name: DISABLE_ADMIN_UI, value: "True"}
+            - {name: RULES_FILE, value: /app/guard-rules.json}
+            - name: TS_JOIN_KEY
+              valueFrom: {secretKeyRef: {name: litellm-env, key: TS_JOIN_KEY}}
+            - name: LITELLM_MASTER_KEY
+              valueFrom: {secretKeyRef: {name: litellm-env, key: LITELLM_MASTER_KEY}}
+          volumeMounts:
+            - {name: ts-state, mountPath: /var/lib/tailscale}
+            - {name: entrypoint, mountPath: /entrypoint}
+            - {name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /v1/models, port: 4000}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /v1/models, port: 4000}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+      volumes:
+        - name: ts-state
+          persistentVolumeClaim: {claimName: ts-state}
+        - name: entrypoint
+          configMap: {name: litellm-entrypoint, defaultMode: 0755}
+        - name: config
+          configMap: {name: litellm-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: litellm
+spec:
+  selector: {app: litellm-gateway}
+  ports:
+    - {name: http, port: 4000, targetPort: 4000}

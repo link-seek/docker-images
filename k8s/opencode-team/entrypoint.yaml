@@ -1,0 +1,22 @@
+# k8s/opencode-team entrypoint（由 k8s/opencode-xieyucheng/entrypoint 精简：去 hcloud/tailscale）。
+# team 镜像无 hcloud 二进制、无容器内 tailscaled（入网走 operator 代理）。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opencode-entrypoint
+  namespace: opencode-team
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+    if [ "${PIPELINE_MANAGED:-}" != "true" ]; then
+      echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2
+      exit 1
+    fi
+    if [ ! -d /workspace/.git ]; then
+      git init -b main /workspace >/dev/null 2>&1
+      git -C /workspace config user.name opencode-team
+      git -C /workspace config user.email opencode-team@local
+      git -C /workspace commit --allow-empty -m init >/dev/null 2>&1
+    fi
+    exec opencode "$@"

@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-entrypoint
+  namespace: litellm
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    # 由 stacks/litellm-gateway/compose.yml entrypoint 逐行翻译（k8s 化：$$ 还原 $，去 compose 插值）。
+    set -eu
+    if [ "${PIPELINE_MANAGED:-}" != "true" ]; then
+      echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2
+      exit 1
+    fi
+    mkdir -p /var/lib/tailscale /var/run/tailscale /var/log
+    if [ -n "${TS_JOIN_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; then
+    tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock >/var/log/tailscaled.log 2>&1 &
+    i=0
+    while [ ! -S /var/run/tailscale/tailscaled.sock ] && [ "$i" -lt 30 ]; do
+      i=$((i+1))
+      sleep 1
+    done
+    if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
+      echo "FATAL: tailscaled did not start" >&2
+      tail -n 50 /var/log/tailscaled.log >&2 || true
+      exit 1
+    fi
+    ts_status="$(tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null || true)"
+    ts_ip="$(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null | head -n 1 || true)"
+    if printf '%s' "$ts_status" | grep -q '"BackendState"[[:space:]]*:[[:space:]]*"Running"' && [ -n "$ts_ip" ]; then
+      echo "tailscale already Running ($ts_ip), skip up"
+    else
+      if [ -z "${TS_JOIN_KEY:-}" ]; then
+        echo "FATAL: TS_JOIN_KEY missing (rendered by k3s-apply line)." >&2
+        exit 1
+      fi
+      # 灰度期用独立名，避免抢 HW21 正式节点 litellm-gateway；全切后再认领。
+      if ! timeout 120 tailscale --socket=/var/run/tailscale/tailscaled.sock up --authkey="$TS_JOIN_KEY" --hostname="${TS_HOSTNAME:-litellm-gateway-k3s}" --accept-routes=false --accept-dns=false; then
+        echo "FATAL: tailscale up failed" >&2
+        tail -n 50 /var/log/tailscaled.log >&2 || true
+        exit 1
+      fi
+      echo "tailscale up: $(tailscale --socket=/var/run/tailscale/tailscaled.sock ip -4 2>/dev/null || echo no-ip)"
+    fi
+    # 入站：tailnet :4000 → 本地 :4000（网关只服务，不登录，不开 --ssh）。
+    if ! timeout 60 tailscale --socket=/var/run/tailscale/tailscaled.sock serve --bg --yes --tcp 4000 localhost:4000; then
+      echo "FATAL: tailscale serve failed" >&2
+      exit 1
+    fi
+    echo "tailscale serve: tailnet :4000 -> local :4000"
+    tailscale --socket=/var/run/tailscale/tailscaled.sock serve status 2>/dev/null || true
+    else
+      echo "WARN: no tailscaled binary (old image); starting without tailnet identity"
+    fi
+    unset TS_JOIN_KEY
+    # 链回上游入口（prisma 迁移＋ddtrace 分流都在里面）：WORKDIR=/app。
+    exec docker/prod_entrypoint.sh "$@"

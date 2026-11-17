@@ -1,10 +1,10 @@
 # litellm-gateway：上游 litellm 官方镜像 + 本仓 guard/配置 bake 进去，开箱即用。
-# 用法：docker build -f Dockerfile.litellm-gateway -t <镜像> .
+# 用法：docker build -f docker/litellm-gateway/Dockerfile -t <镜像> .
 # 背景：之前 guard-*.py/config.yaml 靠 compose volume 挂载，部署仓和测试各维护一份影子配置，
 # 行为漂移无人发现（passthrough callback 未加载事故，2026-10-17）。bake 进镜像后行为=digest，CI 拉 digest 测的就是将要上线的字节。
 # 版本 pin（digest）：升级 = 改这行发 PR（跟 opencode-tools 的 pin 机制一致，禁止 tag）。
 # 上游 GHCR 无版本 tag（只有 latest），必须 digest pin。
-# 2026-11-02：3def038→37e2daf（取当日 latest 解析；转正式版以 bake 产出 digest 为准）。
+# 2026-11-02：3def038→37e2daf；2026-11-16：37e2daf→11175975（Trivy HIGH：nodejs/dnspython，升底座根治）。
 ARG TAILSCALE_VERSION=1.102.4
 
 # tailscale 官方静态二进制下载（上游 litellm 底座是 Wolfi，无 apt-get；
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && mkdir -p /out && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /out/tailscale \
  && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /out/tailscaled
 
-FROM ghcr.io/berriai/litellm@sha256:37e2dafb088a7723beb998590682957386dfc83ffea1848486f8e0e5cfac0b06
+FROM ghcr.io/berriai/litellm@sha256:11175975a3093e05e92faee2fe2fe3412a3ae2fcaa849eb0fe25d5f0d8bcb2e9
 
 USER root
 

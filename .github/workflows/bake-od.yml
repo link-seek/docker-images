@@ -10,10 +10,8 @@ on:
   push:
     branches: [main]
     paths:
-      - Dockerfile.opendesign
+      - docker/opendesign/Dockerfile
       - docker/opendesign/**
-      - docker/opencode-shim
-      - docker/opencode.jsonc
       - .github/workflows/bake-od.yml
       - .github/workflows/bake-stack.yml
   workflow_dispatch:
@@ -38,7 +36,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: opendesign
-      dockerfile: Dockerfile.opendesign
+      dockerfile: docker/opendesign/Dockerfile
       ghcr_image: ghcr.io/link-seek/opendesign
       swr_image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign
       tag_mode: explicit

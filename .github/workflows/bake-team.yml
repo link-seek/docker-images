@@ -1,0 +1,70 @@
+name: bake-team
+# 薄调用：opencode-team 只声明参数，构建/自检/预检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
+# 部门共用精简线（opencode + agent-browser + mem + 邮件）；浏览器走独立 browserless Pod。
+# 版本：opencode_tag 由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
+# mem 版本单源头：只 Dockerfile 的 ARG OPENCODE_MEM_VERSION 一处定义。
+# 新预检（k3d+Flux，#505）：manifest 同仓 k8s/opencode-team；digest 经 images 注入（只注 team 本体，
+# browserless 取 manifest tag——bootstrap 顺序：先 dispatch bake-browserless-cjk 转正）。
+# 细测 hook 用 kubectl 打 k3d 里同货 pod：identity + agent-browser CDP→browserless 全链路。
+
+on:
+  workflow_dispatch:
+    inputs:
+      opencode_tag:
+        description: "官方 tag（必填，如 2.3.0，无 v 前缀也行）"
+        required: true
+        type: string
+      e2e_cases:
+        description: "E2E 名单（skip=只验版本+连通；空/full=全链路；本镜像无 cases 目录）"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - docker/opencode-team/Dockerfile
+      - docker/opencode-team/**
+      - k8s/opencode-team/**
+      - .github/workflows/bake-team.yml
+      - .github/workflows/bake-stack.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: opencode-team
+      dockerfile: docker/opencode-team/Dockerfile
+      ghcr_image: ghcr.io/link-seek/opencode-team
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.opencode_tag }}
+      build_args: |
+        OPENCODE_TAG=${{ inputs.opencode_tag }}
+      push_temp_to_ghcr: true
+      ghcr_temp_only: true
+      k8s_app: opencode
+      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
+      k8s_manifest_path: k8s/opencode-team
+      k8s_manifest_ref: main
+      k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team
+      k8s_secret_env_file: docker/opencode-team/preflight-env.conf
+      k8s_secret_name: opencode-team-env
+      k8s_namespace: opencode-team
+      fine_test_hook: docker/opencode-team/fine-test.sh
+      goss_dir: docker/opencode-team
+      goss_docker_args: --network host -e OPENCODE_SERVER_PASSWORD=gate-dummy
+      goss_command: serve --port 4096 --hostname 127.0.0.1
+      e2e_cases: ${{ inputs.e2e_cases }}
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}

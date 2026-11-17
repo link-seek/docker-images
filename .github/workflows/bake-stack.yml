@@ -3,9 +3,9 @@
 # 【接口（写死）】薄调用只传参，不写逻辑；各镜像按接口实现 hook。
 # inputs:
 #   image_slug      短名（temp tag/TS hostname 用，如 litellm-gateway）
-#   dockerfile      Dockerfile 路径（如 Dockerfile.litellm-gateway）
+#   dockerfile      Dockerfile 路径（如 docker/litellm-gateway/Dockerfile）
 #   ghcr_image      GHCR 仓库（如 ghcr.io/link-seek/litellm-gateway）
-#   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../linkseed/litellm-gateway）
+#   swr_image       SWR 仓库（主发布，如 swr.cn-north-4.../link-seek/litellm-gateway）
 #   tag_mode        date-sha | upstream | explicit
 #     date-sha      TAG=日期-shortsha（网关：上游 digest pin 在 Dockerfile FROM，手动 bump）
 #     upstream      跟上游 tag（tools）：upstream_repo + pattern + 最小年龄 + 资产检查
@@ -13,26 +13,43 @@
 #   explicit_tag    explicit 模式的 tag（tag_mode=explicit 时必填）
 #   build_args      docker build 的 --build-arg（多行，每行 ARG=值；空行忽略）
 #   push_temp_to_ghcr  temp tag 是否同步推 GHCR（od e2e 要验 GHCR 同版；默认 false）
+#   ghcr_temp_only   temp 只推 GHCR，不推 SWR（tools 新预检用；SWR 只留正式版）
 #   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
 #   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标；空=跳过 img 预检（od 过渡）
 #   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
 #   sync_paths      取的子目录（空格分隔，如 "stacks/litellm-gateway/config stacks/litellm-gateway/guard"）
 #   sync_dest       落到本仓的目录（取之前清空，如 litellm-gateway）
 #   fine_test_hook  细测 hook 脚本路径（仓内），空=只到预检（od 过渡态）
-#                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY/TEMP_TAG，
+#                   调用约定（固定）：env 传 DIGEST/API_KEY/SWR_USER/SWR_PASS/STACK_DIR/CANARY/TEMP_TAG
+#                   + K8S_NS/K8S_DEPLOY/K8S_CONTAINER（新预检；老预检为空），
 #                   exit 0 + 打印 PASS 行即过，非零即红。
 #   goss_dir        dgoss 自检目录（仓内相对路径，含 goss-bake.yaml；可选 goss_wait.yaml），空=跳过。
 #                   网关/OD 不填，零感知；tools 填 docker/opencode-tools。
 #   goss_vars       追加 goss vars（多行 KEY: "值"），TAG 骨架自带；空=只有 TAG。
 #   goss_docker_args  dgoss run 的 docker 参数（如 "--network host -e FOO=bar"）；空=默认。
 #   goss_command    容器内替代命令（如 "serve --port 4096 --hostname 127.0.0.1"）；空=镜像默认 CMD。
-#   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/auto/空=auto）；骨架只透传不解释。
-#   img_key_ttl     临 key 有效期秒（默认 21600）
-# secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、TS_API_KEY（mint）
+#   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/空=full）；骨架只透传不解释。
+#   k8s_app         新预检开关：应用名（如 opencode），非空=走 k3d+Flux 预检（#505）；
+#                   空=走老 img-preflight（DEPRECATED）。
+#   k8s_manifest_repo  manifest 所在仓（如 link-seek/infra，过渡用）；空=本仓。
+#   k8s_manifest_path  manifest 目录（如 k8s/opencode）。
+#   k8s_secret_env_file  Secret 模板（env 文件，__LITELLM_API_KEY__/__SMTP_PASS__ 占位由 secrets 注入）。
+#   k8s_secret_name Secret 名（如 opencode-env）；k8s_namespace 命名空间（如 opencode）。
+#   k8s_manifest_ref  跨仓时 manifest 分支（默认 main；同仓时忽略，用当前分支/Commit）。
+#   k8s_image_names  原镜像名（空格分隔，无 tag，如 SWR 那串），预检经 Flux images 注入刚打 digest。
+#   k8s_deploy_name  Deployment 名（默认回落 k8s_app；网关 deploy 与 app 名不一致时显式传）。
+#   k8s_container_name  容器名（默认回落 k8s_app；网关容器叫 litellm 时显式传）。
+#   k8s_preflight_command  预检覆盖命令（YAML flow 原样注入；默认 ["opencode"]；
+#                   网关传 '["litellm", "--config", ...]' 直跑主进程、跳过 entrypoint/tailscale）。
+#   k8s_skip_sidecar  无 sidecar 的应用传 true 跳过 sidecar import（默认 false；tools 有 browser sidecar，保持强制）。
+#   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
+# secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
+#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）
 #
-# 固定四拍：build（temp tag）→ img 预检（infra 部署到本机标签，只装+启动自测）
+# 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
 # 安全门：只有 main 分支才转正式 tag；分支 dispatch 只跑到细测（TRIAL-ONLY），合前可验骨架本身。
+# 轮询门：gh run watch --interval 不得小于 15s（短轮询撞次级限流；骨架内已用 20s）。
 # 版本全由上游 resolve 定（dispatch 参数或自动最新），不读 pin 不回写；审计靠 run 日志。
 
 on:
@@ -62,6 +79,10 @@ on:
         type: string
         default: ""
       push_temp_to_ghcr:
+        required: false
+        type: boolean
+        default: false
+      ghcr_temp_only:
         required: false
         type: boolean
         default: false
@@ -129,6 +150,54 @@ on:
         required: false
         type: string
         default: "21600"
+      k8s_app:
+        required: false
+        type: string
+        default: ""
+      k8s_deploy_name:
+        required: false
+        type: string
+        default: ""
+      k8s_container_name:
+        required: false
+        type: string
+        default: ""
+      k8s_preflight_command:
+        required: false
+        type: string
+        default: '["opencode"]'
+      k8s_skip_sidecar:
+        required: false
+        type: boolean
+        default: false
+      k8s_manifest_repo:
+        required: false
+        type: string
+        default: ""
+      k8s_manifest_path:
+        required: false
+        type: string
+        default: ""
+      k8s_secret_env_file:
+        required: false
+        type: string
+        default: ""
+      k8s_secret_name:
+        required: false
+        type: string
+        default: ""
+      k8s_namespace:
+        required: false
+        type: string
+        default: ""
+      k8s_manifest_ref:
+        required: false
+        type: string
+        default: "main"
+      k8s_image_names:
+        required: false
+        type: string
+        default: ""
     secrets:
       gh_token:
         required: true
@@ -140,6 +209,8 @@ on:
         required: false
       TS_API_KEY:
         required: true
+      ENV_SMTP_PASS:
+        required: false
 
 permissions:
   contents: read
@@ -151,6 +222,10 @@ env:
   GOSS_SHA256_AMD64: "26e365428946294bcec0c61d867bb3c8349f39feb3d0e6f59084e98632785cc7" # goss_0.4.10_linux_x86_64.tar.gz
   GOSS_SHA256_ARM64: "90a59612b4d67d9f1a9038634c000790136bb82526a69de1e81ac075c2f6d2c6" # goss_0.4.10_linux_arm64.tar.gz
   DGOSS_SHA256: "3bb3ac9df33eeab8ce71a35763f4a69582eceb7db7bf02b4d0a551e72c7a888d" # dgoss 脚本（架构无关）
+  K3D_VERSION: v5.8.3
+  K3S_IMAGE: ghcr.io/link-seek/k3s:v1.37.2-k3s1 # 跟生产 .69 同版（公开包，免登录）
+  FLUX_VERSION: v2.10.0 # flux2 大版（内含控制器 v1.10.1，同生产 gotk）
+  FLUX_CLI_TGZ: "https://github.com/fluxcd/flux2/releases/download/v2.10.0/flux_2.10.0_linux_amd64.tar.gz"
 
 jobs:
   release:
@@ -365,13 +440,19 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
           TEMP="ci-$GITHUB_RUN_ID"
-          docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
-          timeout 1800 docker push "${{ env.SWR_IMAGE }}:$TEMP"
-          DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
-          if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+          if [ "${{ inputs.ghcr_temp_only }}" = "true" ]; then
             docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
             timeout 1800 docker push "${{ env.GHCR_IMAGE }}:$TEMP"
             DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
+          else
+            docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.SWR_IMAGE }}:$TEMP"
+            timeout 1800 docker push "${{ env.SWR_IMAGE }}:$TEMP"
+            DIGEST_SOURCE="${{ env.SWR_IMAGE }}:$TEMP"
+            if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
+              docker tag "${{ env.SWR_IMAGE }}:${TAG}" "${{ env.GHCR_IMAGE }}:$TEMP"
+              timeout 1800 docker push "${{ env.GHCR_IMAGE }}:$TEMP"
+              DIGEST_SOURCE="${{ env.GHCR_IMAGE }}:$TEMP"
+            fi
           fi
           DIGEST="$(docker buildx imagetools inspect "$DIGEST_SOURCE" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")"
           echo "temp tag $TEMP -> $DIGEST"
@@ -379,8 +460,8 @@ jobs:
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
           echo "DIGEST_SOURCE=$DIGEST_SOURCE" >> "$GITHUB_ENV"
 
-      - name: 本机加网（API token 现场 mint；mint-only，无直连回退）
-        if: env.skip != 'true' && inputs.infra_stack_dir != ''
+      - name: "[DEPRECATED] 本机加网（老预检；k8s_app 非空时跳过）"
+        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
         run: |
           set -euo pipefail
           curl -fsSL https://tailscale.com/install.sh | sh
@@ -412,8 +493,8 @@ jobs:
           fi
           tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'))"
 
-      - name: 触发 infra 部署到本机标签（只装+启动自测，判好坏在下一步本地细测）
-        if: env.skip != 'true' && inputs.infra_stack_dir != ''
+      - name: "[DEPRECATED] 触发 infra 部署到本机标签"
+        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
         run: |
           set -euo pipefail
           START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
@@ -424,8 +505,8 @@ jobs:
             -f node_tag="host:$IMG_TAG" \
             -f ssh_transport="tailscale"
 
-      - name: 轮询 infra 部署结论（按 node_tag 核对，fail-closed）
-        if: env.skip != 'true' && inputs.infra_stack_dir != ''
+      - name: "[DEPRECATED] 轮询 infra 部署结论"
+        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
         run: |
           set -euo pipefail
           EXPECTED_NODE_TAG="host:${IMG_TAG:?IMG_TAG 未设置，无法核对预检 run}"
@@ -463,6 +544,156 @@ jobs:
             || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
           echo PREFLIGHT-GREEN
 
+      - name: k3d 起簇（新预检；与生产同版 k3s，GHCR 内源，--no-lb）
+        if: env.skip != 'true' && inputs.k8s_app != ''
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/k3d-install.sh https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh
+          chmod +x /tmp/k3d-install.sh
+          TAG="${K3D_VERSION}" /tmp/k3d-install.sh
+          k3d version
+          k3d cluster create preflight --agents 0 --no-lb --timeout 5m --image "${K3S_IMAGE}"
+          k3d kubeconfig merge preflight --kubeconfig-switch-context
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          echo "K3D-GREEN $(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')"
+
+      - name: flux 装控制器（新预检；同生产版）
+        if: env.skip != 'true' && inputs.k8s_app != ''
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/flux.tgz "${FLUX_CLI_TGZ}"
+          tar -xzf /tmp/flux.tgz -C /tmp
+          sudo mv /tmp/flux /usr/local/bin/flux
+          flux --version
+          flux install --version="${FLUX_VERSION}" --components=source-controller,kustomize-controller
+          flux check
+          echo FLUX-GREEN
+
+      - name: 取 manifest（新预检；同仓用当前分支，跨仓用 k8s_manifest_ref）
+        if: env.skip != 'true' && inputs.k8s_app != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}
+          ref: ${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}
+          path: k8s-src
+          sparse-checkout: |
+            ${{ inputs.k8s_manifest_path }}
+          sparse-checkout-cone-mode: false
+
+      - name: flux 对账（新预检；digest 经 images 注入，免提交）
+        if: env.skip != 'true' && inputs.k8s_app != ''
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          SMTP_PASS: ${{ secrets.ENV_SMTP_PASS }}
+        run: |
+          set -euo pipefail
+          NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
+          DEPLOY="${{ inputs.k8s_deploy_name }}"; [ -n "$DEPLOY" ] || DEPLOY="$APP"
+          CONTAINER="${{ inputs.k8s_container_name }}"; [ -n "$CONTAINER" ] || CONTAINER="$APP"
+          MANIFEST="k8s-src/${{ inputs.k8s_manifest_path }}"
+          [ -d "$MANIFEST" ] || { echo "FAIL: manifest 目录缺失 $MANIFEST"; exit 1; }
+          [ -n "${{ inputs.k8s_image_names }}" ] || { echo "FAIL: k8s_image_names 未传"; exit 1; }
+          # 镜像先 import 进簇（digest 对单，簇内免 pull）
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
+          docker pull "${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
+          k3d image import "${DIGEST_SOURCE}" -c preflight
+          # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
+          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+          # sidecar 同簇（CDP e2e 用；SWR 直拉 + 建 swr-pull secret 供 kubelet，二者缺一不可）
+          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
+          if [ -n "${SIDECAR_IMG:-}" ]; then
+            docker pull "$SIDECAR_IMG"
+            k3d image import "$SIDECAR_IMG" -c preflight
+          elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
+            echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
+          else
+            echo "FAIL: manifest 里没找到 sidecar 镜像行"; exit 1
+          fi
+          kubectl -n "$NS" create secret docker-registry swr-pull \
+            --docker-server="${{ env.SWR_REGISTRY }}" \
+            --docker-username="${{ secrets.SWR_LOGIN_USER }}" \
+            --docker-password="${{ secrets.SWR_LOGIN_PASS }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          [ -n "${SIDECAR_IMG:-}" ] && echo "SIDECAR OK: $SIDECAR_IMG" || true
+          # Secret 预渲染（模板占位注入；SMTP 缺失直接红，提示补仓 secret）
+          [ -n "${{ inputs.k8s_secret_env_file }}" ] || { echo "FAIL: k8s_secret_env_file 未传"; exit 1; }
+          [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }
+          sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" \
+            "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
+          kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
+            --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
+          rm -f /tmp/preflight-secret.env
+          # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
+          SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
+          SRC_REF="${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}"
+          flux create source git "$APP-preflight" \
+            --url="https://github.com/${SRC_REPO}" --branch="$SRC_REF" \
+            --username=git --password="${GH_TOKEN}" --interval=30s
+          IMAGES_YAML="$(for n in ${{ inputs.k8s_image_names }}; do
+            printf '    - name: %s\n      newName: %s\n      digest: "%s"\n' \
+              "$n" "${DIGEST_SOURCE%%:*}" "${DIGEST:?DIGEST 未设置}"
+          done)"
+          cat > /tmp/preflight-ks.yaml <<EOF
+          apiVersion: kustomize.toolkit.fluxcd.io/v1
+          kind: Kustomization
+          metadata:
+            name: $APP-preflight
+            namespace: flux-system
+          spec:
+            interval: 30s
+            path: ./${{ inputs.k8s_manifest_path }}
+            prune: true
+            wait: true
+            timeout: 5m
+            sourceRef:
+              kind: GitRepository
+              name: $APP-preflight
+            patches:
+            - target:
+                kind: Deployment
+                name: $DEPLOY
+              patch: |-
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: $DEPLOY
+                spec:
+                  template:
+                    spec:
+                      containers:
+                      - name: $CONTAINER
+                        command: ${{ inputs.k8s_preflight_command }}
+                        volumeMounts:
+                        - mountPath: /dev/net/tun
+                          \$patch: delete
+                    volumes:
+                    - name: tun
+                      \$patch: delete
+          EOF
+          printf '  images:\n%s\n' "$IMAGES_YAML" >> /tmp/preflight-ks.yaml
+          kubectl apply -f /tmp/preflight-ks.yaml
+          flux get kustomizations
+          kubectl wait --for=condition=ready kustomization/$APP-preflight -n flux-system --timeout=300s || {
+            echo "FAIL: Kustomization 未 Ready，dump 诊断"; FAIL_DUMP=1; }
+          echo "FLUX-RECONCILE-GREEN $APP-preflight == ${DIGEST}"
+          [ -z "${FAIL_DUMP:-}" ] || exit 1
+
+      - name: 预检诊断（新预检；失败时 dump，成功只留一行）
+        if: always() && env.skip != 'true' && inputs.k8s_app != ''
+        run: |
+          set -euo pipefail
+          NS="${{ inputs.k8s_namespace }}"; APP="${{ inputs.k8s_app }}"
+          DEPLOY="${{ inputs.k8s_deploy_name }}"; [ -n "$DEPLOY" ] || DEPLOY="$APP"
+          CONTAINER="${{ inputs.k8s_container_name }}"; [ -n "$CONTAINER" ] || CONTAINER="$APP"
+          echo "--- flux ---"
+          flux get sources git 2>&1 | tail -5 || true
+          flux get kustomizations 2>&1 | tail -5 || true
+          echo "--- deploy/pods ---"
+          kubectl -n "$NS" get deploy,pods -o wide 2>&1 | tail -10 || true
+          echo "--- pod describe/events (tail) ---"
+          kubectl -n "$NS" describe pods 2>&1 | grep -aE "Name:|Image:|Status:|Reason:|Message:|Failed|Error|Warning" | head -30 || true
+          kubectl -n "$NS" get events --sort-by=.lastTimestamp 2>&1 | tail -8 || true
+
       - name: 本地细测（hook；实现按接口自带 verdict）
         if: env.skip != 'true' && inputs.fine_test_hook != ''
         env:
@@ -471,10 +702,17 @@ jobs:
           SWR_PASS: ${{ secrets.SWR_LOGIN_PASS }}
           TEMP_TAG: ci-${{ github.run_id }}
           E2E_CASES: ${{ inputs.e2e_cases }}
+          K8S_NS: ${{ inputs.k8s_namespace }}
+          K8S_DEPLOY: ${{ inputs.k8s_app }}
+          K8S_CONTAINER: ${{ inputs.k8s_app }}
         run: |
           set -euo pipefail
           export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}" TEMP_TAG
           bash "${{ inputs.fine_test_hook }}"
+
+      - name: 下线收尾-k3d（新预检；ephemeral 簇即焚）
+        if: always() && env.skip != 'true' && inputs.k8s_app != ''
+        run: k3d cluster delete preflight || true
 
       - name: temp digest 转正式版（retag 不 rebuild；非 main 分支只试不发）
         if: env.skip != 'true' && github.ref == 'refs/heads/main'
@@ -482,9 +720,13 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
           SOURCE="${DIGEST_SOURCE:?DIGEST_SOURCE 未设置}"
-          docker buildx imagetools create \
-            -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
-            "$SOURCE"
+          # 跨境推层偶发断流（PROTOCOL_ERROR），重试 3 次，间隔 60s
+          for i in 1 2 3; do
+            docker buildx imagetools create \
+              -t "${{ env.SWR_IMAGE }}:$TAG" -t "${{ env.SWR_IMAGE }}:latest" \
+              "$SOURCE" && break || { echo "转正 SWR 第 $i 次失败"; sleep 60; }
+            [ "$i" -lt 3 ] || { echo "FAIL: 转正 SWR 3 次全红"; exit 1; }
+          done
           if [ "${{ inputs.push_temp_to_ghcr }}" = "true" ]; then
             docker buildx imagetools create \
               -t "${{ env.GHCR_IMAGE }}:$TAG" -t "${{ env.GHCR_IMAGE }}:latest" \

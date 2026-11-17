@@ -1,0 +1,13 @@
+# k8s/opencode-team — 部门共用实例（trial）：opencode-team 与 browserless 各自独立 Pod，
+# agent-browser 经 CDP 连 browserless Service（ws://browserless:3000/chromium?token=…）。
+# 与 opencode-xieyucheng 的区别：无 nodeSelector（PVC 跟卷走，首调度定节点）；
+# 无 hostPath（41 上 local-path helper 曾拉不动，若 pod 因 PVC 卡在 41 再加亲和）；
+# 无 pod 内 tailscale（入网走 operator 代理）；无 hcloud（team 镜像已砍）。
+# 镜像 tag 即行为版本（首 bake 出 tag 后改 digest pin 发 PR）。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opencode-team
+  labels:
+    app.kubernetes.io/managed-by: flux
+    app.kubernetes.io/name: opencode-team

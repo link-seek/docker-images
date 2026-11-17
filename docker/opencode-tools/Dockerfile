@@ -1,5 +1,5 @@
 # opencode-tools（glibc 线）：官方 opencode 二进制 + 自研工具层 + 记忆插件烘焙
-# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f Dockerfile.opencode-tools -t <镜像> .
+# 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-tools/Dockerfile -t <镜像> .
 # 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
@@ -7,7 +7,7 @@
 # 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
-ARG OPENCODE_TAG=2.2.6
+ARG OPENCODE_TAG=2.3.0
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
 # 行为=digest：重打即刷新底座；bump=改这行发 PR。
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
@@ -58,6 +58,8 @@ ARG ALIYUN_VERSION=3.5.2
 ARG OCI_SPEC=oci-cli
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
+ARG KUBECTL_VERSION=1.37.2
+ARG FLUX_VERSION=2.10.0
 
 # gh：官方 tarball（Go 静态二进制）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
@@ -88,8 +90,9 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
 
 # oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
 # certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）
-RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" markitdown "certifi==2026.10.23" \
- && oci --version \
+RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" "certifi==2026.10.23" \
+ && oci --version
+RUN pip3 install --no-cache-dir --break-system-packages markitdown \
  && markitdown --version
 
 # crypto 后升层（与 oci-cli 的上古 pin 解耦）：CVE-2026-26007 等要求新版；
@@ -99,16 +102,20 @@ RUN pip3 install --no-cache-dir --break-system-packages --upgrade "cryptography=
  && oci --version
 
 # wrangler + agent-browser + lmnr-cli：npm 全局
-RUN npm install -g wrangler "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
+RUN npm install -g wrangler \
  && wrangler --version \
- && agent-browser --version
+ && npm cache clean --force && rm -rf /root/.npm
+RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
+ && agent-browser --version \
+ && npm cache clean --force && rm -rf /root/.npm
 
 # 设计能力（feimacode/open-design-agent-kit，社区包；skill 走官方 skills.sh 装最新版，不 pin——浮动跟随，出问题再定）：
 # - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills）。
 # - MCP server：不烘焙，opencode.json 里用 npx 随调随下（首启慢一次，之后走缓存）。
 # - 版本审计靠镜像 digest（构建时 main 快照）；想锁死再切回 npm pin 方案。
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
- && test -f /root/.agents/skills/open-design/SKILL.md
+ && test -f /root/.agents/skills/open-design/SKILL.md \
+ && npm cache clean --force && rm -rf /root/.npm
 
 # tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
@@ -120,24 +127,27 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH
  && rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}" \
  && tailscale version
 
-# kit 的 check/export 要本地浏览器（不支持 CDP，等上游合 CDP PR 再切 sidecar，见 Discussions）：
-# chrome-headless-shell（puppeteer 官方裁剪版）+ 运行库 + CJK/emoji 字体（中文截图不 tofu）。
-# 注意体积：headless-shell 约 270M + fonts-noto-cjk 约 61M（deb）+ emoji 约 10M，整段约 +450M。
-# OPEN_DESIGN_BROWSER_PATH 钉死绝对路径，auto-detect 不靠运气；unzip 是 puppeteer/browsers 解包必需。
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      unzip libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
-      libdbus-1-3 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-      libgbm1 libxcb1 libxkbcommon0 libasound2t64 fonts-noto-cjk fonts-noto-color-emoji \
- && rm -rf /var/lib/apt/lists/* \
- && npx -y "@puppeteer/browsers@latest" install chrome-headless-shell --path /root/.cache/puppeteer \
- && CHROME_BIN="$(find /root/.cache/puppeteer -name chrome-headless-shell -type f | head -n1)" \
- && [ -n "$CHROME_BIN" ] && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell.real \
- && chrome-headless-shell.real --version
-# wrapper 落到 OPEN_DESIGN_BROWSER_PATH（root 自动加 --no-sandbox；构建期即验 wrapper 本身，坏了这里就红）。
-COPY docker/opencode-tools/chrome-headless-shell-wrapper.sh /usr/local/bin/chrome-headless-shell
-RUN chmod +x /usr/local/bin/chrome-headless-shell \
- && chrome-headless-shell --version
-ENV OPEN_DESIGN_BROWSER_PATH=/usr/local/bin/chrome-headless-shell
+# kubectl：官方 release 二进制（breakglass/排障常驻；与集群版本对齐）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) KUBECTL_ARCH=amd64;; aarch64) KUBECTL_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSLo /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBECTL_ARCH}/kubectl" \
+ && chmod +x /usr/local/bin/kubectl \
+ && kubectl version --client
+
+# flux：官方 GitHub release 二进制（与控制器 v2.10.0 同版；自验 rollout 去 HW21 跳板）
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/flux.tar.gz \
+      "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_${FLUX_ARCH}.tar.gz" \
+ && tar -xzf /tmp/flux.tar.gz -C /tmp \
+ && mv /tmp/flux /usr/local/bin/flux \
+ && chmod +x /usr/local/bin/flux \
+ && rm -f /tmp/flux.tar.gz \
+ && flux --version
+
+# kit 的 check/export 走 sidecar 浏览器（CDP，上游 #114 已合；feimacode/open-design-agent-kit）。
+# 接线：OPEN_DESIGN_BROWSER_URL（DevTools HTTP endpoint，如 http://127.0.0.1:9222 同 pod sidecar）。
+# 本地 chrome 已删（-450M：headless-shell + 运行库 + CJK/emoji 字体）；无 sidecar 的环境不再支持设计 e2e。
+# 部署侧必须保证 sidecar 可达（k8s 同 pod browser 容器 / compose browser 服务），否则 check/export 失败。
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
@@ -153,7 +163,8 @@ COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 ARG OPENCODE_MEM_VERSION=2.41.1
 RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
- && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}"
+ && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）

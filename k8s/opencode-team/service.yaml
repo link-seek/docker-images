@@ -1,0 +1,30 @@
+# k8s/opencode-team Services。
+# opencode：tailscale operator 代理对外（单活；trial 先单点，稳定再议 ha）。
+# browserless：集群内 Service（opencode 经短名 browserless:3000 访问；不对 tailnet 暴露）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode
+  namespace: opencode-team
+  labels:
+    # operator 无 default class，不挂 proxy-class 则 expose 被忽略（实锤：144 分钟无设备）。
+    # ha-b 钉 .69，与本 pod 同节点。
+    tailscale.com/proxy-class: ha-b
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: opencode-team
+    tailscale.com/tags: tag:k8s
+spec:
+  selector: {app: opencode-team}
+  ports:
+    - {name: http, port: 4097, targetPort: 4097}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: browserless
+  namespace: opencode-team
+spec:
+  selector: {app: browserless}
+  ports:
+    - {name: http, port: 3000, targetPort: 3000}

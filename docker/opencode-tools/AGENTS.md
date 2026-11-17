@@ -1,15 +1,16 @@
-# 打包 vs 部署分工铁律（2026-10-18，与 infra/docker-images README 同源）
+# 打包 vs 部署分工铁律（2026-11-16 修订，与 infra#461/#490 同源）
 
-- **本镜像对运行结果负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部 bake 进镜像，digest 即行为版本号。部署侧只认 digest。
-- **部署动作禁区**：不在容器/目标机上手写配置、装软件、改逻辑 —— 要改走本仓 Dockerfile 或对应配置源文件发 PR 重打镜像。部署仓（infra）只做送达（pin digest + env 引用 + up）。
-- **回滚 = 换 digest**：不备份、不保留旧容器、不在机器上存回滚逻辑，git 历史即备份。
+- **商家（本仓及各应用仓）对运行结果负责**：业务逻辑 + 镜像 + manifest + 配送闭环，digest 即行为版本号；manifest 跟镜像走，同一仓同一 PR。
+- **infra 只留底座**：flux-system、egress、etcd、Caddy/DNS、tailnet、namespace/配额/网络策略；pod 层（manifest/env/secret/副本/pin）一律是应用仓的事，infra 不伸手。
+- **配送 = Flux pull**：生产 Flux 对账 main 分支 manifest 自动拉；老 compose `deliver-*` 已退役（k3s-apply 仅留 Secret 轮换应急）。
+- **回滚 = 换 digest/revert**：git 历史即备份，不在机器上存回滚逻辑。
 - **密钥**：真值只活 GitHub Secrets + 目标机 `.env`（600）；本镜像内无真值（`LITELLM_*` 等全走 env 引用）。
 
 # 生产环境说明（直连模型）
 
 本容器内各云 CLI 已直接配好凭证。需要查云资源时直接在容器内执行对应 CLI。不要向用户索取任何密钥。所有查询优先只读。执行变更类操作前必须先向用户确认。
 
-- 铁律：所有测试/验证类负载只跑在 GitHub 临时 runner（ephemeral，现建现焚）上；禁止以任何形式落到生产常驻节点（hw21/hw41/ali-gz 等）——含 canary、探针、试送靶机。生产机只接受正式部署流水线的切流；验证一律用 `host:ci-*`/`host:img-*` 类临时名。（2026-11-02 hw41 误投教训：deliver-stack 曾被 dispatch 到 host:mesh-hw-41 起 canary，探针红才没切流；此后 hw41 只是生产节点，不当试验场。）
+- 铁律：所有测试/验证类负载只跑在 GitHub 临时 runner（ephemeral，现建现焚）上；禁止以任何形式落到生产常驻节点（hw21/hw41/ali-gz/.69 k3s 等）——含 canary、探针、试送靶机、tailnet 加网生产簇。生产只接受 Flux 对账/main 切流；k3d 预检等验证一律用 ephemeral runner + 临时名。（2026-11-02 hw41 误投教训：deliver-stack 曾被 dispatch 到 host:mesh-hw-41 起 canary，探针红才没切流；此后生产节点只跑正式切流，不当试验场。）
 - 触发分级：`user` 身份（只动 HW）可流水线触发、无人值守——门禁全绿＋fail-closed，只验收结果；`admin` 身份（碰 OCI/阿里云等非 HW）必须活人手动 dispatch、全程盯到底，禁止自动触发。
 
 密钥验证白名单（只读验证可直接跑，不用问；名单外的命令先问）：
@@ -29,6 +30,8 @@
 - Dockerfile 云端构建：`gh workflow run build-to-swr.yml --repo link-seek/url2hc -f target_name="<名>" -f dockerfile_inline="$(cat Dockerfile)"`。
 - `gh repo list --limit 10`：查看 GitHub 仓库
 - `gh repo clone OWNER/REPO`：GitHub 克隆默认走 gh（已含 `gh auth` 身份），不用 `git clone`
+- GitHub 代码操作默认优先 gh（`gh api` 读文件/调接口、`gh pr`、`gh run`、`gh release`）；git 协议只作 fallback（容器出口抖时 `gh api` 常比 github.com 稳）。
+- `gh run watch <id> --exit-status --interval 20`：远端任务跟到底，不用 sleep 轮询；间隔不小于 15s（防次级限流）。
 - `hcloud ECS ListServersDetails --limit 5 --cli-region=cn-north-4`：华为云华北四区 ECS
 - `aliyun ecs DescribeInstances --RegionId cn-hangzhou`：阿里云杭州地域实例
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例

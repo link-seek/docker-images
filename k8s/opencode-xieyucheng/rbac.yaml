@@ -1,0 +1,108 @@
+# k8s/opencode-xieyucheng 自验只读 RBAC（HW21 下线后去跳板：pod 用 default SA 自查 rollout）。
+# 范围：本 ns 读 pod/deploy/rs/event/configmap/svc + flux-system 的 GitRepository/Kustomization 状态。
+# 红线：只 get/list/watch，不含 secrets/exec/create/patch/delete；密钥永不进日志。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opencode-self-verify
+  namespace: opencode-xieyucheng
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "configmaps", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opencode-self-verify
+  namespace: opencode-xieyucheng
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: opencode-xieyucheng
+roleRef:
+  kind: Role
+  name: opencode-self-verify
+  apiGroup: rbac.authorization.k8s.io
+---
+# Flux 状态只读（source rev + kustomization conditions），cluster 域但仅限两类 CR，不含 Secret 内容。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opencode-xieyucheng-flux-readonly
+rules:
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: opencode-xieyucheng-flux-readonly
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: opencode-xieyucheng
+roleRef:
+  kind: ClusterRole
+  name: opencode-xieyucheng-flux-readonly
+  apiGroup: rbac.authorization.k8s.io
+---
+# 备份链路只读（etcd-backup CronJob 死因定位：定时全红、Secret 停在 11-13 不再刷）。
+# 仅 batch cronjobs/jobs + events 的 get/list/watch；job/pod 规格不含密钥，Secret/钥匙值不碰。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opencode-xieyucheng-backup-readonly
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: opencode-xieyucheng-backup-readonly
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: opencode-xieyucheng
+roleRef:
+  kind: ClusterRole
+  name: opencode-xieyucheng-backup-readonly
+  apiGroup: rbac.authorization.k8s.io
+---
+# 备份 job pod 诊断（限 kube-system 域：读 pod/log 定位 refresh 失败是拉镜像还是钥匙问题）。
+# Role/Binding 的 namespace 都是 kube-system（与 xieyucheng 栈解耦，yingxin 零接触）；只 get/list，不含 exec/delete。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opencode-xieyucheng-backup-diag
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opencode-xieyucheng-backup-diag
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: opencode-xieyucheng
+roleRef:
+  kind: Role
+  name: opencode-xieyucheng-backup-diag
+  apiGroup: rbac.authorization.k8s.io
