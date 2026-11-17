@@ -39,8 +39,9 @@ spec:
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
-            # Embedding：trial 先 fastembed 本地（权重烘进镜像 /app/fastembed-cache，FASTEMBED_CACHE_PATH 显式指定，bge-m3 定版后切）
-            - {name: FASTEMBED_CACHE_PATH, value: "/app/fastembed-cache"}
+            # Embedding：mock（零向量）。fastembed-local 在 .69 上 worker 起 onnx 即崩（2Gi→4Gi 同样掐连接，非 OOM，判 CPU 不兼容），
+            # 真 embedding 走 bge-m3 网关路线（EMBEDDING_MODEL 变量已建），trial 先验通 LLM 抽取/建图/召回链路。
+            - {name: MOCK_EMBEDDING, value: "true"}
             - {name: EMBEDDING_PROVIDER, value: "fastembed"}
             - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
             - {name: EMBEDDING_DIMENSIONS, value: "384"}
