@@ -34,8 +34,8 @@ identity() { # 货对单：跑的必须是刚打出来的 digest
 smoke() { # 内置兜底：版本 + skill 文件 + MCP 烘焙可用（快、无网、无模型；2026-11-17 脏缓存教训）
   $K8S_EXEC opencode --version
   $K8S_EXEC test -f /root/.agents/skills/open-design/SKILL.md
-  $K8S_EXEC command -v open-design-mcp
-  $K8S_EXEC timeout 25 open-design-mcp --help | grep -q '\[open-design\]'
+  $K8S_EXEC sh -c 'command -v open-design-mcp'
+  $K8S_EXEC timeout 25 open-design-mcp --help 2>&1 | grep -q '\[open-design\]'
   echo "E2E PASS: smoke"
 }
 

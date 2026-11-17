@@ -26,7 +26,7 @@ spec:
       # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
       initContainers:
         - name: init-dirs
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:88b7cb18822304e62360f9aad79f1abd4d707ae47cac3fdfc2afb3b5414405c9
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
           command: [sh, -c, "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
@@ -36,7 +36,7 @@ spec:
             limits: {cpu: 500m, memory: 512Mi}
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:88b7cb18822304e62360f9aad79f1abd4d707ae47cac3fdfc2afb3b5414405c9
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:d4f668b64ac4b906f11f937ff3dc942404597e32750a6dd2804e5407a61d383a
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
@@ -127,3 +127,17 @@ spec:
   selector: {app: opencode}
   ports:
     - {name: http, port: 4097, targetPort: 4097}
+---
+# opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP 直达；容器内 tailscaled 不动）。
+# 外端口 44099：ServiceLB 按 Service 端口占节点 hostPort，hw21/hw41 本机单机版已占 4097，避冲突。
+# 端口登记：team-vpc=44097，xieyucheng-vpc=44098，opencode-vpc=44099；回滚=revert。
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-vpc
+  namespace: opencode
+spec:
+  type: LoadBalancer
+  selector: {app: opencode}
+  ports:
+    - {name: http, port: 44099, targetPort: 4097}

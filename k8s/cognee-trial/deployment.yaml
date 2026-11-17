@@ -1,5 +1,5 @@
 # k8s/cognee-trial 主 Deployment（GH runner 已验镜像可 boot：/health 200，见 url2hc#6）。
-# digest pin 即行为版本（SWR link-seek/cognee-mcp:main，2026-11-17 全绿 run 43992077955）。
+# digest pin 即行为版本（trial 自烘焙 cognee-mcp-trial:20261117-fastembed，digest 5e6d33f5，url2hc run 44013862171；fastembed 显式 FASTEMBED_CACHE_PATH=/app/fastembed-cache，离线 dims=384 实证）。
 # trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、数据 emptyDir。
 # LLM 接线（TEXT_MODEL=beam-free，EMBEDDING 初期 fastembed 本地，bge-m3 后续切）：
 # - LLM 经 litellm 网关 OpenAI 兼容（custom + openai/ 前缀 + /v1 endpoint）；
@@ -20,12 +20,14 @@ spec:
       app: cognee
   template:
     metadata:
+      annotations:
+        cognee-trial-restart: "2026-11-17T0306-secret-live"
       labels:
         app: cognee
     spec:
       containers:
         - name: cognee
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp@sha256:0e2db68d78e791bf6503de0922373a461e2ac7a92e2a3d6f08972f0a91b5fb01
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp-trial@sha256:5e6d33f5159b3fa4dd81aca21882d30bb1d0a684331578a9ae58a3bc76ff50ae
           ports:
             - {name: http, containerPort: 8000}
           env:
@@ -33,14 +35,19 @@ spec:
             - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
             # LLM：TEXT_MODEL（beam-free）经 litellm 网关
             - {name: LLM_PROVIDER, value: "custom"}
-            - {name: LLM_MODEL, value: "openai/beam-free"}
+            - {name: LLM_MODEL, value: "openai/muse-spark-1.3-contributor"} # TEXT_MODEL 临时改 Go 档（beam-free 日配额烧干；定版换回变量值）
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
-            # Embedding：trial 先 fastembed 本地（零外部依赖），bge-m3 定版后切
-            - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
-            - {name: EMBEDDING_DIMENSIONS, value: "384"}
+            # Embedding：CF Workers AI OpenAI 兼容端点（@cf/baai/bge-m3，1024 维，与 EMBEDDING_MODEL 变量一致）；
+            # custom provider 经 LiteLLM 走 /v1/embeddings；key 用 Secret 内 CF_AI_TOKEN（pipeline 现签，不进仓）。
+            # fastembed-local 已判死（.69 上起 onnx 即崩 worker，mock 也绕不开模型加载），不再用。
+            - {name: EMBEDDING_PROVIDER, value: "openai_compatible"} # 裸 openai client 直调 CF，不经 LiteLLM（避 dimensions 守卫）
+            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"} # 裸 client 原样转发 model 名给 CF
+            - {name: EMBEDDING_DIMENSIONS, value: "1024"}
+            - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
+            - name: EMBEDDING_API_KEY
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true }}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
           readinessProbe:
@@ -54,8 +61,8 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 10
           resources:
-            requests: {cpu: 200m, memory: 512Mi}
-            limits: {cpu: 1000m, memory: 2Gi}
+            requests: {cpu: 200m, memory: 1Gi}
+            limits: {cpu: 2000m, memory: 4Gi} # trial ingests吃内存（onnx+抽取），先放宽；定版按实测收敛
       volumes:
         - name: data
           emptyDir: {}

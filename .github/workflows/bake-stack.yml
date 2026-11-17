@@ -621,11 +621,20 @@ jobs:
           k3d image import "${DIGEST_SOURCE}" -c preflight
           # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-          # sidecar 同簇（CDP e2e 用；SWR 直拉 + 建 swr-pull secret 供 kubelet，二者缺一不可）
+          # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
           if [ -n "${SIDECAR_IMG:-}" ]; then
-            docker pull "$SIDECAR_IMG"
-            k3d image import "$SIDECAR_IMG" -c preflight
+            # runner 在境外：SWR（境内）直拉 1GB+ sidecar 跨洋慢；GHCR 有同 digest（bake 双推，字节相同），
+            # 走 GHCR 拉（docker tag 不接受 digest 目标，不用 tag）；manifest 侧用下面的 images 映射到 GHCR 同 digest，
+            # 生产 manifest 一字不动。仅 link-seek 命名有 GHCR 镜像；其它回落 SWR 直拉（原行为）。
+            PULL_IMG="$SIDECAR_IMG"
+            SIDECAR_PATCH=""
+            case "$SIDECAR_IMG" in swr.*/link-seek/*@sha256:*)
+              PULL_IMG="ghcr.io/${SIDECAR_IMG#*/}"
+              SIDECAR_PATCH="$(printf '    - name: %s\n      newName: %s\n      digest: "%s"\n' "${SIDECAR_IMG%%@*}" "${PULL_IMG%%@*}" "${SIDECAR_IMG##*@}")"
+            ;; esac
+            docker pull "$PULL_IMG"
+            k3d image import "$PULL_IMG" -c preflight
           elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
           else
@@ -672,6 +681,8 @@ jobs:
             printf '    - name: %s\n      newName: %s\n      digest: "%s"\n' \
               "$n" "${DIGEST_SOURCE%%:*}" "${DIGEST:?DIGEST 未设置}"
           done)"
+          # sidecar 换道 GHCR（同 digest，见上）：kustomize images 追加映射，预检 manifests 免提交
+          [ -n "${SIDECAR_PATCH:-}" ] && IMAGES_YAML="$(printf '%s\n%s\n' "$IMAGES_YAML" "$SIDECAR_PATCH")"
           cat > /tmp/preflight-ks.yaml <<EOF
           apiVersion: kustomize.toolkit.fluxcd.io/v1
           kind: Kustomization
@@ -699,6 +710,9 @@ jobs:
                 spec:
                   template:
                     spec:
+                      # 预检簇单节点：生产钉节点（team 钉 .69 hostname）的 manifest 在此永 Pending；
+                      # null 即删字段，无此字段的 manifest（tools）是 no-op，生产 manifest 不动
+                      nodeSelector: null
                       containers:
                       - name: $CONTAINER
                         command: ${{ inputs.k8s_preflight_command }}
