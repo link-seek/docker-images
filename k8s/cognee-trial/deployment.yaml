@@ -48,9 +48,6 @@ spec:
             - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
             - name: EMBEDDING_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true }}
-            - {name: EMBEDDING_PROVIDER, value: "fastembed"}
-            - {name: EMBEDDING_MODEL, value: "BAAI/bge-small-en-v1.5"}
-            - {name: EMBEDDING_DIMENSIONS, value: "384"}
           volumeMounts:
             - {name: data, mountPath: /root/.cognee_system}
           readinessProbe:
