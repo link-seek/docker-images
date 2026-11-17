@@ -22,6 +22,8 @@ spec:
       app: opencode-team
   template:
     metadata:
+      annotations:
+        cognee-mcp-rev: "7ca5f06"
       labels:
         app: opencode-team
     spec:
