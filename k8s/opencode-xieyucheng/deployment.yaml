@@ -106,9 +106,9 @@ spec:
         # 41 上 local-path helper 镜像拉不动（docker.io 被墙）→ hostPath 直挂（单机 RWO 等价，kubelet DirectoryOrCreate）。
         # yingxin 栈保持 PVC（.69 缓存有镜像，不动活数据）。
         - name: prod-work
-          hostPath: {path: /var/lib/opencode-xieyucheng/work, type: DirectoryOrCreate}
+          hostPath: {path: /data/opencode-xieyucheng/work, type: DirectoryOrCreate}
         - name: prod-data
-          hostPath: {path: /var/lib/opencode-xieyucheng/data, type: DirectoryOrCreate}
+          hostPath: {path: /data/opencode-xieyucheng/data, type: DirectoryOrCreate}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
 ---
