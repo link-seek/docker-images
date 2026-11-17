@@ -35,7 +35,7 @@ spec:
         - name: swr-pull
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:a89419303f92956c7dc6ee5efc5b615df97ebca59cf620514ef0725b7bd38d61
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:10a2a229759f4928a9083effda70fb4a387ea5229922fa8b687271dc3197ad72
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
