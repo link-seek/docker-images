@@ -657,7 +657,7 @@ jobs:
               -e OCI_CLI_USER="$OCI_U" -e OCI_CLI_FINGERPRINT="$OCI_FP" \
               -e OCI_CLI_TENANCY="$OCI_T" -e OCI_CLI_REGION="$OCI_R" \
               -e OCI_CLI_KEY_CONTENT="$OCI_KEY" \
-              "$DIGEST_SOURCE" oci iam availability-domain list \
+              "$DIGEST_SOURCE" iam availability-domain list \
               --compartment-id "$OCI_T" --output json | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d.get('data'),list) and len(d['data'])>0; print('OCI PROBE OK: ADs', len(d['data']))"
           fi
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
