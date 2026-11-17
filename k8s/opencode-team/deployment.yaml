@@ -53,6 +53,8 @@ spec:
             - {name: OPEN_DESIGN_BROWSER_URL, value: "ws://browserless.opencode-team.svc.cluster.local:3000/chromium?token=$(BROWSERLESS_TOKEN)"}
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: LITELLM_API_KEY}}
+            - name: MAAS_KEY
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: MAAS_KEY}}
             - name: GH_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
