@@ -73,6 +73,13 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_SK}}
             - name: SMTP_PASS
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: SMTP_PASS}}
+            # 阿里云身份（pilot 专用；CLI 原生 env 名；region 明文非秘钥）
+            - name: ALIBABACLOUD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: ALIBABACLOUD_ACCESS_KEY_ID}}
+            - name: ALIBABACLOUD_ACCESS_KEY_SECRET
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: ALIBABACLOUD_ACCESS_KEY_SECRET}}
+            - name: ALIBABACLOUD_REGION_ID
+              value: "cn-hangzhou"
             # OCI 身份（pilot 专用；真值走 pipeline mint，OCI_CLI_* 环境认证，免 ~/.oci）：
             - name: OCI_CLI_USER
               value: "ocid1.user.oc1..aaaaaaaalhn53cu72kvifu34crgpabqpm5xhm424yj56n4g2ca2cxn3hs4ca"
