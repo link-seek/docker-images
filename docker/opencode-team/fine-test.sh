@@ -71,7 +71,7 @@ link() { # 全链路：agent-browser 经 CDP 连 browserless（example.com 外�
 obs_reach() { # OBS 端点可达（dummy key 打 ls：403/400/NoSuchBucket 均算通；只验链路不验权，不耗 key）
   # 预检覆盖了容器 command（entrypoint 没跑），配置在这里现写；env 来自 Secret。
   $K8S_EXEC sh -c 'if [ -n "$OBS_AK" ]; then printf "endpoint=%s\nak=%s\nsk=%s\ntoken=\n" "$OBS_ENDPOINT" "$OBS_AK" "$OBS_SK" > /root/.obsutilconfig; fi; echo config-ok' > /dev/null
-  OUT=$($K8S_EXEC sh -c 'obsutil ls obs://dummy-probe-$RANDOM 2>&1' || true)
+  OUT=$($K8S_EXEC sh -c 'obsutil ls obs://dummy-probe-$$ 2>&1' || true)
   echo "$OUT" | head -n 5
   echo "$OUT" | grep -aqE "403|400|NoSuchBucket|InvalidAccessKey|AccessDenied" && echo "OBS REACHABLE" || { echo "FAIL: OBS endpoint unreachable"; exit 1; }
   echo "E2E PASS: obs-reach"
