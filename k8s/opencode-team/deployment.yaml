@@ -66,6 +66,7 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: OPENCODE_SERVER_PASSWORD}}
+            - {name: OPENCODE_SERVER_USERNAME, value: "team"}
             - name: CLOUDFLARE_API_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: CLOUDFLARE_API_TOKEN}}
             - name: CF_AI_TOKEN
