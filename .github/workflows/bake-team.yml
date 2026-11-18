@@ -74,3 +74,5 @@ jobs:
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
       TS_API_KEY: ${{ secrets.TS_API_KEY }}
       ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}
+      OBS_TEST_AK: ${{ secrets.PROD_HCLOUD_AK }}
+      OBS_TEST_SK: ${{ secrets.PROD_HCLOUD_SK }}
