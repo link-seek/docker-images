@@ -98,3 +98,6 @@ CVE-2026-113351 exp:2027-01-31
 CVE-2026-115506 exp:2027-01-31
 CVE-2026-49272 exp:2027-01-31
 CVE-2026-128089 exp:2027-02-28 # 网关上游venv自带dnspython 2.9.0：Wolfi无pip，venv动不了；等上游升。HIGH认领，e2e照常。
+
+# 2026-11-18 team bake 认领：Snyk 已撤销 SNYK-JS-PICOMATCH-21248802（does not affect any version），上游暂无修复版；传递依赖，无监听面。
+CVE-2026-112366 exp:2027-02-28
