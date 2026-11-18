@@ -39,5 +39,6 @@ jobs:
         RELOADER_TAG=${{ inputs.reloader_tag }}
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
