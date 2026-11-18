@@ -6,8 +6,7 @@
 # 新预检：同货验证。骨架已在 k3d 里用 Flux 对完账（team digest 经 images 注入，
 # browserless 取 manifest tag——bootstrap 要求先转正 browserless），本 hook 只做：
 #   1) identity：k3d 里跑的必须是刚打出来的 digest（kubectl 读 deploy image）。
-#   2) 链路：pod 内 agent-browser connect 到同 ns browserless Service（CDP over ws + token 鉴权）
-#      → open → snapshot 断言 → screenshot → close。
+#   2) E2E：e2e-cases/select-cases.sh 选单（默认全量；E2E_CASES 可 skip/名单强制），逐个跑。
 # TOKEN 用 preflight-env.conf 里写死的 dummy-preflight（模板进仓，同 Secret 两边同值）。
 set -euo pipefail
 
@@ -17,9 +16,13 @@ K8S_NS="${K8S_NS:-opencode-team}"
 K8S_CONTAINER="${K8S_CONTAINER:-opencode}"
 K8S_EXEC="kubectl -n $K8S_NS exec deploy/$K8S_DEPLOY -c $K8S_CONTAINER --"
 export K8S_NS K8S_DEPLOY K8S_CONTAINER
-
+# 用例 env：真 key 缺失由各 case 自检 fail-closed（信息写明补哪里的 secret）。
+export OBS_TEST_AK OBS_TEST_SK TEMP_TAG 2>/dev/null || true
 TOKEN="dummy-preflight"
 WS_URL="ws://browserless:3000/chromium?token=$TOKEN"
+export TOKEN WS_URL
+
+CASES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/e2e-cases" && pwd)"
 
 identity() { # 货对单：跑的必须是刚打出来的 digest
   local img
@@ -27,24 +30,15 @@ identity() { # 货对单：跑的必须是刚打出来的 digest
   [ -n "$img" ] || { echo "FAIL: deploy/$K8S_DEPLOY 读不到 image"; exit 1; }
   case "$img" in
     *"@${DIGEST}") echo "IDENTITY OK: deploy/$K8S_DEPLOY == $DIGEST" ;;
-    *) echo "FAIL: deploy 跑的是 $img，不是刚打出来的 $DIGEST"; exit 1 ;;
+    *) echo "FAIL: deploy 跑的是 $img，不是刚打出来的 $DIGEST"; exit 1; ;;
   esac
 }
 
+identity
 
-maas_reach() { # MAAS 端点可达（dummy key → 401/403 预期；只验 DNS/TLS，不耗 key）
-  $K8S_EXEC python3 -c "
-import urllib.request, urllib.error
-r = urllib.request.Request('https://api.modelarts-maas.com/v2/models', headers={'Authorization': 'Bearer dummy-preflight'})
-try:
-    urllib.request.urlopen(r, timeout=20)
-    print('UNEXPECTED 200'); raise SystemExit(1)
-except urllib.error.HTTPError as e:
-    print('MAAS REACHABLE, status', e.code)
-    raise SystemExit(0 if e.code in (401, 403) else 1)
-"
-  echo "E2E PASS: maas-reach"
-}
+# --- E2E 选单 + 逐个跑 ---
+CASES="$(E2E_CASES="${E2E_CASES:-}" bash "$CASES_DIR/select-cases.sh")"
+echo "E2E cases: ${CASES:-<none>}"
 
 smoke() { # 内置兜底：版本 + skill 文件 + MCP 烘焙可用（快、无网、无模型；2026-11-17 脏缓存教训）
   $K8S_EXEC opencode --version
@@ -54,37 +48,18 @@ smoke() { # 内置兜底：版本 + skill 文件 + MCP 烘焙可用（快、无�
   echo "E2E PASS: smoke"
 }
 
-link() { # 全链路：agent-browser 经 CDP 连 browserless（example.com 外网，runner/k3d 均可达）
-  $K8S_EXEC agent-browser connect "$WS_URL" \
-    && echo "CDP CONNECT OK" || { echo "FAIL: agent-browser connect 不通（$WS_URL）"; exit 1; }
-  $K8S_EXEC agent-browser open https://example.com \
-    && echo "OPEN OK" || { echo "FAIL: open 失败"; exit 1; }
-  $K8S_EXEC agent-browser snapshot | grep -qi "example" \
-    && echo "SNAPSHOT OK" || { echo "FAIL: snapshot 无预期内容"; exit 1; }
-  $K8S_EXEC agent-browser screenshot /tmp/fine-team-shot.png \
-    && echo "SCREENSHOT OK" || { echo "FAIL: screenshot 失败"; exit 1; }
-  $K8S_EXEC agent-browser close \
-    && echo "CLOSE OK" || { echo "FAIL: close 失败"; exit 1; }
-  echo "E2E PASS: link（agent-browser CDP→browserless 全链路）"
-}
-
-obs_reach() { # OBS 端点可达（dummy key 打 ls：403/400/NoSuchBucket 均算通；只验链路不验权，不耗 key）
-  # 预检覆盖了容器 command（entrypoint 没跑），配置在这里现写；env 来自 Secret。
-  $K8S_EXEC sh -c 'if [ -n "$OBS_AK" ]; then printf "endpoint=%s\nak=%s\nsk=%s\ntoken=\n" "$OBS_ENDPOINT" "$OBS_AK" "$OBS_SK" > /root/.obsutilconfig; fi; echo config-ok' > /dev/null
-  OUT=$($K8S_EXEC sh -c 'obsutil ls obs://dummy-probe-$$ 2>&1' || true)
-  echo "$OUT" | head -n 5
-  echo "$OUT" | grep -aqE "403|400|NoSuchBucket|InvalidAccessKey|AccessDenied" && echo "OBS REACHABLE" || { echo "FAIL: OBS endpoint unreachable"; exit 1; }
-  echo "E2E PASS: obs-reach"
-}
-
-identity
-smoke
-maas_reach
-obs_reach
-if [ "${E2E_CASES:-}" = "skip" ]; then
-  echo "E2E SKIP: E2E_CASES=skip，只认版本+连通"
+if [ -z "$CASES" ]; then
+  echo "E2E SKIP: 选单为空（E2E_CASES=skip）"
 else
-  link
+  for c in $CASES; do
+    if [ "$c" = "smoke" ]; then
+      smoke
+    else
+      [ -f "$CASES_DIR/$c.sh" ] || { echo "FAIL: 用例文件缺失 $CASES_DIR/$c.sh（选单与文件不一致）"; exit 1; }
+      bash "$CASES_DIR/$c.sh"
+      echo "E2E PASS: $c"
+    fi
+  done
 fi
 
-echo "FINE PASS: opencode-team 细测通过（k3d+Flux 同货，E2E_CASES: ${E2E_CASES:-<full>}）"
+echo "FINE PASS: opencode-team 细测通过（k3d+Flux 同货，E2E cases: ${CASES:-<none>}）"
