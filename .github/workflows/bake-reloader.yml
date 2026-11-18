@@ -1,0 +1,43 @@
+name: bake-reloader
+# 薄调用：stakater/reloader 原样重打（SOPS 终局的自动 rollout 执行器）。
+# 上游已测，本线只 build→转正：k8s_app/infra_stack_dir 留空跳双预检，hook/goss 留空。
+# 版本：reloader_tag dispatch 传入（默认 v1.4.24）；转正以 run 日志 digest 为准，下游 manifests pin digest。
+
+on:
+  workflow_dispatch:
+    inputs:
+      reloader_tag:
+        description: "上游 tag（如 v1.4.24）"
+        required: false
+        type: string
+        default: "v1.4.24"
+  push:
+    branches: [main]
+    paths:
+      - docker/reloader/Dockerfile
+      - docker/reloader/**
+      - .github/workflows/bake-reloader.yml
+      - .github/workflows/bake-stack.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: reloader
+      dockerfile: docker/reloader/Dockerfile
+      ghcr_image: ghcr.io/link-seek/reloader
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/reloader
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.reloader_tag }}
+      build_args: |
+        RELOADER_TAG=${{ inputs.reloader_tag }}
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
