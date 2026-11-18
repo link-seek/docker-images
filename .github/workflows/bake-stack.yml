@@ -236,6 +236,10 @@ on:
         required: false
       ALI_SK:
         required: false
+      OBS_TEST_AK:
+        required: false
+      OBS_TEST_SK:
+        required: false
 
 permissions:
   contents: read
@@ -792,6 +796,8 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SWR_USER: ${{ secrets.SWR_LOGIN_USER }}
           SWR_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+          OBS_TEST_AK: ${{ secrets.OBS_TEST_AK }}
+          OBS_TEST_SK: ${{ secrets.OBS_TEST_SK }}
           TEMP_TAG: ci-${{ github.run_id }}
           E2E_CASES: ${{ inputs.e2e_cases }}
           K8S_NS: ${{ inputs.k8s_namespace }}
