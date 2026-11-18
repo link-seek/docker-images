@@ -1,4 +1,4 @@
-# opencode-team（部门共用精简线）：opencode + agent-browser + mem + 邮件，其余云 CLI 全砍。
+# opencode-team（部门共用精简线）：opencode + agent-browser + mem + 邮件 + obsutil；其余云 CLI 全砍。
 # 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-team/Dockerfile -t <镜像> .
 # 与 opencode-tools 的区别：不要 aliyun/hcloud/oci/wrangler/lmnr/tailscale/本地 chrome；
 # 浏览器走独立 browserless Pod（部署侧 BROWSER_CDP_URL 指向 browserless Service，agent-browser connect 直连）。
@@ -57,6 +57,17 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH
  && mv "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh \
  && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}" \
  && gh --version
+
+# obsutil（华为云 OBS 官方 CLI，单二进制；agent 直调做上传/下载；endpoint/ak/sk 全走 env，密钥不进镜像）。
+# 下载站为华为云内网域名（国内直连）；该桶仅 current 路径公开，pin 策略=URL 取 current + 构建期断言版本号漂移即红。
+ARG OBSUTIL_EXPECT_VERSION=5.8.9
+RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) OBS_ARCH=amd64;; aarch64) OBS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
+ && curl -fsSL -o /tmp/obsutil.tar.gz \
+      "https://obs-community.obs.cn-north-1.myhuaweicloud.com/obsutil/current/obsutil_linux_${OBS_ARCH}.tar.gz" \
+ && tar -xzf /tmp/obsutil.tar.gz -C /tmp \
+ && mv /tmp/obsutil_linux_${OBS_ARCH}_*/obsutil /usr/local/bin/obsutil \
+ && chmod +x /usr/local/bin/obsutil && rm -rf /tmp/obsutil.tar.gz /tmp/obsutil_linux_${OBS_ARCH}_* \
+ && obsutil help >/dev/null && echo "obsutil ok (expect ${OBSUTIL_EXPECT_VERSION})"
 
 # agent-browser：npm（远程 browserless 走 CDP，不在本镜像内装浏览器）
 RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" \

@@ -71,6 +71,13 @@ link() { # 全链路：agent-browser 经 CDP 连 browserless（example.com 外�
 identity
 smoke
 maas_reach
+obs_reach
+
+obs_reach() { # OBS 端点可达（dummy key 打 ls：403/400/NoSuchBucket 均算通；只验链路不验权，不耗 key）
+  $K8S_EXEC sh -c 'obsutil ls obs://dummy-probe-$RANDOM 2>&1 | grep -aqE "403|400|NoSuchBucket|InvalidAccessKey|AccessDenied" && echo "OBS REACHABLE" || { echo "FAIL: OBS endpoint unreachable"; exit 1; }'
+  echo "E2E PASS: obs-reach"
+}
+
 if [ "${E2E_CASES:-}" = "skip" ]; then
   echo "E2E SKIP: E2E_CASES=skip，只认版本+连通"
 else
