@@ -61,7 +61,7 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_AK}}
             - name: OBS_SK
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_SK}}
-            - {name: OBS_ENDPOINT, value: "https://obs.cn-north-4.myhuaweicloud.com"}
+            - {name: OBS_ENDPOINT, value: "https://obs.cn-north-9.myhuaweicloud.com"}
             - name: GH_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
