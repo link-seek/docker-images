@@ -15,7 +15,7 @@ set -euo pipefail
 K8S_NS="${K8S_NS:-opencode-team}"
 K8S_CONTAINER="${K8S_CONTAINER:-opencode}"
 K8S_EXEC="kubectl -n $K8S_NS exec deploy/$K8S_DEPLOY -c $K8S_CONTAINER --"
-export K8S_NS K8S_DEPLOY K8S_CONTAINER
+export K8S_NS K8S_DEPLOY K8S_CONTAINER K8S_EXEC TOKEN WS_URL
 # 用例 env：真 key 缺失由各 case 自检 fail-closed（信息写明补哪里的 secret）。
 export OBS_TEST_AK OBS_TEST_SK TEMP_TAG 2>/dev/null || true
 TOKEN="dummy-preflight"
