@@ -54,9 +54,20 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) GH_ARCH=amd64;; aarch64) GH_ARCH
  && curl -fsSL -o /tmp/gh.tar.gz \
       "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" \
  && tar -xzf /tmp/gh.tar.gz -C /tmp \
- && mv "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh \
+ && mkdir -p /usr/local/libexec \
+ && mv "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh" /usr/local/libexec/gh-real \
+ && chmod +x /usr/local/libexec/gh-real \
  && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${GH_ARCH}" \
- && gh --version
+ && /usr/local/libexec/gh-real --version
+
+# gh 命令级护栏（team 线）：/usr/local/bin/gh 是 wrapper，只放行 `gh issue create`；
+# 真二进制移到 /usr/local/libexec/gh-real。注意这是防误用护栏，不是安全边界（token 未降权）。
+COPY docker/opencode-team/gh-restrict.sh /usr/local/bin/gh
+RUN chmod +x /usr/local/bin/gh \
+ && gh --version \
+ && gh issue create --help >/dev/null \
+ && if gh api /user >/dev/null 2>&1; then echo "FAIL: gh-restrict 未生效（gh api 应被拒）" >&2; exit 1; fi \
+ && echo "gh-restrict ok: 仅 issue create"
 
 # obsutil（华为云 OBS 官方 CLI，单二进制；agent 直调做上传/下载；endpoint/ak/sk 全走 env，密钥不进镜像）。
 # 下载站为华为云内网域名（国内直连）；该桶仅 current 路径公开，pin 策略=URL 取 current + 构建期断言版本号漂移即红。
