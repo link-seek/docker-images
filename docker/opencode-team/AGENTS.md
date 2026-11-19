@@ -33,8 +33,9 @@
 
 ## 本线没有（不要照抄 tools 线的命令）
 
-`hcloud`、`aliyun`、`oci`、`tailscale`、`wrangler`、`lmnr`、`jq`、`yq`、`sops`、本地 Chrome 均已砍掉。
+`hcloud`、`aliyun`、`oci`、`tailscale`、`wrangler`、`lmnr`、本地 Chrome 本线均已砍掉（这些是与 tools 线的差异）。
 需要云资源时：查询/上传走 `obsutil` 或 `gh api`；Cloudflare 用 REST + `$CLOUDFLARE_API_TOKEN`；真需要整套云 CLI 就改走 tools 线，别在容器里手工装。
+另：`jq` / `yq` / `sops` 两条线都没装——JSON 用 `gh --jq` 或 `python3`，YAML 用 `python3`；sops 解密在流水线/Flux 侧做（本仓 `k8s/**/*.enc.yaml` 由部署链解），不在 agent 容器里跑。
 
 # 密钥验证白名单（只读可直接跑；名单外先问）
 
