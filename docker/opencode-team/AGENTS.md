@@ -34,6 +34,7 @@
 ## 本线没有（不要照抄 tools 线的命令）
 
 `hcloud`、`aliyun`、`oci`、`tailscale`、`wrangler`、`lmnr`、本地 Chrome 本线均已砍掉（这些是与 tools 线的差异）。
+注意：无 `hcloud` 只表示没有 KooCLI 命令；**华为云 OBS 的 AK/SK（`$OBS_AK`/`$OBS_SK`）与 `$OBS_ENDPOINT` 必须保留**，obsutil 依赖它们，别当无用凭证删掉。
 需要云资源时：查询/上传走 `obsutil` 或 `gh api`；Cloudflare 用 REST + `$CLOUDFLARE_API_TOKEN`；真需要整套云 CLI 就改走 tools 线，别在容器里手工装。
 
 # 密钥验证白名单（只读可直接跑；名单外先问）
@@ -57,6 +58,7 @@
 # OBS（本线专属）
 
 - 上传/下载一律用 `obsutil`，endpoint/AK/SK 走 `$OBS_ENDPOINT`/`$OBS_AK`/`$OBS_SK`，不落明文。
+- **华为云 AK/SK 必须保留**：`$OBS_AK`/`$OBS_SK`/`$OBS_ENDPOINT` 由 deployment 注入，是 obsutil 的凭据；砍的只是 `hcloud` 命令层，不是华为云凭证。缺凭证按报错补 Secret，不向用户索取。
 - 例：`obsutil ls obs://<bucket>/`、`obsutil cp <本地文件> obs://<bucket>/<key>`、`obsutil sign obs://<bucket>/<key>`（临时预签名）。
 - 预签名有效期按需给，别生成长期公开链接。
 
