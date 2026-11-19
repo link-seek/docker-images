@@ -22,6 +22,18 @@
           "catalog": 180000,
           "execution": 600000
         }
+      },
+      // 组织记忆 trial：cognee 集中式（ClusterIP 集群内直达，无鉴权；隔离靠 dataset 约定）。
+      // team 只用 trial-team（私库）+ org-settled（共享）。烘焙进镜像，避免运行期改写只读的 /root/.config。
+      "cognee": {
+        "type": "remote",
+        "url": "http://cognee.cognee-trial.svc.cluster.local:8000/mcp",
+        "oauth": false,
+        "timeout": {
+          "startup": 45000,
+          "catalog": 60000,
+          "execution": 600000
+        }
       }
     }
   },
