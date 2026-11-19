@@ -9,6 +9,15 @@ data:
   entrypoint.sh: |
     #!/bin/sh
     set -eu
+    # 只读根文件系统（deployment.securityContext.readOnlyRootFilesystem=true）：
+    # 可写只有 /workspace、数据卷 /root/.local/share/opencode、以及 emptyDir /tmp。
+    # 把 HOME 指到 /tmp，并用 XDG_* 把 opencode 的配置/数据钉回镜像与数据卷位置。
+    export HOME=/tmp/home
+    export XDG_CONFIG_HOME=/root/.config
+    export XDG_DATA_HOME=/root/.local/share
+    export XDG_STATE_HOME=/tmp/state
+    export XDG_CACHE_HOME=/tmp/cache
+    mkdir -p "$HOME" /tmp/cache /tmp/state
     if [ "${PIPELINE_MANAGED:-}" != "true" ]; then
       echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2
       exit 1
@@ -19,31 +28,14 @@ data:
       git -C /workspace config user.email opencode-team@local
       git -C /workspace commit --allow-empty -m init >/dev/null 2>&1
     fi
-    # 组织记忆 trial：cognee 集中式（ClusterIP 集群内直达，无鉴权；隔离靠 dataset 约定）。
-    # team 只用 trial-team（私库）+ org-settled（共享），不用 trial-yingxin。
-    # 注意：opencode.json 由 opencode.jsonc 落盘，含 // 全行注释；json.load 直接读会炸，
-    # 必须先剥注释再解析，否则 except 分支 d={} 会抹掉整份配置（白名单/模型全丢实锤）。
-    python3 - <<'PY' 2>/dev/null || true
-    import json, re
-    p='/root/.config/opencode/opencode.json'
-    raw=open(p).read() if __import__('os').path.exists(p) else '{}'
-    raw=re.sub(r'^[ \t]*//.*$', '', raw, flags=re.M)
-    try:
-        d=json.loads(raw)
-    except Exception:
-        d={}
-    m=d.setdefault('mcp',{}).setdefault('servers',{});
-    cog={"type":"remote","url":"http://cognee.cognee-trial.svc.cluster.local:8000/mcp","oauth":False,"timeout":{"startup":45000,"catalog":60000,"execution":600000}}
-    if m.get('cognee')!=cog:
-        m['cognee']=cog
-        json.dump(d,open(p,'w'),indent=2)
-        print('cognee-mcp-injected')
-    PY
-    # obsutil 配置：华为云 AK/SK 统一用 HCLOUD_AK/HCLOUD_SK（组织级 PROD_HCLOUD_AK/SK 物化）；
-    # 过渡期兼容旧名 OBS_AK/OBS_SK。OBS_ENDPOINT 缺省华北九；密钥不进镜像。
+    # 组织记忆 trial：cognee 已烘焙进镜像 opencode.jsonc（mcp.servers.cognee），
+    # 运行期不再改写 /root/.config（只读根文件系统下不可写）。
+    # obsutil 配置：华为云 AK/SK 统一 HCLOUD_AK/HCLOUD_SK（旧名 OBS_AK/OBS_SK 兜底），
+    # 走 env 链式取密钥（OBS_ACCESS_KEY_ID/SECRET，不落盘），配置文件写 HOME（/tmp/home）。
     _OBS_AK="${HCLOUD_AK:-${OBS_AK:-}}"; _OBS_SK="${HCLOUD_SK:-${OBS_SK:-}}"
     if [ -n "$_OBS_AK" ] && [ -n "$_OBS_SK" ]; then
-      printf 'endpoint=%s\nak=%s\nsk=%s\ntoken=\n' "${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}" "$_OBS_AK" "$_OBS_SK" > /root/.obsutilconfig
-      chmod 600 /root/.obsutilconfig
+      export OBS_ACCESS_KEY_ID="$_OBS_AK" OBS_SECRET_ACCESS_KEY="$_OBS_SK"
+      printf 'endpoint=%s\nautoChooseSecurityProvider=true\nutilLogLevel=ERROR\n' "${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}" > "$HOME/.obsutilconfig"
+      chmod 600 "$HOME/.obsutilconfig"
     fi
     exec opencode "$@"
