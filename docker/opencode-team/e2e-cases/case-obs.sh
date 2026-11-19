@@ -6,7 +6,8 @@ set -euo pipefail
 [ -n "${K8S_EXEC:-}" ] || { echo "FAIL: K8S_EXEC 为空（fine-test.sh 未导出）"; exit 1; }
 [ -n "${OBS_TEST_AK:-}" ] || { echo "FAIL: OBS_TEST_AK 为空（bake-team 需传 PROD_HCLOUD_AK）"; exit 1; }
 [ -n "${OBS_TEST_SK:-}" ] || { echo "FAIL: OBS_TEST_SK 为空"; exit 1; }
-ENDPOINT="https://obs.cn-north-9.myhuaweicloud.com"
+# robotwin-assets 桶在 cn-north-4（team 默认 OBS_ENDPOINT 是 cn-north-9，桶地域须与端点一致）。
+ENDPOINT="https://obs.cn-north-4.myhuaweicloud.com"
 BUCKET="robotwin-assets"
 TAG="${TEMP_TAG:-local}"
 KEY="e2e-team/${TAG}/probe.txt"
