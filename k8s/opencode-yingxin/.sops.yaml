@@ -1,0 +1,6 @@
+# SOPS 加密规则（pilot）：本目录 *.enc.yaml 用 age 公钥加密，只加密 data/stringData。
+# 公钥对集群 flux-system/sops-age 私钥（k3s-sops-bootstrap 自举）。真值切换沿用此规则。
+creation_rules:
+  - path_regex: .*\.enc\.yaml$
+    age: age1xa3yp8xdquu3v0wlg3n2gmlmah7z60uz8m9e0py7xx30ct4vlu8sjhd87z
+    encrypted_regex: ^(data|stringData)$
