@@ -40,9 +40,8 @@
 # 文件系统边界（只读根文件系统）
 
 - `readOnlyRootFilesystem: true`：镜像与系统文件（`/usr`、`/etc`、`/root/.config`、`/usr/local/bin` 等）**一律不可写**。
-- 可写仅三处：`/workspace`（业务代码）、`/root/.local/share/opencode`（opencode 状态 + 记忆库）、`/tmp`（emptyDir）。
-- `HOME=/tmp/home`；`XDG_CONFIG_HOME=/root/.config`、`XDG_DATA_HOME=/root/.local/share`，保证 opencode 仍找到原配置/数据。
-- obsutil 配置写 `$HOME/.obsutilconfig`（即 `/tmp/home`）；AK/SK 走 `OBS_ACCESS_KEY_ID`/`OBS_SECRET_ACCESS_KEY` 环境变量（不落盘）。
+- 可写：`/workspace`（业务代码）、`/root/.local/share/opencode`（数据卷，记忆库）、`/root`（emptyDir，由 initContainer seed 镜像内 `/root/.`，故 `.config` 等仍在）、`/tmp`（emptyDir）。
+- 家目录可写所以 gh / obsutil / agent-browser 的缓存与配置都能落盘；obsutil 配置在 `/root/.obsutilconfig`，AK/SK 走 `OBS_ACCESS_KEY_ID`/`OBS_SECRET_ACCESS_KEY`（不落盘）。
 - 局限：只防"写"，不防"读"；hostPath 共享，**不是跨用户隔离**。
 
 # 密钥验证白名单（只读可直接跑；名单外先问）
@@ -73,7 +72,7 @@
 
 # OBS（本线专属）
 
-- 上传/下载一律用 `obsutil`；endpoint 走 `$OBS_ENDPOINT`，AK/SK 由 entrypoint 转成 `OBS_ACCESS_KEY_ID`/`OBS_SECRET_ACCESS_KEY`（env 链式取密钥，不落盘），配置文件位于 `$HOME/.obsutilconfig`（`/tmp/home`）。
+- 上传/下载一律用 `obsutil`；endpoint 走 `$OBS_ENDPOINT`，AK/SK 由 entrypoint 转成 `OBS_ACCESS_KEY_ID`/`OBS_SECRET_ACCESS_KEY`（env 链式取密钥，不落盘），配置文件位于 `/root/.obsutilconfig`。
 - **华为云 AK/SK 必须保留**：env 名已统一为 `$HCLOUD_AK`/`$HCLOUD_SK`（值与组织级 `PROD_HCLOUD_AK`/`PROD_HCLOUD_SK` 同源，经 SOPS 物化进 Secret），`$OBS_ENDPOINT` 同由 deployment 注入；砍的只是 `hcloud` 命令层，不是华为云凭证。过渡期 entrypoint 兼容旧名 `OBS_AK`/`OBS_SK`。
 - 例：`obsutil ls obs://<bucket>/`、`obsutil cp <本地文件> obs://<bucket>/<key>`、`obsutil sign obs://<bucket>/<key>`（临时预签名）。
 - 预签名有效期按需给，别生成长期公开链接。
@@ -116,7 +115,7 @@
 
 - `/workspace` = prod-work（hostPath `/var/lib/opencode-team/work`），git 仓库，改动前会自动 checkpoint。
 - `/root/.local/share/opencode` = prod-data（hostPath `/var/lib/opencode-team/data`）；opencode-mem 数据库在此，重建容器不失忆。
-- `/tmp` = emptyDir，唯一临时可写区（HOME/缓存/obsutil 配置）；容器重建即清空。
+- `/root` = emptyDir（initContainer 从镜像 seed `/root/.`），家目录可写；`/tmp` = emptyDir 临时区；二者容器重建即清空。
 - 其余根文件系统只读（见「文件系统边界」）。
 - 本线不挂 `/old-workspace`。
 - 模型经本地 LiteLLM 网关（`$LITELLM_BASE_URL`）。
