@@ -50,6 +50,13 @@ spec:
             - {name: http, containerPort: 4097}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
+            # 只读根文件系统：HOME/缓存必须作为容器级 env（entrypoint export 不覆盖 kubectl exec 会话）。
+            - {name: HOME, value: /tmp/home}
+            - {name: XDG_CONFIG_HOME, value: /root/.config}
+            - {name: XDG_DATA_HOME, value: /root/.local/share}
+            - {name: XDG_STATE_HOME, value: /tmp/state}
+            - {name: XDG_CACHE_HOME, value: /tmp/cache}
+            - {name: TMPDIR, value: /tmp}
             - {name: LITELLM_BASE_URL, value: "http://litellm-gateway.litellm.svc.cluster.local:4000"}
             - {name: SSH_TARGETS, value: "mesh-hw-21 mesh-hw-41"}
             - {name: SMTP_HOST, value: smtp.163.com}
