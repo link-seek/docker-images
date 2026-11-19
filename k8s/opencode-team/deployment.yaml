@@ -35,6 +35,18 @@ spec:
         kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
+      initContainers:
+        # /root 挂 emptyDir 后需把镜像内烘好的 /root/.config（opencode 配置）、.agents 等 seed 进去。
+        # 与主容器同镜像；预检的 kustomize images 注入会同时覆盖 init 容器 digest。
+        - name: root-home-seed
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:10a2a229759f4928a9083effda70fb4a387ea5229922fa8b687271dc3197ad72
+          command: ["/bin/sh", "-c", "cp -a /root/. /seed/"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - {name: root-home, mountPath: /seed}
       containers:
         - name: opencode
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:10a2a229759f4928a9083effda70fb4a387ea5229922fa8b687271dc3197ad72
@@ -50,12 +62,7 @@ spec:
             - {name: http, containerPort: 4097}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
-            # 只读根文件系统：HOME/缓存必须作为容器级 env（entrypoint export 不覆盖 kubectl exec 会话）。
-            - {name: HOME, value: /tmp/home}
-            - {name: XDG_CONFIG_HOME, value: /root/.config}
-            - {name: XDG_DATA_HOME, value: /root/.local/share}
-            - {name: XDG_STATE_HOME, value: /tmp/state}
-            - {name: XDG_CACHE_HOME, value: /tmp/cache}
+            # 只读根：/root 由可写 emptyDir 承接（initContainer seed 镜像内 .config），系统目录仍只读。
             - {name: TMPDIR, value: /tmp}
             - {name: LITELLM_BASE_URL, value: "http://litellm-gateway.litellm.svc.cluster.local:4000"}
             - {name: SSH_TARGETS, value: "mesh-hw-21 mesh-hw-41"}
@@ -98,6 +105,7 @@ spec:
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
             - {name: prod-data, mountPath: /root/.local/share/opencode}
+            - {name: root-home, mountPath: /root}
             - {name: entrypoint, mountPath: /entrypoint}
             - {name: tmp, mountPath: /tmp}
           readinessProbe:
@@ -123,7 +131,9 @@ spec:
           hostPath: {path: /var/lib/opencode-team/data, type: DirectoryOrCreate}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
-        # 只读根文件系统下的唯一可写临时区：HOME/缓存/obsutil 配置/临时文件都落这里。
+        # 只读根文件系统下的可写家目录（seed 自镜像 /root/.）+ 临时区。
+        - name: root-home
+          emptyDir: {}
         - name: tmp
           emptyDir: {}
 ---
