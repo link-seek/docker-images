@@ -1,0 +1,38 @@
+# 主 Secret（SOPS 密文）：仅 Flux 解密，明文只活过加密当次的 runner 内存。
+# CF 子 token 现签 90 天：cf-minted-at 见注解，到期重跑本 workflow 轮换。
+# 生成源：opencode-sops-reencrypt run 44502321253。
+apiVersion: v1
+kind: Secret
+metadata:
+    name: opencode-team-env
+    namespace: opencode-team
+    annotations:
+        sops-cutover: "2026-11-19"
+        cf-minted-at: "2026-11-19"
+type: Opaque
+stringData:
+    LITELLM_API_KEY: ENC[AES256_GCM,data:IAN95vJj7Le0k2g5BR3NdqlqluRBOGHbHBzqSMCvP65f0WjEEsdb/8cLsCVCFjPj092y,iv:zYbTlYrS2gBUWr61YjqWMoRllaFRnJRP7OnKVu6dH3A=,tag:ss69FqRYnLIHQ9OcDT8xIw==,type:str]
+    GH_TOKEN: ENC[AES256_GCM,data:BIf3QTKfVY9v+KMgYaj/Tq45UcxTIkoOUnZJm+HG1xmDiI7L3u++Sw==,iv:dOHQg5mF40IGRUaCI+s8t6r+OgE7pQGkWBdLCVZA1PI=,tag:AqhX4P0lskViExWFh2w/Kw==,type:str]
+    OPENCODE_SERVER_PASSWORD: ENC[AES256_GCM,data:HheobNiuJ6o=,iv:0fyRhrywT4MBwqinCGFTke9uLDJ1wZqBg1TjWKM1/Yk=,tag:EjpuGN59xS5P8HDmL6g4MQ==,type:str]
+    CLOUDFLARE_API_TOKEN: ENC[AES256_GCM,data:GXwMUUCXqCfgqekNdfv654Xm3PBIeTL+Bn81toWe4BALu6r/MhITCPwaIxq8wkGxCaBDCBY=,iv:YmGybUy6iFm9zQiWCtqbZoFzMfP9BbX2Mj6SfJax2ME=,tag:7jKjk6QKe4fufofF4JbZrg==,type:str]
+    CF_AI_TOKEN: ENC[AES256_GCM,data:NPV1xE065FU2BzfEIutkquOfZ+rb/Xm82ywABuu9y9dq0p65r172Dxyt9aOXoyJ2bpJc6fE=,iv:QFNnoianyJQPVrOz4FaNcVjDvto7uPM2Yz8Q8WA7N8A=,tag:m1hCM+06oeeip2WZ1wpsEw==,type:str]
+    BROWSERLESS_TOKEN: ENC[AES256_GCM,data:hdpat6Py1UR1/ldeZcDNTn346a9F2lRe0d4/pDrEt367jaDOh8AJVeKfaGW57vdx,iv:2ssXEnzK3RxfYAvwIW3Z+xehajZ6rIg/aNMVghBJrbU=,tag:Fh8VM8Qtv4XtrRN142Z7mw==,type:str]
+    MAAS_KEY: ENC[AES256_GCM,data:Yfn5aF6YltK+qIEH6D27XtBjxL9DfICNpnnOhffsCA/PxsUAvpX4kd5objNUu77ikp7naGDgHLkFdbMHLvnI9ZBYLmfSPPkKtkt8PPVd4490UKsTN90=,iv:pycpB1YGKBhaNbmS7fUkTF2iR4RyzILD1KTZl+Gy9y0=,tag:kwR2aXsXEXO9QdcaC3raag==,type:str]
+    OBS_AK: ENC[AES256_GCM,data:wY9Y3RhWFjXZeMvbmHT0KiTeI84=,iv:ziNIkycE3qPd5VrC+Jat+KoUI3CLqCfw55xkwOJYGDc=,tag:9bB8h43dlHDInKXuemuQ8g==,type:str]
+    OBS_SK: ENC[AES256_GCM,data:yDnJHCXfg02RKN0wsYoMNs5SS0/fKhLVw3ncBKg/facHlsXf22pNQw==,iv:gE2/Z2qOlq1LdHOkmR6Ilo8ji/rI6fjSGSLwwmuQuhc=,tag:4Uc+XjsKSlE9d3KsknRlrw==,type:str]
+    SMTP_PASS: ENC[AES256_GCM,data:4ezIRyXkGNaFrqIRrRC1cg==,iv:2yM/nfvYOhsgyhlQ374A3fkSFtKEzKArJ+ut16twPAA=,tag:uB8AxM9cFWUnFi9Z2/Bl9g==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAweG9pRk9BNXBwcTRnOTNW
+            Vk5aaDZCZ0FGR3NkdTVEdWFQaE5iTUNnT3l3CmxBZmNOVDRZaU8xQzFlc293QW1Z
+            czltSW13RnBTazhpTDM4bGZHUmQ1amcKLS0tIHlaWFVlL2tSSDk3Z3c0bWIzREZl
+            VTJOcUcwVXZHVkc1ek5TVHRkRjNlODgKZrA4Z1mhFmHCaINd9qcG/Hh14rxfZyDt
+            Ru2/JfKbOEfx3BYtWP/grbAT/B143JyTGneApMMdWLAJDZzIBAHWZA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1xa3yp8xdquu3v0wlg3n2gmlmah7z60uz8m9e0py7xx30ct4vlu8sjhd87z
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-19T10:05:14Z"
+    mac: ENC[AES256_GCM,data:rVFrJ4qaq+1UQ9isi1MKZv6OuNfN674YoXeVS5lIiGRWu0j1gGAx5Kwtl9mtaaoxQxad8wg6ARRhSxevrDh+Q7wK7Xv0c1oovKRHhV2hRdkuEuk+Jk070o0PQFKrV+Tv+SO0mtItiqt+vKamV9SRKizkjYfxSXAlTQzq2r3HsgA=,iv:VIZcao2FO9qrI632bKbR3wGgudvmGS0SSMgAC8ZzV1A=,tag:PSRcITW0uDXomOiXoD757w==,type:str]
+    version: 3.13.3
