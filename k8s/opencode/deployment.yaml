@@ -105,23 +105,6 @@ spec:
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: opencode
-  namespace: opencode
-  labels:
-    # operator 代理（pod 不再入 TS 网；单点 ha-b，erpnext 同款；hostname 保持，Caddy 不动）。
-    tailscale.com/proxy-class: ha-b
-  annotations:
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: opencode-k3s
-    tailscale.com/tags: tag:k8s
-spec:
-  selector: {app: opencode}
-  ports:
-    - {name: http, port: 4097, targetPort: 4097}
----
 # opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP 直达；容器已无 TS 身份，tailnet 走 operator 代理）。
 # 外端口 44099：ServiceLB 按 Service 端口占节点 hostPort，hw21/hw41 本机单机版已占 4097，避冲突。
 # 端口登记：team-vpc=44097，xieyucheng-vpc=44098，opencode-vpc=44099；回滚=revert。
