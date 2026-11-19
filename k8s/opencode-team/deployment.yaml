@@ -114,7 +114,7 @@ metadata:
   labels:
     app: browserless
   annotations:
-    reloader.stakater.com/auto: "true" # 同上（BROWSERLESS_TOKEN 同 Secret）
+    reloader.stakater.com/auto: "true" # 独立 Secret browserless-env
 spec:
   replicas: 1
   strategy:
@@ -137,7 +137,7 @@ spec:
           env:
             - {name: HOST, value: "0.0.0.0"}
             - name: TOKEN
-              valueFrom: {secretKeyRef: {name: opencode-team-env, key: BROWSERLESS_TOKEN}}
+              valueFrom: {secretKeyRef: {name: browserless-env, key: BROWSERLESS_TOKEN}}
             - {name: CONCURRENT, value: "10"}
             - {name: QUEUED, value: "10"}
             # 单会话上限；30s(官方示例默认)会截断真实自动化(登录+多步CRUD+等待返回常>30s)。
