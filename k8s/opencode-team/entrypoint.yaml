@@ -9,15 +9,11 @@ data:
   entrypoint.sh: |
     #!/bin/sh
     set -eu
-    # 只读根文件系统（deployment.securityContext.readOnlyRootFilesystem=true）：
-    # 可写只有 /workspace、数据卷 /root/.local/share/opencode、以及 emptyDir /tmp。
-    # 把 HOME 指到 /tmp，并用 XDG_* 把 opencode 的配置/数据钉回镜像与数据卷位置。
-    export HOME=/tmp/home
-    export XDG_CONFIG_HOME=/root/.config
-    export XDG_DATA_HOME=/root/.local/share
-    export XDG_STATE_HOME=/tmp/state
-    export XDG_CACHE_HOME=/tmp/cache
-    mkdir -p "$HOME" /tmp/cache /tmp/state
+    # 只读根文件系统（securityContext.readOnlyRootFilesystem=true）：
+    # /root 由可写 emptyDir 承接（initContainer 已把镜像内 /root/. 拷入），系统目录只读；
+    # /workspace、/root/.local/share/opencode（数据卷）、/tmp 可写。
+    export TMPDIR=/tmp
+    : "${HOME:=/root}"; export HOME
     if [ "${PIPELINE_MANAGED:-}" != "true" ]; then
       echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2
       exit 1
@@ -35,7 +31,7 @@ data:
     _OBS_AK="${HCLOUD_AK:-${OBS_AK:-}}"; _OBS_SK="${HCLOUD_SK:-${OBS_SK:-}}"
     if [ -n "$_OBS_AK" ] && [ -n "$_OBS_SK" ]; then
       export OBS_ACCESS_KEY_ID="$_OBS_AK" OBS_SECRET_ACCESS_KEY="$_OBS_SK"
-      printf 'endpoint=%s\nautoChooseSecurityProvider=true\nutilLogLevel=ERROR\n' "${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}" > "$HOME/.obsutilconfig"
-      chmod 600 "$HOME/.obsutilconfig"
+      printf 'endpoint=%s\nautoChooseSecurityProvider=true\nutilLogLevel=ERROR\n' "${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}" > "${HOME:-/root}/.obsutilconfig"
+      chmod 600 "${HOME:-/root}/.obsutilconfig"
     fi
     exec opencode "$@"
