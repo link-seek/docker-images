@@ -52,8 +52,8 @@ spec:
             - {name: SMTP_FROM, value: 122306789@163.com}
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
             - {name: BROWSER_CDP_URL, value: "http://127.0.0.1:9222"}
-            - name: LITELLM_API_KEY
-              valueFrom: {secretKeyRef: {name: opencode-yingxin-env, key: LITELLM_API_KEY}}
+            # 网关 always_allow＋上游透传，不校验此值（2026-11-19 实测假 key 全通）。静态假值，不占 secret 名额。
+            - {name: LITELLM_API_KEY, value: sk-dummy-unused-passthrough}
             - name: GH_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-yingxin-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
