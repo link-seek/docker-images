@@ -25,7 +25,7 @@
 
 - `gh`（已登录；**经 wrapper 限制：仅 `gh issue create`**，其余命令被拒——见「GitHub（gh 受限）」）
 - url2hc 三条流水线：`download-to-obs.yml` / `img-to-swr.yml` / `build-to-swr.yml`
-- `obsutil`（华为云 OBS；`$OBS_ENDPOINT` / `$OBS_AK` / `$OBS_SK` 全走 env）
+- `obsutil`（华为云 OBS；`$OBS_ENDPOINT` / `$HCLOUD_AK` / `$HCLOUD_SK` 全走 env）
 - `agent-browser` + 远程 browserless（CDP）
 - `send-mail` / `fetch-mail`（163 SMTP/IMAP）
 - open-design（MCP `open-design-mcp` + skill）
@@ -34,7 +34,7 @@
 ## 本线没有（不要照抄 tools 线的命令）
 
 `hcloud`、`aliyun`、`oci`、`tailscale`、`wrangler`、`lmnr`、本地 Chrome 本线均已砍掉（这些是与 tools 线的差异）。
-注意：无 `hcloud` 只表示没有 KooCLI 命令；**华为云 OBS 的 AK/SK（`$OBS_AK`/`$OBS_SK`）与 `$OBS_ENDPOINT` 必须保留**，obsutil 依赖它们，别当无用凭证删掉。
+注意：无 `hcloud` 只表示没有 KooCLI 命令；**华为云 AK/SK（env 名 `$HCLOUD_AK`/`$HCLOUD_SK`）与 `$OBS_ENDPOINT` 必须保留**，obsutil 依赖它们，别当无用凭证删掉。
 需要云资源时：查询/上传走 `obsutil`；Cloudflare 用 REST + `$CLOUDFLARE_API_TOKEN`；真需要整套云 CLI 就改走 tools 线，别在容器里手工装。
 
 # 密钥验证白名单（只读可直接跑；名单外先问）
@@ -65,8 +65,8 @@
 
 # OBS（本线专属）
 
-- 上传/下载一律用 `obsutil`，endpoint/AK/SK 走 `$OBS_ENDPOINT`/`$OBS_AK`/`$OBS_SK`，不落明文。
-- **华为云 AK/SK 必须保留**：`$OBS_AK`/`$OBS_SK`/`$OBS_ENDPOINT` 由 deployment 注入，是 obsutil 的凭据；砍的只是 `hcloud` 命令层，不是华为云凭证。缺凭证按报错补 Secret，不向用户索取。
+- 上传/下载一律用 `obsutil`，endpoint/AK/SK 走 `$OBS_ENDPOINT`/`$HCLOUD_AK`/`$HCLOUD_SK`，不落明文。
+- **华为云 AK/SK 必须保留**：env 名已统一为 `$HCLOUD_AK`/`$HCLOUD_SK`（值与组织级 `PROD_HCLOUD_AK`/`PROD_HCLOUD_SK` 同源，经 SOPS 物化进 Secret），`$OBS_ENDPOINT` 同由 deployment 注入；砍的只是 `hcloud` 命令层，不是华为云凭证。过渡期 entrypoint 兼容旧名 `OBS_AK`/`OBS_SK`。
 - 例：`obsutil ls obs://<bucket>/`、`obsutil cp <本地文件> obs://<bucket>/<key>`、`obsutil sign obs://<bucket>/<key>`（临时预签名）。
 - 预签名有效期按需给，别生成长期公开链接。
 
