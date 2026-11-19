@@ -59,10 +59,17 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: LITELLM_API_KEY}}
             - name: MAAS_KEY
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: MAAS_KEY}}
+            # 华为云 AK/SK：组织级 PROD_HCLOUD_AK/SK 物化进 Secret，env 名统一 HCLOUD_*（与 xieyucheng/yingxin 一致）。
+            # optional：SOPS 重加密 PR 落地前允许缺失（obsutil 暂不可用，但 pod 正常起）。
+            - name: HCLOUD_AK
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: HCLOUD_AK, optional: true}}
+            - name: HCLOUD_SK
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: HCLOUD_SK, optional: true}}
+            # 过渡兼容：旧 key 尚在 Secret 时兜底；重加密 PR 合入后可删这两条。
             - name: OBS_AK
-              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_AK}}
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_AK, optional: true}}
             - name: OBS_SK
-              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_SK}}
+              valueFrom: {secretKeyRef: {name: opencode-team-env, key: OBS_SK, optional: true}}
             - {name: OBS_ENDPOINT, value: "https://obs.cn-north-9.myhuaweicloud.com"}
             - name: GH_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: GH_TOKEN}}
