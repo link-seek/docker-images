@@ -36,6 +36,14 @@ identity() { # 货对单：跑的必须是刚打出来的 digest
 
 identity
 
+# k3d 预检簇无 SOPS 解密器：kustomization 里的 browserless-env.enc.yaml 会让 sidecar 拿到密文 TOKEN，
+# 与客户端 dummy-preflight 不一致（CDP 401）。先暂停 Flux 防它把密文 Secret 改回去，再覆盖并重启 sidecar。
+flux -n flux-system suspend kustomization "${K8S_DEPLOY}-preflight" >/dev/null 2>&1 || true
+kubectl -n "$K8S_NS" create secret generic browserless-env \
+  --from-literal=BROWSERLESS_TOKEN="$TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n "$K8S_NS" rollout restart deploy/browserless >/dev/null
+kubectl -n "$K8S_NS" rollout status deploy/browserless --timeout=180s
+
 # --- E2E 选单 + 逐个跑 ---
 CASES="$(E2E_CASES="${E2E_CASES:-}" bash "$CASES_DIR/select-cases.sh")"
 echo "E2E cases: ${CASES:-<none>}"
