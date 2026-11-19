@@ -9,6 +9,8 @@ metadata:
   namespace: opencode-xieyucheng
   labels:
     app: opencode
+  annotations:
+    reloader.stakater.com/auto: "true" # SOPS 切换：Secret 更新后自动重载
 spec:
   replicas: 1
   strategy:
