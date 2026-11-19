@@ -4,5 +4,6 @@ resources:
   - namespace.yaml
   - entrypoint.yaml
   - deployment.yaml
+  - opencode-yingxin-env.enc.yaml
   - sops-pilot.enc.yaml
   - sops-pilot-deploy.yaml

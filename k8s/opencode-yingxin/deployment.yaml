@@ -8,6 +8,8 @@ metadata:
   namespace: opencode-yingxin
   labels:
     app: opencode-yingxin
+  annotations:
+    reloader.stakater.com/auto: "true" # 主 Secret 转 SOPS：Flux 更新 Secret 后自动重载（与 pilot 同机制）
 spec:
   replicas: 1
   strategy:
