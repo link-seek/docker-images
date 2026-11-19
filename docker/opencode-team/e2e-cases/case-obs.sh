@@ -10,17 +10,19 @@ ENDPOINT="https://obs.cn-north-9.myhuaweicloud.com"
 BUCKET="robotwin-assets"
 TAG="${TEMP_TAG:-local}"
 KEY="e2e-team/${TAG}/probe.txt"
-# AK/SK 为 base64 系字符集，单引号包裹安全；runner 侧展开（细测 runner 为一次性节点）。
-PUT="obsutil -e=$ENDPOINT -i=$OBS_TEST_AK -k=$OBS_TEST_SK"
-cleanup() { $K8S_EXEC sh -c "$PUT rm obs://$BUCKET/$KEY 2>/dev/null || true" >/dev/null 2>&1 || true; }
+# 预检覆盖了容器 command（entrypoint 未跑），这里在 pod 内写 obsutil 配置：
+# HOME=/tmp/home 是只读根下唯一可写区；AK/SK 只落到一次性预检 Pod 的 600 配置文件。
+$K8S_EXEC sh -c "mkdir -p /tmp/home && printf 'endpoint=%s\nak=%s\nsk=%s\ntoken=\n' '$ENDPOINT' '$OBS_TEST_AK' '$OBS_TEST_SK' > /tmp/home/.obsutilconfig && chmod 600 /tmp/home/.obsutilconfig"
+OBS="HOME=/tmp/home obsutil"
+cleanup() { $K8S_EXEC sh -c "$OBS rm obs://$BUCKET/$KEY 2>/dev/null || true" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-$K8S_EXEC sh -c "echo e2e-probe-$TAG > /tmp/obs-probe.txt && $PUT cp /tmp/obs-probe.txt obs://$BUCKET/$KEY && rm -f /tmp/obs-probe.txt" \
+$K8S_EXEC sh -c "echo e2e-probe-$TAG > /tmp/obs-probe.txt && $OBS cp /tmp/obs-probe.txt obs://$BUCKET/$KEY && rm -f /tmp/obs-probe.txt" \
   || { echo "FAIL: OBS 上传失败"; exit 1; }
 echo "UPLOAD OK"
-$K8S_EXEC sh -c "$PUT ls obs://$BUCKET/e2e-team/$TAG/" | grep -q "probe.txt" \
+$K8S_EXEC sh -c "$OBS ls obs://$BUCKET/e2e-team/$TAG/" | grep -q "probe.txt" \
   || { echo "FAIL: OBS 上传后 ls 不见 probe.txt"; exit 1; }
 echo "VISIBLE OK"
-$K8S_EXEC sh -c "$PUT rm obs://$BUCKET/$KEY" \
+$K8S_EXEC sh -c "$OBS rm obs://$BUCKET/$KEY" \
   || { echo "FAIL: OBS 删除失败"; exit 1; }
 echo "DELETE OK"
 trap - EXIT
