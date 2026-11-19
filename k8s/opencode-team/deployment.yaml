@@ -13,6 +13,8 @@ metadata:
   namespace: opencode-team
   labels:
     app: opencode-team
+  annotations:
+    reloader.stakater.com/auto: "true" # SOPS 切换：Secret 更新后自动重载
 spec:
   replicas: 1
   strategy:
@@ -111,6 +113,8 @@ metadata:
   namespace: opencode-team
   labels:
     app: browserless
+  annotations:
+    reloader.stakater.com/auto: "true" # 同上（BROWSERLESS_TOKEN 同 Secret）
 spec:
   replicas: 1
   strategy:
