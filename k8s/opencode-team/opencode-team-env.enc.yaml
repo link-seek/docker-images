@@ -1,6 +1,5 @@
-# 主 Secret（SOPS 密文）：仅 Flux 解密，明文只活过加密当次的 runner 内存。
-# CF 子 token 现签 90 天：cf-minted-at 见注解，到期重跑本 workflow 轮换。
-# 生成源：opencode-sops-reencrypt run 44509594002。
+# SOPS 密文（配方见 dimgs k8s/opencode-team/sops-secrets.yaml）：仅 Flux 解密，明文只活加密当次 runner 内存。
+# 生成源：sops-reencrypt run 44518767420。
 apiVersion: v1
 kind: Secret
 metadata:
@@ -11,28 +10,28 @@ metadata:
         cf-minted-at: "2026-11-19"
 type: Opaque
 stringData:
-    LITELLM_API_KEY: ENC[AES256_GCM,data:UVMkOapoxB03ffr2HfKjiwS7KWw1bDnGr8jeIvhfKK3Smzrnbe8uPQR07600fpL1NF9N,iv:ZcAXcWzpUqJYsUV+PCd1+kg/mqLn3X3H4ygvK6Q/S3k=,tag:zjoeTcLUMavCEkBvHWyD6g==,type:str]
-    GH_TOKEN: ENC[AES256_GCM,data:I9MjyMpNqe/GUmPwy/vm9BDUlYOYvWE5qzgC6u2BM0XSnLnopqwBTw==,iv:fEI5xcPCO3u5sGF2EB5RF69oY3F7SJ2dhxD0iYc6yVU=,tag:hkGUnW7yYLEYKlN/epJQwQ==,type:str]
-    OPENCODE_SERVER_PASSWORD: ENC[AES256_GCM,data:D1R4h7f2lB0=,iv:fWGg3OVpsmERHQoSywyysHtqQc7byaRq1nJpgi4QugE=,tag:mI4quuLlqD5PTHIq+aUgyw==,type:str]
-    CLOUDFLARE_API_TOKEN: ENC[AES256_GCM,data:dQeBmipFSDhUsXlKJaXPfCNjnTj0JH+u5IBJzg/y2iuZ6vKUtqSZ7VQw8TBsojDtS6GaH+M=,iv:ZcfVEm7dFQCw+YqgbHIGeDYIdRbhLvnQqf995CroRSY=,tag:fWXmV5WerzMWJqOG47GyFA==,type:str]
-    CF_AI_TOKEN: ENC[AES256_GCM,data:KfxR9NVh4o7WYLXIE8pdlUm8Upd+Y4fX3fVf+Ww+Ft7ysCxcrALQAq7cUf84KYFqN38bBKE=,iv:aR9cOiAbH05OY9d5zImX9b3bn31J/TEVcGr5A3Sc5+M=,tag:J9w52AJ0XAUwzWeO1OEcZg==,type:str]
-    BROWSERLESS_TOKEN: ENC[AES256_GCM,data:l64mxCGHsxid0sDkXlvpQnks6/3hm8qBlr8IedRlrFo1hi061YIeG0QheMzThTX4,iv:EyaBESdsFFmnqMj2vx+qPDE8ghmr+EZBK5DjmA+22po=,tag:yzB2qLVfYnyLN8zoxOo3OA==,type:str]
-    MAAS_KEY: ENC[AES256_GCM,data:lpBzWUqaiJ+t/bEsWjGhAJ5WecPUf/z9lmMUPl2I3PrxJDeyZjxQCM5wnLFWGXzjDfzqItmp0BX+mVfASJr7fgYj445KHjti9+Prq3H1IlU74uj2IUc=,iv:ggE/i23r9JnLvuTQ47G3hxhBi8zD5yfaVZvAW9ohm/o=,tag:UWldToegy6edY7q0oRtT2Q==,type:str]
-    OBS_AK: ENC[AES256_GCM,data:UzXjbYvJZZwpRSTPURrz0/2tntM=,iv:ePGAIaYISbvHpHoS1kD+6nFfGwxN1WOndUg9JkLNO08=,tag:L1hckaxHAKL9W1NgrmtWCw==,type:str]
-    OBS_SK: ENC[AES256_GCM,data:VpV7P+Yk32FWdgNs5Dr3sk2p7B8LWLEUBQHQKAAqZDWo6/y6v6Jdkw==,iv:DhtZpq3rUHac+/9MGZNLwFNNYkE1IW89/QUDEZny36U=,tag:2KJZ4T4BrIoU2AMCN9XsWw==,type:str]
-    SMTP_PASS: ENC[AES256_GCM,data:fbnYGnS9C3Mbj6uXVGROhA==,iv:sUGSpEqY1VlvKHVLIFbdEjD4OZVjfIgQQI7RmJBLJfU=,tag:Gs2ra3tBX+y+TALjxqpImQ==,type:str]
+    LITELLM_API_KEY: ENC[AES256_GCM,data:sefXEdm7UlQuYTl23uaUvuDN6DRHcwGxlJ6IA27PBjKCSph9jGWCZaxfERgjUhVnlk7O,iv:r/ucRiTVKToB4W7Ve7wiPbIv8PVujbi5VfLweTHCpbE=,tag:T556wswHuxYieIOdE7jXyQ==,type:str]
+    GH_TOKEN: ENC[AES256_GCM,data:PB0ioZtrxTCS/Vjr6ZvztDyp0iy01xJ4VnPGvxqSbWD1/o4FVtXrpQ==,iv:Y7ZDzwvcXww5jLBabw1ZwbYIgt3lZEYPvE6TwM2QuhA=,tag:GqNcxq12CYP26eVcl5qadQ==,type:str]
+    OPENCODE_SERVER_PASSWORD: ENC[AES256_GCM,data:1bB+NsM/Ko8=,iv:xNcMXAA6I9W6IxFUMgjS3d8+lxsFCNXmc72nU3IpZZM=,tag:vefoFOAhQmebcmDYWbJHPA==,type:str]
+    CLOUDFLARE_API_TOKEN: ENC[AES256_GCM,data:F8kgvnq5Oz/eevCg0MwDhraP/8KqlsnHh/L9ddRS38uRsUfiQeIoIJC+b1w0G7KJQeGX2Hg=,iv:u6LqCUdTfp3V0qv1V5pyt2VrPc5Wgb+m7mOjbRimstM=,tag:pFPe58eWQWJBD9GbiJ2hyA==,type:str]
+    CF_AI_TOKEN: ENC[AES256_GCM,data:ubmuTko8D9o89EMt7tNBa3BbSf0ytd/fH4F4HGgsYYjW6fzv46gHNg1+9L70X7YDIVPMGp4=,iv:EyGx3H5XcOLHiQge791v40TvqnyCoeTQzxX2ZfflKLg=,tag:ZJ1TEwZ0CRqudAxvdERu3g==,type:str]
+    BROWSERLESS_TOKEN: ENC[AES256_GCM,data:AK56AYQZNk0mEl7b2yWUNdhGwkEmf3g4sqQy53FVh0X7tXw09oWx0NG4KlMlY5Ab,iv:1xVYKGJJV0hPiP6MD1yyvRozKr5IozrOTVNwPNYA8Uk=,tag:xK9YFQOGzy3wJ0IOCTS90A==,type:str]
+    MAAS_KEY: ENC[AES256_GCM,data:otWY/6fzLi+8juxn6WBQiLuXxpbV3x0gGQeiy9PE3pB7l7Krt/i0DUe/No6BfVWuu8v/rZchKU3tpuiVW6IhLvrTw20PKZMja+xLfLGdzGGxxqa8SGw=,iv:BC4Njx02RqfxTOaQ8ChMbeGa8dG3ecA5euO1sFHSYFg=,tag:Ysxg7sUVb3MQ1z0D68PhEQ==,type:str]
+    OBS_AK: ENC[AES256_GCM,data:8oPcHGPe0A2TPgei2EabdMz49Og=,iv:kYie7xPRG1k+PYsX+kxtXb31aEyvftpwfuQD0IDtC0Q=,tag:bgGZWh4iz5Bt0B4XmUkI3w==,type:str]
+    OBS_SK: ENC[AES256_GCM,data:+eCBYRHpC6y4H3lR22Jde8I8jHiBmp7uLnjv0ducHX5x5SRFZtt9ag==,iv:/jNfTeaOExg2J08rSqrbMHB8k3vE+8I/e7EMOgSTkkk=,tag:18kndaigxdg1hMvsoC6nOw==,type:str]
+    SMTP_PASS: ENC[AES256_GCM,data:txJ/383E0sY0kofViTdmSg==,iv:BhEbuksYjDMj5gWegBN1YEwIOmzySCynXh37U1POHyo=,tag:rWTTcXP8xW4UjuTP5j7W/A==,type:str]
 sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB0SER3MExHNHNjcnZ3dkVn
-            dzRtRkNHS2pxWVEzWDFTcHdwdFIwZGQyZEdVClhheThZcTVaQjZVTC9aL0pDWlJZ
-            ZS92eFllN09KVkdqR0N1SjhrOWJYc2MKLS0tIG1takpIMGcwL3d5Mk1yOXFtdjl1
-            NG1wSXcxWjVuRk1RSm5Td2MrOE5EblkKbePkLtCYZ8zpr7RTbREAwufWulBG2YUu
-            UVZG61vW2aNH8PT0svBLj5BmV+BNfyHBVREoxOc32/D1bN+/eLHG+g==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBrcThLbjRramxwS2lFR09s
+            c1BBdjg0Qzh2T01MK29rSU9UL2V0a1RMQlNjClJycVpJd3B3VVowOTAvWm5mZkhC
+            RTJQc3kxK2pyclY5UmdrSWpwbU9SYk0KLS0tIHdFNkRVYlNxTzFIWTVScUlmMFNG
+            bkhVNS9HbTVxbHNZZVlZMjNMQkNZcWcKwFUapoyj6CSGkVXndoymaZTcP+DHXEe8
+            Fy9z80fGby0z4yYgS/7DhVaMuUhYQoUQh/arod6sl4QZFZnhVlnfoQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1xa3yp8xdquu3v0wlg3n2gmlmah7z60uz8m9e0py7xx30ct4vlu8sjhd87z
     encrypted_regex: ^(data|stringData)$
-    lastmodified: "2026-11-19T10:52:10Z"
-    mac: ENC[AES256_GCM,data:EwAmAZqYD+k0jIkXWTZUu7tbXc0H/Xapi+KdWV5VK3kZ3B4i8VH09ZULAKJcSTo9DjdgbMboExs9l8F9GCXy6le+rh2ngZVOCl2rsDWoA001M4/d6NryTi/E1tRuMSuisB0xqqn+lzZH6t+P2a2l/TEyfBxQ6Z5CCb+rtgMs6Kk=,iv:qPCVJwLOmGo9vLenhdV2RucYIuEhtQP7VFCqa+VELh4=,tag:vDaxwqEUY9gA1wGn9RfiUg==,type:str]
+    lastmodified: "2026-11-19T11:53:13Z"
+    mac: ENC[AES256_GCM,data:XVmoqRk6wG28qeYBSRTfPgL6RoWZov5DGyR/GDc535IyFqu4zX0Y3Gg4OiFWFouc2LIOXjt0vz5X0kNOzOAIi73iXwZHF5YSnkHgJ/Jvcj9XGaRASPad86V95/dhVe3T9cFeFHUnjpISXNJ3Jy72ZiwBKAUTWBCCO/Xkb9E4KWI=,iv:ftFqOdw32bLFikl6AASfwUwPvhYvzHyXBUqUwSekrF4=,tag:F7HrM198IzvOwxjqgUO4/Q==,type:str]
     version: 3.13.3

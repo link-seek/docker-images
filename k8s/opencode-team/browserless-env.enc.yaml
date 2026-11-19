@@ -1,33 +1,28 @@
+# SOPS 密文（配方见 dimgs k8s/opencode-team/sops-secrets.yaml）：仅 Flux 解密，明文只活加密当次 runner 内存。
+# 生成源：sops-reencrypt run 44518767420。
 apiVersion: v1
 kind: Secret
 metadata:
-  name: browserless-env
-  namespace: opencode-team
-  annotations:
-    sops-cutover: '2026-11-19'
-    cf-minted-at: '2026-11-19'
+    name: browserless-env
+    namespace: opencode-team
+    annotations:
+        sops-cutover: "2026-11-19"
+        cf-minted-at: "2026-11-19"
 type: Opaque
 stringData:
-  BROWSERLESS_TOKEN: ENC[AES256_GCM,data:l64mxCGHsxid0sDkXlvpQnks6/3hm8qBlr8IedRlrFo1hi061YIeG0QheMzThTX4,iv:EyaBESdsFFmnqMj2vx+qPDE8ghmr+EZBK5DjmA+22po=,tag:yzB2qLVfYnyLN8zoxOo3OA==,type:str]
+    BROWSERLESS_TOKEN: ENC[AES256_GCM,data:DmKkJRXdcFxAQi4UYA/MRP+toan9wI8vdXp8DgXqyGMVkGc8MQklm+m75VpTurZl,iv:YBdDkeje8VpqPnpTFDgiwhzmQ0ys58yvn4ySK9DF/+g=,tag:fzKbfDAZE6cuGMQfweuZWA==,type:str]
 sops:
-  age:
-  - enc: '-----BEGIN AGE ENCRYPTED FILE-----
-
-      YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB0SER3MExHNHNjcnZ3dkVn
-
-      dzRtRkNHS2pxWVEzWDFTcHdwdFIwZGQyZEdVClhheThZcTVaQjZVTC9aL0pDWlJZ
-
-      ZS92eFllN09KVkdqR0N1SjhrOWJYc2MKLS0tIG1takpIMGcwL3d5Mk1yOXFtdjl1
-
-      NG1wSXcxWjVuRk1RSm5Td2MrOE5EblkKbePkLtCYZ8zpr7RTbREAwufWulBG2YUu
-
-      UVZG61vW2aNH8PT0svBLj5BmV+BNfyHBVREoxOc32/D1bN+/eLHG+g==
-
-      -----END AGE ENCRYPTED FILE-----
-
-      '
-    recipient: age1xa3yp8xdquu3v0wlg3n2gmlmah7z60uz8m9e0py7xx30ct4vlu8sjhd87z
-  encrypted_regex: ^(data|stringData)$
-  lastmodified: '2026-11-19T10:52:10Z'
-  mac: ENC[AES256_GCM,data:EwAmAZqYD+k0jIkXWTZUu7tbXc0H/Xapi+KdWV5VK3kZ3B4i8VH09ZULAKJcSTo9DjdgbMboExs9l8F9GCXy6le+rh2ngZVOCl2rsDWoA001M4/d6NryTi/E1tRuMSuisB0xqqn+lzZH6t+P2a2l/TEyfBxQ6Z5CCb+rtgMs6Kk=,iv:qPCVJwLOmGo9vLenhdV2RucYIuEhtQP7VFCqa+VELh4=,tag:vDaxwqEUY9gA1wGn9RfiUg==,type:str]
-  version: 3.13.3
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBqZ3BXN0lNb2lvQS9uRFZT
+            ZUNCemw5enlIWlJweTZmeG1BdlRhWWpocUhzCmthMUZoK1R6amx0NGNsQlZiMlk1
+            Tm4zbzVwM2VlVlpWdWVuRm04MkhEWXcKLS0tIHFOTVZQRzllUStTMDFuZVpNaGMx
+            MGVwTGlPTUN5NVFMb29zTU5ncFE5bU0KNXz0+xOPLY/r3FyUB/Wsd+IJULaMxb+a
+            0OOs/TTOptgArpGoc01Zm92eo0irkYZWxc8SZcU3NKAfOkGKeTHKBg==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1xa3yp8xdquu3v0wlg3n2gmlmah7z60uz8m9e0py7xx30ct4vlu8sjhd87z
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-19T11:53:13Z"
+    mac: ENC[AES256_GCM,data:W0U9HvCjp1ilDE8f9RHFYzOlcuUGUado/K5nY2TprtsNbCvR0IMZeP93C6oO8RZ6zTDXy6+QyitfTWNeU19Q3MLJ7V17+bEnGSCeay4jRtUOZkTg1zkgADk/Xv+1ds2MYmKnCjaob7sBgMD6iSQeof+YMJExmxz8qi0JXw+gQoY=,iv:yAjcpxOvRgleMUZVBrIGDOc63CYIMsuVu2oFa4la2Mo=,tag:R/+mTbUNx8k2oiC2B/0o9w==,type:str]
+    version: 3.13.3
