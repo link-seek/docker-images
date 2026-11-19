@@ -1,11 +1,10 @@
-# docker-images 角色：merchant（bake 端）。业务逻辑 bake 进镜像，部署不管。
+# docker-images 角色（商家）：只讲本仓，不管他仓。
+version: 1
+mission: 对运行结果负责——业务逻辑 + 镜像 + 清单 + 发版闭环，digest 即行为版本号。
 accept:
-  - 镜像构建：Dockerfile、bake 脚本、guard/passthrough/auth/重试/默认配置
-  - 业务逻辑 bake：玩法、策略、模型对接进镜像
-  - 构建流水线报错、基础镜像升级、digest pin
-  - 应用发版：镜像 bake、打 tag、发版本
+  - 烘焙线（打包专用）：docker 下各镜像目录的 Dockerfile、bake 流水线、hook 与配置；版本走 dispatch 必填传入
+  - 应用配置线（应用配置专用）：k8s 下各应用的 manifest、env、pin、digest；与镜像同一 PR，合 main 即对账上线
 reject:
-  - 部署运维的一切（K3S、TS 网络、节点、tunnel、deliver 执行、摆场）：去 link-seek/infra
-  - 具体环境的值（IP、域名、token）：必须走 ${VAR} 引用，不许 bake 死
-  - OpenCode 本体 bug：去上游 anomalyco/opencode
-notes: 跨界的一律拒收并指路；语义模糊放行由 Jev 判；镜像敏感，进仓前人审 Dockerfile diff。
+  - 本仓之外的机器与底座：节点、系统、存储、网段、隧道、DNS
+  - 上游本体缺陷：官方镜像与 CLI 自身 bug
+notes: 门禁只验货不碰值；改门禁本身只收人工，intake 一律转 needs-human；边界不清或含真值转人工；FILECHECK 只加权；不用反引号。

@@ -52,6 +52,8 @@ spec:
             - {name: SMTP_FROM, value: 122306789@163.com}
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
             - {name: BROWSER_CDP_URL, value: "http://127.0.0.1:9222"}
+            # LITELLM_API_KEY 是 opencode 认的变量名，值须为上游认可的 key（=OPENCODE_API_KEY 的值；网关透传，completions 路上游验签）。
+    # 命名易误解为网关的 key，实为 opencode 发出去鉴权用的；真值走 SOPS，改名随各 app 迁移 SOPS 时一并做。
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-yingxin-env, key: LITELLM_API_KEY}}
             - name: GH_TOKEN
