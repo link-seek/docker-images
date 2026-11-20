@@ -1,0 +1,14 @@
+# litellm /go/v1/models → 上游透传改写＋去鉴权头（对标 Caddy handle @goList）。
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: litellm-go
+  namespace: litellm
+spec:
+  replacePathRegex:
+    regex: ^/go/v1/models(.*)$
+    replacement: /inference/go/v1/models$1
+  headers:
+    customRequestHeaders:
+      Authorization: ""
+      X-Api-Key: ""
