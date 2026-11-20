@@ -9,3 +9,4 @@ resources:
 - opencode-team-env.enc.yaml
 - browserless-env.enc.yaml
 - ingress.yaml
+- ingress-staging-tls.yaml
