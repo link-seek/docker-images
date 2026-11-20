@@ -1,0 +1,20 @@
+# 全新域名逼出完整签发链（缓存里没有，只能现签现写）。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: acme-probe-staging
+  namespace: opencode-team
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`acme-probe.xieyucheng.top`)
+      kind: Rule
+      services:
+        - name: opencode
+          port: 4097
+  tls:
+    certResolver: le-staging
+    domains:
+      - main: acme-probe.xieyucheng.top
+    secretName: acme-probe-staging-tls

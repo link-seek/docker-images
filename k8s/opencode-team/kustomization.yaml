@@ -10,3 +10,4 @@ resources:
 - browserless-env.enc.yaml
 - ingress.yaml
 - ingressroute-staging-tls.yaml
+- ingressroute-probe-staging.yaml
