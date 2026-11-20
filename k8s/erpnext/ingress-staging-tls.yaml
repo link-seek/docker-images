@@ -1,0 +1,26 @@
+# staging 证书验证 #2（erp 域，全新签发，验证 Traefik 写 secret 通路；原 ingress.yaml 不动）。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erpnext-staging-tls
+  namespace: erpnext
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le-staging
+spec:
+  tls:
+    - hosts:
+        - erp.xieyucheng.top
+      secretName: erpnext-staging-tls
+  rules:
+    - host: erp.xieyucheng.top
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: erpnext
+                port:
+                  number: 8080

@@ -10,3 +10,4 @@ resources:
 - service.yaml
 - jobs.yaml
 - ingress.yaml
+- ingress-staging-tls.yaml
