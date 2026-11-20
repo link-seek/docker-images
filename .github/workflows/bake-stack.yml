@@ -701,7 +701,10 @@ jobs:
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
-          if [ -n "${SIDECAR_IMG:-}" ]; then
+          if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
+            echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
+            SIDECAR_IMG=""
+          elif [ -n "${SIDECAR_IMG:-}" ]; then
             # runner 在境外：SWR（境内）直拉 1GB+ sidecar 跨洋慢；GHCR 有同 digest（bake 双推，字节相同），
             # 走 GHCR 拉（docker tag 不接受 digest 目标，不用 tag）；manifest 侧用下面的 images 映射到 GHCR 同 digest，
             # 生产 manifest 一字不动。仅 link-seek 命名有 GHCR 镜像；其它回落 SWR 直拉（原行为）。
@@ -713,8 +716,6 @@ jobs:
             ;; esac
             docker pull "$PULL_IMG"
             k3d image import "$PULL_IMG" -c preflight
-          elif [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
-            echo "SIDECAR SKIP: manifest 无 sidecar（k8s_skip_sidecar=true）"
           else
             echo "FAIL: manifest 里没找到 sidecar 镜像行"; exit 1
           fi
