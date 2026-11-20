@@ -1,0 +1,19 @@
+# team-agent 公网入口（Traefik 试点第一站）。
+# host→同 ns Service opencode:4097；TLS 仍由外层 Caddy 终结（影子/试点期），Traefik 只做 HTTP 路由。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: team-agent
+  namespace: opencode-team
+spec:
+  rules:
+    - host: team-agent.xieyucheng.top
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opencode
+                port:
+                  number: 4097
