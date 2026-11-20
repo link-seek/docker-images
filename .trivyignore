@@ -101,3 +101,7 @@ CVE-2026-128089 exp:2027-02-28 # 网关上游venv自带dnspython 2.9.0：Wolfi�
 
 # 2026-11-18 team bake 认领：Snyk 已撤销 SNYK-JS-PICOMATCH-21248802（does not affect any version），上游暂无修复版；传递依赖，无监听面。
 CVE-2026-112366 exp:2027-02-28
+
+# 2026-11-19 team 认领：gh-real / obsutil 的 Go stdlib CVE-2026-97054（HTTP/1 服务端 MaxBytesReader）。
+# 两者均为客户端 CLI、容器内无监听面；obsutil 无更新二进制，gh 已升 2.105.0 若仍命中则等上游 Go 修版。
+CVE-2026-97054 exp:2027-02-28
