@@ -1,0 +1,27 @@
+# staging 证书验证（加法文件，原 ingress.yaml 不动；HTTP 试点流量不受影响）。
+# 同 host 第二 Ingress：仅 websecure 入口＋DNS-01 staging 签发，落 secret team-agent-staging-tls。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: team-agent-staging-tls
+  namespace: opencode-team
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le-staging
+spec:
+  tls:
+    - hosts:
+        - team-agent.xieyucheng.top
+      secretName: team-agent-staging-tls
+  rules:
+    - host: team-agent.xieyucheng.top
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opencode
+                port:
+                  number: 4097
