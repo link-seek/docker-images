@@ -6,22 +6,25 @@ set -euo pipefail
 [ -n "${K8S_EXEC:-}" ] || { echo "FAIL: K8S_EXEC 为空（fine-test.sh 未导出）"; exit 1; }
 [ -n "${OBS_TEST_AK:-}" ] || { echo "FAIL: OBS_TEST_AK 为空（bake-team 需传 PROD_HCLOUD_AK）"; exit 1; }
 [ -n "${OBS_TEST_SK:-}" ] || { echo "FAIL: OBS_TEST_SK 为空"; exit 1; }
-ENDPOINT="https://obs.cn-north-9.myhuaweicloud.com"
+# robotwin-assets 桶在 cn-north-4（team 默认 OBS_ENDPOINT 是 cn-north-9，桶地域须与端点一致）。
+ENDPOINT="https://obs.cn-north-4.myhuaweicloud.com"
 BUCKET="robotwin-assets"
 TAG="${TEMP_TAG:-local}"
 KEY="e2e-team/${TAG}/probe.txt"
-# AK/SK 为 base64 系字符集，单引号包裹安全；runner 侧展开（细测 runner 为一次性节点）。
-PUT="obsutil -e=$ENDPOINT -i=$OBS_TEST_AK -k=$OBS_TEST_SK"
-cleanup() { $K8S_EXEC sh -c "$PUT rm obs://$BUCKET/$KEY 2>/dev/null || true" >/dev/null 2>&1 || true; }
+CFG="/root/.obsutilconfig"
+# 预检覆盖了容器 command（entrypoint 未跑），这里在 pod 内写 obsutil 配置：
+# /root 为可写 emptyDir；显式 -config 指定，避免依赖家目录解析。
+$K8S_EXEC sh -c "mkdir -p /root && printf 'endpoint=%s\nak=%s\nsk=%s\ntoken=\n' '$ENDPOINT' '$OBS_TEST_AK' '$OBS_TEST_SK' > $CFG && chmod 600 $CFG && ls -l $CFG >/dev/null"
+run_obs() { $K8S_EXEC sh -c "obsutil $1 -config=$CFG"; }
+cleanup() { run_obs "rm obs://$BUCKET/$KEY" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-$K8S_EXEC sh -c "echo e2e-probe-$TAG > /tmp/obs-probe.txt && $PUT cp /tmp/obs-probe.txt obs://$BUCKET/$KEY && rm -f /tmp/obs-probe.txt" \
+$K8S_EXEC sh -c "echo e2e-probe-$TAG > /tmp/obs-probe.txt && obsutil cp /tmp/obs-probe.txt obs://$BUCKET/$KEY -config=$CFG && rm -f /tmp/obs-probe.txt" \
   || { echo "FAIL: OBS 上传失败"; exit 1; }
 echo "UPLOAD OK"
-$K8S_EXEC sh -c "$PUT ls obs://$BUCKET/e2e-team/$TAG/" | grep -q "probe.txt" \
+run_obs "ls obs://$BUCKET/e2e-team/$TAG/" | grep -q "probe.txt" \
   || { echo "FAIL: OBS 上传后 ls 不见 probe.txt"; exit 1; }
 echo "VISIBLE OK"
-$K8S_EXEC sh -c "$PUT rm obs://$BUCKET/$KEY" \
-  || { echo "FAIL: OBS 删除失败"; exit 1; }
+run_obs "rm obs://$BUCKET/$KEY" || { echo "FAIL: OBS 删除失败"; exit 1; }
 echo "DELETE OK"
 trap - EXIT
 echo "CASE OK: case-obs（上传→可见→删除闭环）"
