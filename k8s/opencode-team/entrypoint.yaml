@@ -9,6 +9,11 @@ data:
   entrypoint.sh: |
     #!/bin/sh
     set -eu
+    # 只读根文件系统（securityContext.readOnlyRootFilesystem=true）：
+    # /root 由可写 emptyDir 承接（initContainer 已把镜像内 /root/. 拷入），系统目录只读；
+    # /workspace、/root/.local/share/opencode（数据卷）、/tmp 可写。
+    export TMPDIR=/tmp
+    : "${HOME:=/root}"; export HOME
     if [ "${PIPELINE_MANAGED:-}" != "true" ]; then
       echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true). Refusing to start.' >&2
       exit 1
