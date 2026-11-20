@@ -1,0 +1,28 @@
+# SOPS 密文（配方见 dimgs k8s/opencode-team-preflight/sops-secrets.yaml）：仅 Flux 解密，明文只活加密当次 runner 内存。
+# 生成源：sops-reencrypt run 44668055659。
+apiVersion: v1
+kind: Secret
+metadata:
+    name: browserless-env
+    namespace: opencode-team
+    annotations:
+        sops-cutover: "2026-11-20"
+        cf-minted-at: "2026-11-20"
+type: Opaque
+stringData:
+    BROWSERLESS_TOKEN: ENC[AES256_GCM,data:7+fs+VthyMhp8wIRaZR6,iv:WayNBZW9wLqBCo6k9Ke0CxyLrr/BdUiIF3z+ccQM9nw=,tag:w7cYbU1XkoC0/AS4FNOacw==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBrN1pmWGVvMGx2NWJlT1lZ
+            cGFObkFpQUkzVzU3WXJHU2J1VUtNR0xlYVI0Cm5PQjU3YjlXbXhDL0E5OEtpUHR6
+            ZElnYis0Q2lLZSttOGFZL3ptMXZsazQKLS0tIE80dHdPY3dKbE9LYmpSTzE3Ynl5
+            VkJwcFJnekdncTgzMWZsbXdCTXU0QUEKceZhL2xeDJq9KnEUsxzZ8mw7kuNNEQLX
+            5plBiiDM/yMozj8uABo+nCESN4Lg4BBHDEd7oAWblg1I6iqHl/p5WQ==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age167s7vc9ctur6vnfxkdg3yzrrwv3ske245q77v6dlzqf9tu5g8d5svj53mh
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-20T03:29:30Z"
+    mac: ENC[AES256_GCM,data:PVKzaVH2UDXhpKpv9Q7YriE6PUy4qZGZv1gtsLGPlU+W1J4Xxa001vFfRtlqD9yKw/CELakqQRiYj5erJI3G3C6C8rFhGXU3D67StjnOiH3pmzAwDDceP8mNuRWoWsuVOJUH5IJBop6WyIhKZDytTri6j6UYxCFIGNvReHbZNk4=,iv:ZXXUVQToEFSGTeSvPhY0h1Wg9Isy08uZmyb5uCQExJ4=,tag:LKMG4yQaQkRY7jMH3GqKcA==,type:str]
+    version: 3.13.3
