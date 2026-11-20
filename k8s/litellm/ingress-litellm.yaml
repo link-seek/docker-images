@@ -1,5 +1,3 @@
-# 公网入口声明（Traefik）：litellm.linkseek.net.cn → 同 ns Service litellm-gateway:4000。
-# 三条路由：/go/v1/models 与 /v1/models 走改写中间件，其余直透（对标 Caddy 三段）。
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,16 +7,16 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-go@kubernetescrd
 spec:
   rules:
-    - host: litellm.linkseek.net.cn
-      http:
-        paths:
-          - path: /go/v1/models
-            pathType: Prefix
-            backend:
-              service:
-                name: litellm-gateway
-                port:
-                  number: 4000
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /go/v1/models
+        pathType: Prefix
+        backend:
+          service:
+            name: opencode-ai
+            port:
+              number: 443
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,16 +27,16 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-zen@kubernetescrd
 spec:
   rules:
-    - host: litellm.linkseek.net.cn
-      http:
-        paths:
-          - path: /v1/models
-            pathType: Prefix
-            backend:
-              service:
-                name: litellm-gateway
-                port:
-                  number: 4000
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /v1/models
+        pathType: Prefix
+        backend:
+          service:
+            name: opencode-ai
+            port:
+              number: 443
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -47,13 +45,13 @@ metadata:
   namespace: litellm
 spec:
   rules:
-    - host: litellm.linkseek.net.cn
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: litellm-gateway
-                port:
-                  number: 4000
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: litellm-gateway
+            port:
+              number: 4000
