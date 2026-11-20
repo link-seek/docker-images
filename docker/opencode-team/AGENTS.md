@@ -23,7 +23,7 @@
 
 ## 本线可用
 
-- `gh`（已登录；GitHub 代码/PR/Actions 默认走 `gh`，不用 `git` 协议——容器出口抖时 `gh api` 稳）
+- `gh`（已登录；**经 wrapper 限制：仅 `gh issue create`**，其余命令被拒——见「GitHub（gh 受限）」）
 - url2hc 三条流水线：`download-to-obs.yml` / `img-to-swr.yml` / `build-to-swr.yml`
 - `obsutil`（华为云 OBS；`$OBS_ENDPOINT` / `$OBS_AK` / `$OBS_SK` 全走 env）
 - `agent-browser` + 远程 browserless（CDP）
@@ -35,7 +35,7 @@
 
 `hcloud`、`aliyun`、`oci`、`tailscale`、`wrangler`、`lmnr`、本地 Chrome 本线均已砍掉（这些是与 tools 线的差异）。
 注意：无 `hcloud` 只表示没有 KooCLI 命令；**华为云 OBS 的 AK/SK（`$OBS_AK`/`$OBS_SK`）与 `$OBS_ENDPOINT` 必须保留**，obsutil 依赖它们，别当无用凭证删掉。
-需要云资源时：查询/上传走 `obsutil` 或 `gh api`；Cloudflare 用 REST + `$CLOUDFLARE_API_TOKEN`；真需要整套云 CLI 就改走 tools 线，别在容器里手工装。
+需要云资源时：查询/上传走 `obsutil`；Cloudflare 用 REST + `$CLOUDFLARE_API_TOKEN`；真需要整套云 CLI 就改走 tools 线，别在容器里手工装。
 
 # 密钥验证白名单（只读可直接跑；名单外先问）
 
@@ -49,11 +49,19 @@
 # 境外源 / 镜像 / 文件（统一走 url2hc 中转）
 
 - 铁律：源在国外的下载/拉取（GitHub release、ghcr.io 镜像、外网文件、pip/npm/go 等境外源）一律优先走 `url2hc` 中转，禁止直连硬扛；直连只在中转失败或不适用时才允许。
-- 文件到 OBS：`gh workflow run download-to-obs.yml --repo link-seek/url2hc -f url="<下载地址>" -f obs_key="<文件名>"`，日志里拿 7 天预签名链接（文件 7 天自动删）。
-- 镜像到 SWR：`gh workflow run img-to-swr.yml --repo link-seek/url2hc -f source_image="ghcr.io/xxx:tag"`，自动公开 + 7 天老化，拉取地址 `swr.cn-north-4.myhuaweicloud.com/link-seek/<名>:<标签>`（SWR 在 cn-north-4，跨区只能公网拉）。
-- Dockerfile 云端构建：`gh workflow run build-to-swr.yml --repo link-seek/url2hc -f target_name="<名>" -f dockerfile_inline="$(cat Dockerfile)"`。
-- `gh run watch <id> --exit-status --interval 60`：远端任务跟到底，不 sleep 轮询；默认 60s，急活 30s，底线 15s（防次级限流）。
-- 其它 gh 常用：`gh repo list --limit 10`、`gh api` 读文件/调接口、`gh pr`、`gh release`。
+- ⚠️ 本容器 `gh` 被限制为仅 `gh issue create`，**不能直接触发 workflow**。以下命令供有 gh 权限的环境（CI / 人工 / 宿主机）执行，pod 内仅作参考：
+  - 文件到 OBS：`gh workflow run download-to-obs.yml --repo link-seek/url2hc -f url="<下载地址>" -f obs_key="<文件名>"`，日志里拿 7 天预签名链接（文件 7 天自动删）。
+  - 镜像到 SWR：`gh workflow run img-to-swr.yml --repo link-seek/url2hc -f source_image="ghcr.io/xxx:tag"`，自动公开 + 7 天老化，拉取地址 `swr.cn-north-4.myhuaweicloud.com/link-seek/<名>:<标签>`（SWR 在 cn-north-4，跨区只能公网拉）。
+  - Dockerfile 云端构建：`gh workflow run build-to-swr.yml --repo link-seek/url2hc -f target_name="<名>" -f dockerfile_inline="$(cat Dockerfile)"`。
+  - 跟进度：`gh run watch <id> --exit-status --interval 60`（默认 60s，急活 30s，底线 15s）。
+- 需要触发上述流水线时：请提示用户/CI 侧执行，或让有权限的机器人处理；不要试图绕过 gh 限制。
+
+# GitHub（gh 受限）
+
+- 本容器 `gh` 是 wrapper（真二进制 `/usr/local/libexec/gh-real`）：**仅放行 `gh issue create`**，另放行 `--help` / `--version` / `version` / `auth status`。
+- 被拒：`gh api`、`gh pr`、`gh workflow`、`gh repo`、`gh release` 及其它子命令。
+- 提 issue：`gh issue create -R link-seek/<repo> -t "标题" -b "正文"`。
+- ⚠️ 这是**防误用护栏，不是安全边界**：token 仍为全权限，直接调 `gh-real` 或自行用 `$GH_TOKEN` 发 HTTP 可绕过；不要把它当隔离手段宣传。
 
 # OBS（本线专属）
 
