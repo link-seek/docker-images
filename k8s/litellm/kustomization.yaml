@@ -10,3 +10,4 @@ resources:
 - middleware-litellm-go.yaml
 - middleware-litellm-zen.yaml
 - ingress-litellm.yaml
+- svc-opencode-ai.yaml

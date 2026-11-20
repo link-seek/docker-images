@@ -10,5 +10,6 @@ spec:
     replacement: /inference/go/v1/models$1
   headers:
     customRequestHeaders:
+      Host: "opencode.ai"
       Authorization: ""
       X-Api-Key: ""
