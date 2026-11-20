@@ -4,7 +4,7 @@ metadata:
   name: litellm-go
   namespace: litellm
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-go@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-go-rewrite@kubernetescrd,litellm-litellm-go-headers@kubernetescrd
 spec:
   rules:
   - host: litellm.linkseek.net.cn
@@ -24,7 +24,7 @@ metadata:
   name: litellm-zen
   namespace: litellm
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-zen@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-zen-rewrite@kubernetescrd,litellm-litellm-zen-headers@kubernetescrd
 spec:
   rules:
   - host: litellm.linkseek.net.cn
