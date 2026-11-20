@@ -1,0 +1,26 @@
+# staging 证书验证 #3（yingxin 域，全新签发；原 ingress.yaml 不动）。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yingxin-staging-tls
+  namespace: opencode-yingxin
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le-staging
+spec:
+  tls:
+    - hosts:
+        - opencode.yingxin.net.cn
+      secretName: yingxin-staging-tls
+  rules:
+    - host: opencode.yingxin.net.cn
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opencode-yingxin
+                port:
+                  number: 4097
