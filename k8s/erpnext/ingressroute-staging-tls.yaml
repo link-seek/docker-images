@@ -1,11 +1,11 @@
-# IngressRoute staging（Ingress 存不下 LE 证，见官方文档；HTTP 入口不动）。
+# IngressRoute prod（Ingress 存不下 LE 证，见官方文档；HTTP 入口不动）。
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: erpnext-staging-tls
   namespace: erpnext
   annotations:
-    route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE
+    route-comment: prod DNS-01 via IngressRoute (Ingress provider can't store LE
       certs)
 spec:
   entryPoints:
@@ -17,7 +17,7 @@ spec:
     - name: erpnext
       port: 8080
   tls:
-    certResolver: le-staging
+    certResolver: le-prod
     domains:
     - main: erp.xieyucheng.top
     secretName: erpnext-staging-tls
