@@ -1,0 +1,36 @@
+# litellm staging（3 路由共用一张 staging 证；HTTP Ingress 不动）。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: litellm-staging-tls
+  namespace: litellm
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`litellm.linkseek.net.cn`) && PathPrefix(`/go/v1/models`)
+      kind: Rule
+      middlewares:
+        - name: litellm-go-rewrite
+        - name: litellm-go-headers
+      services:
+        - name: opencode-ai
+          port: 14443
+    - match: Host(`litellm.linkseek.net.cn`) && PathPrefix(`/v1/models`)
+      kind: Rule
+      middlewares:
+        - name: litellm-zen-rewrite
+        - name: litellm-zen-headers
+      services:
+        - name: opencode-ai
+          port: 14443
+    - match: Host(`litellm.linkseek.net.cn`) && PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: litellm-gateway
+          port: 4000
+  tls:
+    certResolver: le-staging
+    domains:
+      - main: litellm.linkseek.net.cn
+    secretName: litellm-staging-tls
