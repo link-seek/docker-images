@@ -11,9 +11,10 @@ metadata:
 spec:
   type: ExternalName
   externalName: opencode.ai
+  # 东京 SNI 中继端口（relay 只听 14443；SNI=Host=opencode.ai 不变）。
   ports:
     - name: https
-      port: 443
+      port: 14443
       protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
