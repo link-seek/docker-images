@@ -17,7 +17,7 @@ spec:
     - name: opencode-yingxin
       port: 4097
   tls:
-    certResolver: le-staging
+    certResolver: le-prod
     domains:
     - main: opencode.yingxin.net.cn
     secretName: yingxin-staging-tls

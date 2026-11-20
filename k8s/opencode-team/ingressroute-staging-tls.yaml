@@ -17,7 +17,7 @@ spec:
     - name: opencode
       port: 4097
   tls:
-    certResolver: le-staging
+    certResolver: le-prod
     domains:
     - main: team-agent.xieyucheng.top
     secretName: team-agent-staging-tls
