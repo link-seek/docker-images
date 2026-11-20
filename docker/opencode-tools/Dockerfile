@@ -175,12 +175,14 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
 COPY docker/opencode-tools/send-mail.sh /usr/local/bin/send-mail
 COPY docker/opencode-tools/fetch-mail.py /usr/local/bin/fetch-mail
 COPY docker/opencode-tools/md2html.py /usr/local/lib/send-mail/md2html.py
+COPY docker/opencode-tools/tssh.sh /usr/local/bin/tssh
 # send-mail -m 烘焙依赖（社区标准配方；goss 转换冒烟不过则不发版）
 ARG MD_DEPS="markdown==3.7 premailer==3.10.0"
 RUN pip3 install --no-cache-dir --break-system-packages $MD_DEPS \
  && python3 -c "import markdown, premailer; print('md-ok')"
-RUN chmod +x /usr/local/bin/send-mail /usr/local/bin/fetch-mail && send-mail --help >/dev/null \
+RUN chmod +x /usr/local/bin/send-mail /usr/local/bin/fetch-mail /usr/local/bin/tssh && send-mail --help >/dev/null \
  && fetch-mail --help >/dev/null \
+ && tssh --help >/dev/null \
  && echo "tools image ready:" && opencode --version
 # 默认直接 serve（compose 仍可用 entrypoint 覆盖；CI 可直接 docker run 起服）
 ENTRYPOINT ["opencode"]
