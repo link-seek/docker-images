@@ -17,4 +17,3 @@ spec:
     certResolver: le-prod
     domains:
       - main: opencode.xieyucheng.top
-    secretName: xieyucheng-staging-tls

@@ -20,4 +20,3 @@ spec:
     certResolver: le-prod
     domains:
     - main: opencode.yingxin.net.cn
-    secretName: yingxin-staging-tls
