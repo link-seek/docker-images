@@ -114,13 +114,6 @@ kind: Service
 metadata:
   name: opencode-yingxin
   namespace: opencode-yingxin
-  labels:
-    # operator 代理（pod 不再入 TS 网；单点 ha-b，erpnext 同款；hostname 保持，Caddy 不动）。
-    tailscale.com/proxy-class: ha-b
-  annotations:
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: opencode-k3s
-    tailscale.com/tags: tag:k8s
 spec:
   selector: {app: opencode-yingxin}
   ports:

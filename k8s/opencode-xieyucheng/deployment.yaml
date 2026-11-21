@@ -137,14 +137,6 @@ kind: Service
 metadata:
   name: opencode
   namespace: opencode-xieyucheng
-  labels:
-    # ProxyClass 用 label 挂（非 annotation）。
-    tailscale.com/proxy-class: ha-a
-  annotations:
-    # 设备代理 A（钉 41 节点）：与 ha-b 双活，Caddy 双后端。
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: opencode-xieyucheng-ha-a
-    tailscale.com/tags: tag:k8s
 spec:
   selector: {app: opencode}
   ports:
