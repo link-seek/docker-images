@@ -35,6 +35,76 @@ identity
 CASES="$(E2E_CASES="${E2E_CASES:-}" bash "$CASES_DIR/select-cases.sh")"
 echo "E2E cases: ${CASES:-<none>}"
 
+# --- 宿主真连靶：case-ssh 要验“容器 → 宿主”这条真实形态（生产直连 .21 同构）。
+# 宿主 sshd 现起在本 runner（ephemeral，即焚），地址+临时 key 递进 pod；验完即拆。
+case_selected() { case " ${CASES:-} " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+HOST_BAIT_DIR=/tmp/e2e-host-ssh
+host_bait_pid=""
+
+host_bait_bridge_ip() { # pod 出网经 k3d node 容器，宿主 = node 的默认网关
+  local node ip
+  node="$(docker ps --filter "name=k3d-preflight-server-0" --format '{{.ID}}' 2>/dev/null | head -1 || true)"
+  if [ -n "$node" ]; then
+    ip="$(docker exec "$node" sh -c "ip route | awk '/^default/{print \$3}'" 2>/dev/null || true)"
+  fi
+  if [ -z "${ip:-}" ]; then
+    ip="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 || true)"
+  fi
+  printf '%s' "${ip:-}"
+}
+
+host_bait_up() {
+  local ip
+  if ! command -v sshd >/dev/null 2>&1; then
+    echo "CASE-INFO: runner 无 sshd，ephemeral 现装 openssh-server（不进镜像）"
+    sudo apt-get update -qq >/dev/null 2>&1 || true
+    sudo apt-get install -y -qq openssh-server >/dev/null 2>&1 \
+      || { echo "CASE-INFO: 宿主 sshd 装不上，case-ssh 回落容器内 loopback"; return 1; }
+  fi
+  ip="$(host_bait_bridge_ip)"
+  [ -n "$ip" ] || { echo "CASE-INFO: 取不到宿主网桥 IP，case-ssh 回落 loopback"; return 1; }
+  rm -rf "$HOST_BAIT_DIR"; mkdir -p "$HOST_BAIT_DIR"
+  ssh-keygen -t ed25519 -N '' -f "$HOST_BAIT_DIR/host_ed25519" -q || return 1
+  ssh-keygen -t ed25519 -N '' -f "$HOST_BAIT_DIR/client_ed25519" -q || return 1
+  cp "$HOST_BAIT_DIR/client_ed25519.pub" "$HOST_BAIT_DIR/authorized_keys"
+  chmod 600 "$HOST_BAIT_DIR/authorized_keys" "$HOST_BAIT_DIR/client_ed25519" "$HOST_BAIT_DIR/host_ed25519"
+  sudo mkdir -p /run/sshd
+  # 用独立 sshd_config 而不是一串 -o：选项多时更可读，且 -E 日志便于失败定位。
+  cat > "$HOST_BAIT_DIR/sshd_config" <<EOF
+Port 2222
+ListenAddress 0.0.0.0
+HostKey $HOST_BAIT_DIR/host_ed25519
+PidFile $HOST_BAIT_DIR/sshd.pid
+AuthorizedKeysFile $HOST_BAIT_DIR/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
+StrictModes no
+# runner 账号无密码（锁定哈希）：UsePAM no 时 sshd 会以 account locked 拒登，走系统默认 UsePAM
+UsePAM yes
+PasswordAuthentication no
+LogLevel VERBOSE
+EOF
+  sudo /usr/sbin/sshd -f "$HOST_BAIT_DIR/sshd_config" -E "$HOST_BAIT_DIR/sshd.log" \
+    || { echo "CASE-INFO: 宿主 sshd 起不来，回落 loopback"; sudo cat "$HOST_BAIT_DIR/sshd.log" 2>/dev/null | tail -5; return 1; }
+  chmod 644 "$HOST_BAIT_DIR/sshd.log" 2>/dev/null || true
+  host_bait_pid="$HOST_BAIT_DIR/sshd.pid"
+  TSSH_HOST_BAIT="$(whoami)@${ip}:2222"
+  export TSSH_HOST_BAIT TSSH_HOST_BAIT_KEY="$HOST_BAIT_DIR/client_ed25519"
+  echo "CASE-INFO: 宿主真连靶就绪 $TSSH_HOST_BAIT（pod → runner 网桥）"
+}
+
+host_bait_down() {
+  [ -n "${host_bait_pid:-}" ] && [ -f "$host_bait_pid" ] && sudo kill "$(cat "$host_bait_pid")" 2>/dev/null || true
+  rm -rf "$HOST_BAIT_DIR"
+}
+
+if case_selected case-ssh; then
+  trap host_bait_down EXIT
+  host_bait_up || true
+fi
+
 smoke() { # 内置兜底：版本 + skill 文件存在（快、无网、无模型）
   $K8S_EXEC opencode --version
   $K8S_EXEC test -f /root/.agents/skills/open-design/SKILL.md

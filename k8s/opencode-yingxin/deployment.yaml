@@ -24,11 +24,10 @@ spec:
     spec:
       imagePullSecrets:
         - name: swr-pull
-      # DNS 保持 kube-dns 默认：网关走公网域名，pod 不需要 tailnet 解析。
-      # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
+      # DNS 保持 kube-dns 默认：网关走公网域名解析。
       initContainers:
         - name: init-dirs
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools:pin-required
           command: [sh, -c, "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
@@ -38,7 +37,7 @@ spec:
             limits: {cpu: 500m, memory: 512Mi}
       containers:
         - name: opencode-yingxin
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools:pin-required
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
@@ -114,13 +113,6 @@ kind: Service
 metadata:
   name: opencode-yingxin
   namespace: opencode-yingxin
-  labels:
-    # operator 代理（pod 不再入 TS 网；单点 ha-b，erpnext 同款；hostname 保持，Caddy 不动）。
-    tailscale.com/proxy-class: ha-b
-  annotations:
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: opencode-k3s
-    tailscale.com/tags: tag:k8s
 spec:
   selector: {app: opencode-yingxin}
   ports:

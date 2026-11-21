@@ -7,7 +7,8 @@
 # browserless 取 manifest tag——bootstrap 要求先转正 browserless），本 hook 只做：
 #   1) identity：k3d 里跑的必须是刚打出来的 digest（kubectl 读 deploy image）。
 #   2) E2E：e2e-cases/select-cases.sh 选单（默认全量；E2E_CASES 可 skip/名单强制），逐个跑。
-# TOKEN 用 preflight-env.conf 里写死的 dummy-preflight（模板进仓，同 Secret 两边同值）。
+# TOKEN 用 hook 内写死的 dummy-preflight；browserless 侧同值经 Flux 解密 test enc 进来
+# （k8s/opencode-team-preflight，test age key），两边一致 CDP 才通。生产走真值，此处只验逻辑。
 set -euo pipefail
 
 [ -n "${K8S_DEPLOY:-}" ] || { echo "FAIL: K8S_DEPLOY 为空（骨架 k8s_app 未传）"; exit 1; }

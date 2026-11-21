@@ -1,9 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
-  - entrypoint.yaml
-  - litellm-config.yaml
-  - pvc.yaml
-  - deployment.yaml
-  - service.yaml
+- namespace.yaml
+- entrypoint.yaml
+- litellm-config.yaml
+- pvc.yaml
+- deployment.yaml
+- service.yaml
+- middleware-litellm-go.yaml
+- middleware-litellm-zen.yaml
+- ingress-litellm.yaml
+- svc-opencode-ai.yaml
+- middleware-litellm-go-headers.yaml
+- middleware-litellm-zen-headers.yaml
+- ingressroute-staging-tls.yaml
