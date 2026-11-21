@@ -7,3 +7,4 @@ resources:
 - rbac.yaml
 - opencode-xieyucheng-env.enc.yaml
 - ingress.yaml
+- ingressroute-staging-tls.yaml

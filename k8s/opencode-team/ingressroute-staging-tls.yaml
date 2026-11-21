@@ -1,0 +1,23 @@
+# IngressRoute staging（Ingress 存不下 LE 证，见官方文档；HTTP 入口不动）。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: team-agent-staging-tls
+  namespace: opencode-team
+  annotations:
+    route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE
+      certs)
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - match: Host(`team-agent.xieyucheng.top`)
+    kind: Rule
+    services:
+    - name: opencode
+      port: 4097
+  tls:
+    certResolver: le-prod
+    domains:
+    - main: team-agent.xieyucheng.top
+    secretName: team-agent-staging-tls
