@@ -24,8 +24,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: swr-pull
-      # DNS 保持 kube-dns 默认：网关走公网域名，pod 不需要 tailnet 解析。
-      # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
+      # DNS 保持 kube-dns 默认：网关走公网域名解析。
       initContainers:
         - name: init-dirs
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
