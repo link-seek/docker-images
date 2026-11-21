@@ -33,3 +33,4 @@ spec:
     certResolver: le-prod
     domains:
       - main: litellm.linkseek.net.cn
+    secretName: litellm-staging-tls

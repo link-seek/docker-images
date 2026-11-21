@@ -20,3 +20,4 @@ spec:
     certResolver: le-prod
     domains:
     - main: erp.xieyucheng.top
+    secretName: erpnext-staging-tls

@@ -20,3 +20,4 @@ spec:
     certResolver: le-prod
     domains:
     - main: team-agent.xieyucheng.top
+    secretName: team-agent-staging-tls
