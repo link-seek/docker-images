@@ -1,20 +1,13 @@
-# 前门 Service：nginx 8080，tailscale operator 代理对外（trial 先单点，稳定再议 ha）。
-# operator 无 default proxy-class，不挂 proxy-class 则 expose 被忽略（team 实锤）；ha-b 钉 .69，与 pod 同节点。
-# 公网入口由 infra 侧 Caddy 反代 erpnext.mackarel-polaris.ts.net.:8080（另见 infra#546）。
+# 前门 Service：nginx 8080（集群内；公网经 Caddy→Traefik）。
 apiVersion: v1
 kind: Service
 metadata:
   name: erpnext
   namespace: erpnext
   labels:
-    tailscale.com/proxy-class: ha-b
     app.kubernetes.io/name: erpnext
     app.kubernetes.io/instance: erpnext
     app.kubernetes.io/managed-by: Flux
-  annotations:
-    tailscale.com/expose: "true"
-    tailscale.com/hostname: erpnext
-    tailscale.com/tags: tag:k8s
 spec:
   type: ClusterIP
   ports:
