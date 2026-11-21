@@ -1,6 +1,6 @@
 # litellm 网关配置（ConfigMap 覆盖镜像内 /app/config.yaml）。
 # 与 stacks/litellm-gateway/config/litellm_config.yaml 同步，唯一差别：
-# api_base 指东京 SNI 中转（宿主机 14443，hostAliases 把 opencode.ai 钉到 vm-proxy tailnet IP）。
+# api_base 直连 opencode.ai:443（HTTPS_PROXY 指向东京 egress-proxy，出口=vm-proxy，代理按白名单隧道）。
 # 说明：选 ConfigMap 而不重打镜像——Relay 端口/地址是部署 topology，钥匙不进镜像；
 # 业务逻辑（guard/callback）仍在镜像里，digest 即行为版本原则只让渡这一处。
 apiVersion: v1
@@ -31,11 +31,11 @@ data:
       - model_name: big-pickle
         litellm_params:
           model: openai/big-pickle
-          api_base: https://opencode.ai:14443/inference/openai/v1
+          api_base: https://opencode.ai/inference/openai/v1
           api_key: sk-dummy-overridden-by-callback
       # 其余走新 Go 基座（老 /zen/go 已搬迁；Go 要求 x-opencode-session，网关已 forward_client_headers 转发）。
       - model_name: "*"
         litellm_params:
           model: openai/*
-          api_base: https://opencode.ai:14443/inference/go/openai/v1
+          api_base: https://opencode.ai/inference/go/openai/v1
           api_key: sk-dummy-overridden-by-callback
