@@ -69,6 +69,36 @@ command:
     timeout: 30000
     stdout:
       - 'TLS-OK'
+  tssh:
+    exec: "tssh --help"
+    exit-status: 0
+    stdout:
+      - 'tssh'
+
+  tssh-no-key:
+    exec: "env TSSH_KEY=/tmp/definitely-missing-tssh-key tssh dummyhost -- echo hi"
+    exit-status: 2
+    stderr:
+      - '缺少私钥'
+
+  tssh-dry-run-opts:
+    exec: "ssh-keygen -t ed25519 -N '' -f /tmp/goss-tssh-key -q && TSSH_KEY=/tmp/goss-tssh-key tssh --dry-run somehost -- echo hi"
+    exit-status: 0
+    stdout:
+      - 'BatchMode=yes'
+      - 'PasswordAuthentication=no'
+      - 'IdentitiesOnly=yes'
+      - 'StrictHostKeyChecking=accept-new'
+      - 'ConnectTimeout=10'
+      - '-p 22'
+
+  tssh-dry-run-port:
+    # 自备 key：goss 用例间不共享 /tmp 状态（并行度不可假设）
+    exec: "ssh-keygen -t ed25519 -N '' -f /tmp/goss-tssh-key2 -q && TSSH_KEY=/tmp/goss-tssh-key2 tssh -p 2222 --dry-run somehost -- uptime"
+    exit-status: 0
+    stdout:
+      - '-p 2222'
+
 
 
   md2html:
