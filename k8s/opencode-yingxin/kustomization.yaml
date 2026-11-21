@@ -8,3 +8,4 @@ resources:
 - sops-pilot.enc.yaml
 - sops-pilot-deploy.yaml
 - ingress.yaml
+- ingressroute-staging-tls.yaml
