@@ -6,7 +6,6 @@ resources:
 - deployment.yaml
 - rbac.yaml
 - opencode-xieyucheng-env.enc.yaml
-- ingress.yaml
 - ingressroute-staging-tls.yaml
 
 # 镜像 digest 单源头：升级/回滚只改这里一行（本目录 deployment.yaml 里是 :pin-required 占位，
