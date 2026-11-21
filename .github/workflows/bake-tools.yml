@@ -27,10 +27,10 @@ on:
         type: boolean
         default: false
       layer_size_limit_mb:
-        description: "单层体积门 MB（默认 500；0=本次跳过，只用于分支试跑，不转正）"
+        description: "单层体积门 MB（tools 线默认 1600：opencode-mem 插件本体一层就 ~1.4GB 未压缩；0=本次跳过）"
         required: false
         type: string
-        default: "500"
+        default: "1600"
       k8s_skip_sidecar:
         description: "预检跳过 sidecar 镜像导入（默认 false；tools 的 chrome 在个人 SWR 命名空间，流水线拉不到）"
         required: false

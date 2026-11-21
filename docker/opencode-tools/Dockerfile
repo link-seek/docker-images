@@ -22,17 +22,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
  && apt --version
 
 # 基础运行时（放最前：裸 ubuntu 连 curl 都没有，后面所有下载都靠它）：
-# node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用，
-# 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh + msmtp + gnupg
+# 与 node22 分两层跑：单层体积门按“未压缩单层”算，合在一层会顶到 700MB+（2026-11-21 实测）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git python3 python3-pip openssh-client msmtp gnupg \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /etc/apt/keyrings \
+ && git --version && ssh -V && msmtp --version
+
+# node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用），与 Dockerfile.runner 同 pattern
+RUN mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
- && git --version && ssh -V && node --version && msmtp --version
+ && node --version
 
 # opencode 官方二进制（glibc 版；musl 版另有 -musl 后缀，不要拿错）
 # x64 取 baseline（随 brew 配方，最大 CPU 兼容）；arm64 无 baseline 变体
