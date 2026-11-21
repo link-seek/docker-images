@@ -1,3 +1,7 @@
+# k8s/opencode-xieyucheng 主 Deployment（由 k8s/opencode 复制；租户=xieyucheng，切流另议）。
+# 差异：namespace/TS 身份/secret 名按租户；nodeSelector 钉 41（.69 limits 已超配，41 空）。
+# digest pin 即行为版本（tools bb7c1087…/chrome 4ffc5390…，与 HW41 现跑一致）。
+# resources 是 HW41 事故教训的硬化（limits 必填）：.69 为 4C15G。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,11 +10,11 @@ metadata:
   labels:
     app: opencode
   annotations:
-    reloader.stakater.com/auto: 'true'
+    reloader.stakater.com/auto: "true" # SOPS 切换：Secret 更新后自动重载
 spec:
   replicas: 1
   strategy:
-    type: Recreate
+    type: Recreate # 单副本+本地卷：滚动无意义，重建即切换（切流由 Caddy 做）。
   selector:
     matchLabels:
       app: opencode
@@ -22,203 +26,125 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: ecs-ies-euleros-jmupervm-xieyucheng-langfuse-33b4
       imagePullSecrets:
-      - name: swr-pull
+        - name: swr-pull
+      # DNS 保持 kube-dns 默认：网关走公网域名，pod 不需要 tailnet 解析。
+      # （quad-100 方案已验证不可行：tailscaled 转发公网自环，E2E-GW-FAIL 000 实锤。）
       initContainers:
-      - name: init-dirs
-        image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
-        command:
-        - sh
-        - -c
-        - mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace
-          /root/.local/share/opencode || true
-        volumeMounts:
-        - name: prod-work
-          mountPath: /workspace
-        - name: prod-data
-          mountPath: /root/.local/share/opencode
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+        - name: init-dirs
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
+          command: [sh, -c, "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
       containers:
-      - name: opencode
-        image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
-        command:
-        - /bin/sh
-        - /entrypoint/entrypoint.sh
-        args:
-        - serve
-        - --port
-        - '4097'
-        - --hostname
-        - 0.0.0.0
-        ports:
-        - name: http
-          containerPort: 4097
-        env:
-        - name: PIPELINE_MANAGED
-          value: 'true'
-        - name: LITELLM_BASE_URL
-          value: http://litellm-gateway.litellm.svc.cluster.local:4000
-        - name: SSH_TARGETS
-          value: mesh-hw-21 mesh-hw-41
-        - name: SMTP_HOST
-          value: smtp.163.com
-        - name: SMTP_PORT
-          value: '465'
-        - name: SMTP_USER
-          value: 122306789@163.com
-        - name: SMTP_FROM
-          value: 122306789@163.com
-        - name: MAIL_DEFAULT_TO
-          value: xieyucheng@outlook.com
-        - name: BROWSER_CDP_URL
-          value: http://127.0.0.1:9222
-        - name: OPEN_DESIGN_BROWSER_URL
-          value: http://127.0.0.1:9222
-        - name: LITELLM_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: LITELLM_API_KEY
-        - name: GH_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: GH_TOKEN
-        - name: OPENCODE_SERVER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: OPENCODE_SERVER_PASSWORD
-        - name: CLOUDFLARE_API_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: CLOUDFLARE_API_TOKEN
-        - name: CF_AI_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: CF_AI_TOKEN
-        - name: HCLOUD_AK
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: HCLOUD_AK
-        - name: HCLOUD_SK
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: HCLOUD_SK
-        - name: SMTP_PASS
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: SMTP_PASS
-        - name: ALIBABACLOUD_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: ALIBABACLOUD_ACCESS_KEY_ID
-        - name: ALIBABACLOUD_ACCESS_KEY_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: ALIBABACLOUD_ACCESS_KEY_SECRET
-        - name: ALIBABACLOUD_REGION_ID
-          value: cn-hangzhou
-        - name: OCI_CLI_USER
-          value: ocid1.user.oc1..aaaaaaaalhn53cu72kvifu34crgpabqpm5xhm424yj56n4g2ca2cxn3hs4ca
-        - name: OCI_CLI_FINGERPRINT
-          value: 53:47:c7:ea:5d:3d:3e:cc:58:99:99:e9:cb:5e:7b:96
-        - name: OCI_CLI_TENANCY
-          value: ocid1.tenancy.oc1..aaaaaaaa3znvscn322jewkqpty3phxuw6x7tkitevjmh5o55qfp3ffevfcaq
-        - name: OCI_CLI_REGION
-          value: ap-tokyo-1
-        - name: OCI_CLI_KEY_CONTENT
-          valueFrom:
-            secretKeyRef:
-              name: opencode-xieyucheng-env
-              key: OCI_CLI_KEY_CONTENT
-        volumeMounts:
-        - name: prod-work
-          mountPath: /workspace
-        - name: prod-data
-          mountPath: /root/.local/share/opencode
-        - name: entrypoint
-          mountPath: /entrypoint
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 4097
-          initialDelaySeconds: 90
-          periodSeconds: 15
-          timeoutSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 4097
-          initialDelaySeconds: 180
-          periodSeconds: 30
-          timeoutSeconds: 10
-        resources:
-          requests:
-            cpu: 1000m
-            memory: 2Gi
-          limits:
-            cpu: 3000m
-            memory: 8Gi
-      - name: browser
-        image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/chrome-cjk@sha256:4ffc5390fc0df74b80ca44d688b8e5a26dd5da648afd796a0e9a6a57e3a64a27
-        ports:
-        - name: cdp
-          containerPort: 9222
-        readinessProbe:
-          httpGet:
-            path: /json/version
-            port: 9222
-          initialDelaySeconds: 30
-          periodSeconds: 15
-          timeoutSeconds: 10
-        resources:
-          requests:
-            cpu: 200m
-            memory: 512Mi
-          limits:
-            cpu: 500m
-            memory: 2Gi
+        - name: opencode
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
+          command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
+          args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
+          ports:
+            - {name: http, containerPort: 4097}
+          env:
+            - {name: PIPELINE_MANAGED, value: "true"}
+            # 网关走公网域名（用户已修复公网后端；网关迁 k3s 后改集群内 Service）。
+            - {name: LITELLM_BASE_URL, value: "http://litellm-gateway.litellm.svc.cluster.local:4000"}
+            - {name: SSH_TARGETS, value: "mesh-hw-21 mesh-hw-41"}
+            - {name: SMTP_HOST, value: smtp.163.com}
+            - {name: SMTP_PORT, value: "465"}
+            - {name: SMTP_USER, value: 122306789@163.com}
+            - {name: SMTP_FROM, value: 122306789@163.com}
+            - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
+            - {name: BROWSER_CDP_URL, value: "http://127.0.0.1:9222"}
+            # kit 走 sidecar（CDP，上游 #114 已合；镜像内已无本地 chrome，见 docker-images#123）
+            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://127.0.0.1:9222"}
+            - name: LITELLM_API_KEY
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: LITELLM_API_KEY}}
+            - name: GH_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: GH_TOKEN}}
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OPENCODE_SERVER_PASSWORD}}
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: CLOUDFLARE_API_TOKEN}}
+            - name: CF_AI_TOKEN
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: CF_AI_TOKEN}}
+            - name: HCLOUD_AK
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_AK}}
+            - name: HCLOUD_SK
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: HCLOUD_SK}}
+            - name: SMTP_PASS
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: SMTP_PASS}}
+            # 阿里云身份（pilot 专用；CLI 原生 env 名；region 明文非秘钥）
+            - name: ALIBABACLOUD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: ALIBABACLOUD_ACCESS_KEY_ID}}
+            - name: ALIBABACLOUD_ACCESS_KEY_SECRET
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: ALIBABACLOUD_ACCESS_KEY_SECRET}}
+            - name: ALIBABACLOUD_REGION_ID
+              value: "cn-hangzhou"
+            # OCI 身份（pilot 专用；真值走 pipeline mint，OCI_CLI_* 环境认证，免 ~/.oci）：
+            - name: OCI_CLI_USER
+              value: "ocid1.user.oc1..aaaaaaaalhn53cu72kvifu34crgpabqpm5xhm424yj56n4g2ca2cxn3hs4ca"
+            - name: OCI_CLI_FINGERPRINT
+              value: "53:47:c7:ea:5d:3d:3e:cc:58:99:99:e9:cb:5e:7b:96"
+            - name: OCI_CLI_TENANCY
+              value: "ocid1.tenancy.oc1..aaaaaaaa3znvscn322jewkqpty3phxuw6x7tkitevjmh5o55qfp3ffevfcaq"
+            - name: OCI_CLI_REGION
+              value: "ap-tokyo-1"
+            - name: OCI_CLI_KEY_CONTENT
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OCI_CLI_KEY_CONTENT}}
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+            - {name: entrypoint, mountPath: /entrypoint}
+          readinessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 1000m, memory: 2Gi}
+            limits: {cpu: 3000m, memory: 8Gi}
+        - name: browser
+          image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/chrome-cjk@sha256:4ffc5390fc0df74b80ca44d688b8e5a26dd5da648afd796a0e9a6a57e3a64a27
+          ports:
+            - {name: cdp, containerPort: 9222}
+          readinessProbe:
+            httpGet: {path: /json/version, port: 9222}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 500m, memory: 2Gi}
       volumes:
-      - name: prod-work
-        hostPath:
-          path: /data/opencode-xieyucheng/work
-          type: DirectoryOrCreate
-      - name: prod-data
-        hostPath:
-          path: /data/opencode-xieyucheng/data
-          type: DirectoryOrCreate
-      - name: entrypoint
-        configMap:
-          name: opencode-entrypoint
-          defaultMode: 493
+        # 41 上 local-path helper 镜像拉不动（docker.io 被墙）→ hostPath 直挂（单机 RWO 等价，kubelet DirectoryOrCreate）。
+        # yingxin 栈保持 PVC（.69 缓存有镜像，不动活数据）。
+        - name: prod-work
+          hostPath: {path: /data/opencode-xieyucheng/work, type: DirectoryOrCreate}
+        - name: prod-data
+          hostPath: {path: /data/opencode-xieyucheng/data, type: DirectoryOrCreate}
+        - name: entrypoint
+          configMap: {name: opencode-entrypoint, defaultMode: 0755}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: opencode
   namespace: opencode-xieyucheng
-  labels: {}
 spec:
-  selector:
-    app: opencode
+  selector: {app: opencode}
   ports:
-  - name: http
-    port: 4097
-    targetPort: 4097
+    - {name: http, port: 4097, targetPort: 4097}
 ---
+# opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP 直达；tailnet ha-a/ha-b 不动）。
+# 外端口 44098：ServiceLB 按 Service 端口占节点 hostPort，hw21/hw41 本机单机版已占 4097，避冲突。
+# 端口登记：team-vpc=44097，xieyucheng-vpc=44098，opencode-vpc=44099；回滚=revert。
 apiVersion: v1
 kind: Service
 metadata:
@@ -226,9 +152,6 @@ metadata:
   namespace: opencode-xieyucheng
 spec:
   type: LoadBalancer
-  selector:
-    app: opencode
+  selector: {app: opencode}
   ports:
-  - name: http
-    port: 44098
-    targetPort: 4097
+    - {name: http, port: 44098, targetPort: 4097}
