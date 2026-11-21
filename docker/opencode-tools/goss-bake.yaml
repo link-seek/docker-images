@@ -63,10 +63,13 @@ command:
       - '缺少邮件配置'
 
   fetch-mail-imap-tls:
+    # goss 默认 10s 会先杀掉；命令内部已限 12s，这里放宽到 30s（外部网络，别误判成回归）
     exec: "timeout 20 python3 -c \"import socket,ssl; s=socket.create_connection(('imap.163.com',993),timeout=12); ss=ssl.create_default_context().wrap_socket(s,server_hostname='imap.163.com'); print('TLS-OK', ss.version()); ss.close()\""
     exit-status: 0
+    timeout: 30000
     stdout:
       - 'TLS-OK'
+
 
   md2html:
     exec: "python3 /usr/local/lib/send-mail/md2html.py"
