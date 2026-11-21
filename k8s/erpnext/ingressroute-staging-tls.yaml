@@ -1,14 +1,13 @@
-# IngressRoute prod（唯一路由：单条 IngressRoute 同管 web(80)/websecure(443)，取代原 Ingress+IngressRoute 双份）。
+# IngressRoute prod（唯一路由：单条 websecure IngressRoute；web(80) 由 Traefik 全局 301→https，不再单独维护 Ingress）。
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: erpnext-staging-tls
   namespace: erpnext
   annotations:
-    route-comment: prod DNS-01 via IngressRoute (single route set for web + websecure)
+    route-comment: prod DNS-01 via IngressRoute (single route; web redirects globally)
 spec:
   entryPoints:
-  - web
   - websecure
   routes:
   - match: Host(`erp.xieyucheng.top`)

@@ -1,4 +1,4 @@
-# litellm prod（3 路由共用一张 staging 证；HTTP Ingress 不动）。
+# litellm prod（3 路由共用一张证；唯一路由，web(80) 由 Traefik 全局 301→https）。
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
