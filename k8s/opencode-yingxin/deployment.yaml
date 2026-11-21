@@ -118,16 +118,16 @@ spec:
   ports:
     - {name: http, port: 4097, targetPort: 4097}
 ---
-# opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP 直达；容器已无 TS 身份，tailnet 走 operator 代理）。
-# 外端口 44099：ServiceLB 按 Service 端口占节点 hostPort，hw21/hw41 本机单机版已占 4097，避冲突。
-# 端口登记：team-vpc=44097，xieyucheng-vpc=44098，opencode-vpc=44099；回滚=revert。
+# opencode-vpc：历史 VPC 内网口（原 k3s ServiceLB，节点 IP 直达）。2026-11-22 退役外部暴露：
+# 无任何 Ingress/IngressRoute/pod 引用、无活跃连接，降级为 ClusterIP（不再占节点 hostPort / 不再暴露节点 IP）。
+# 如后续确认彻底无用可直接删除。
 apiVersion: v1
 kind: Service
 metadata:
   name: opencode-vpc
   namespace: opencode-yingxin
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector: {app: opencode-yingxin}
   ports:
     - {name: http, port: 44099, targetPort: 4097}
