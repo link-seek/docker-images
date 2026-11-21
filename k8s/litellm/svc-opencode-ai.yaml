@@ -1,5 +1,6 @@
 # 上游直透（对标 Caddy handle @goList/@zenList → https://opencode.ai）。
-# Traefik 经 HW 出口直达上游（HW→opencode.ai 已验 200）；网关 pod 出口（OCI 日本）不受影响。
+# 直连上游 443（不经东京中继；中继仅供 litellm 网关自用，因部分模型按来源地区放行）。
+# Traefik 经 HW 出口直连上游（HW→opencode.ai 已验 200）；SNI=opencode.ai 由 ServersTransport 保证。
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,10 +12,10 @@ metadata:
 spec:
   type: ExternalName
   externalName: opencode.ai
-  # 东京 SNI 中继端口（relay 只听 14443；SNI=Host=opencode.ai 不变）。
+  # 直连 443（不再经 relay 的 14443）。
   ports:
     - name: https
-      port: 14443
+      port: 443
       protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1

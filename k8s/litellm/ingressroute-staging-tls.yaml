@@ -15,7 +15,7 @@ spec:
         - name: litellm-go-headers
       services:
         - name: opencode-ai
-          port: 14443
+          port: 443
     - match: Host(`litellm.linkseek.net.cn`) && PathPrefix(`/v1/models`)
       kind: Rule
       middlewares:
@@ -23,7 +23,7 @@ spec:
         - name: litellm-zen-headers
       services:
         - name: opencode-ai
-          port: 14443
+          port: 443
     - match: Host(`litellm.linkseek.net.cn`) && PathPrefix(`/`)
       kind: Rule
       services:
