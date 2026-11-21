@@ -1,0 +1,59 @@
+# 预检 overlay（tools 线，2026-11-20 加）：base = 生产 k8s/opencode-xieyucheng。
+# tools 镜像只有两个生产实例（xieyucheng / yingxin），没有独立的 "opencode" 部署；
+# bake-tools 预检拿 xieyucheng（本仓开发实例）当 base，起在 k3d 里验证同货。
+# 只做三件事，生产目录零改动、看不见本目录：
+#   1) 去 nodeSelector（k3d 没有 41/.69 那种固定节点名）
+#   2) hostPath → emptyDir（预检机没有 /data/opencode-xieyucheng）
+#   3) 删生产 enc Secret（test key 解不开）与 Ingress（k3d 无对应 class/TLS）
+# Secret opencode-xieyucheng-env 由骨架按 preflight-env.conf 现 mint，不在这里声明。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../opencode-xieyucheng
+patches:
+  - target:
+      kind: Secret
+      name: opencode-xieyucheng-env
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: opencode-xieyucheng-env
+        namespace: opencode-xieyucheng
+  - target:
+      kind: Ingress
+      name: opencode
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: opencode
+        namespace: opencode-xieyucheng
+  # browser sidecar 镜像在个人 SWR 命名空间（xieyucheng123），流水线凭证拉不到；
+  # 预检先去掉该容器（case-browser 因而不可跑，tools 线浏览器覆盖暂由 team 线承接）。
+  # 长期解：把 chrome-cjk 镜像镜像到 link-seek 命名空间（或 GHCR 同 digest），再把这条 patch 删掉。
+  - target:
+      kind: Deployment
+      name: opencode
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/1
+  - target:
+      kind: Deployment
+      name: opencode
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/nodeSelector
+      - op: replace
+        path: /spec/template/spec/volumes
+        value:
+          - name: prod-work
+            emptyDir: {}
+          - name: prod-data
+            emptyDir: {}
+          - name: entrypoint
+            configMap:
+              name: opencode-entrypoint
+              defaultMode: 493

@@ -13,3 +13,4 @@ resources:
 - svc-opencode-ai.yaml
 - middleware-litellm-go-headers.yaml
 - middleware-litellm-zen-headers.yaml
+- ingressroute-staging-tls.yaml

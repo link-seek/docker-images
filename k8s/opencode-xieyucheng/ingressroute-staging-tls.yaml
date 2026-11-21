@@ -1,0 +1,20 @@
+# xieyucheng staging（HTTP Ingress 不动）。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: xieyucheng-staging-tls
+  namespace: opencode-xieyucheng
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`opencode.xieyucheng.top`)
+      kind: Rule
+      services:
+        - name: opencode
+          port: 4097
+  tls:
+    certResolver: le-prod
+    domains:
+      - main: opencode.xieyucheng.top
+    secretName: xieyucheng-staging-tls

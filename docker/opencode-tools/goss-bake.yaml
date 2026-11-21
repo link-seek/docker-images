@@ -63,10 +63,43 @@ command:
       - '缺少邮件配置'
 
   fetch-mail-imap-tls:
+    # goss 默认 10s 会先杀掉；命令内部已限 12s，这里放宽到 30s（外部网络，别误判成回归）
     exec: "timeout 20 python3 -c \"import socket,ssl; s=socket.create_connection(('imap.163.com',993),timeout=12); ss=ssl.create_default_context().wrap_socket(s,server_hostname='imap.163.com'); print('TLS-OK', ss.version()); ss.close()\""
     exit-status: 0
+    timeout: 30000
     stdout:
       - 'TLS-OK'
+  tssh:
+    exec: "tssh --help"
+    exit-status: 0
+    stdout:
+      - 'tssh'
+
+  tssh-no-key:
+    exec: "env TSSH_KEY=/tmp/definitely-missing-tssh-key tssh dummyhost -- echo hi"
+    exit-status: 2
+    stderr:
+      - '缺少私钥'
+
+  tssh-dry-run-opts:
+    exec: "ssh-keygen -t ed25519 -N '' -f /tmp/goss-tssh-key -q && TSSH_KEY=/tmp/goss-tssh-key tssh --dry-run somehost -- echo hi"
+    exit-status: 0
+    stdout:
+      - 'BatchMode=yes'
+      - 'PasswordAuthentication=no'
+      - 'IdentitiesOnly=yes'
+      - 'StrictHostKeyChecking=accept-new'
+      - 'ConnectTimeout=10'
+      - '-p 22'
+
+  tssh-dry-run-port:
+    # 自备 key：goss 用例间不共享 /tmp 状态（并行度不可假设）
+    exec: "ssh-keygen -t ed25519 -N '' -f /tmp/goss-tssh-key2 -q && TSSH_KEY=/tmp/goss-tssh-key2 tssh -p 2222 --dry-run somehost -- uptime"
+    exit-status: 0
+    stdout:
+      - '-p 2222'
+
+
 
   md2html:
     exec: "python3 /usr/local/lib/send-mail/md2html.py"
