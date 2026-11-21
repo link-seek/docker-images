@@ -1,0 +1,26 @@
+# 上游直透（对标 Caddy handle @goList/@zenList → https://opencode.ai）。
+# Traefik 经 HW 出口直达上游（HW→opencode.ai 已验 200）；网关 pod 出口（OCI 日本）不受影响。
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-ai
+  namespace: litellm
+  annotations:
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: litellm-opencode-ai@kubernetescrd
+spec:
+  type: ExternalName
+  externalName: opencode.ai
+  # 东京 SNI 中继端口（relay 只听 14443；SNI=Host=opencode.ai 不变）。
+  ports:
+    - name: https
+      port: 14443
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: opencode-ai
+  namespace: litellm
+spec:
+  serverName: opencode.ai

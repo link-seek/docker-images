@@ -1,0 +1,18 @@
+# 公网入口声明（Traefik）：opencode.yingxin.net.cn → 同 ns Service opencode-yingxin:4097。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opencode-yingxin
+  namespace: opencode-yingxin
+spec:
+  rules:
+    - host: opencode.yingxin.net.cn
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opencode-yingxin
+                port:
+                  number: 4097

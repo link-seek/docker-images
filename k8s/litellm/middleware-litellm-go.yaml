@@ -1,0 +1,9 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: litellm-go-rewrite
+  namespace: litellm
+spec:
+  replacePathRegex:
+    regex: ^/go/v1/models(.*)$
+    replacement: /inference/go/v1/models$1

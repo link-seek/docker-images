@@ -1,0 +1,9 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: litellm-zen-rewrite
+  namespace: litellm
+spec:
+  replacePathRegex:
+    regex: ^/v1/models(.*)$
+    replacement: /inference/v1/models$1

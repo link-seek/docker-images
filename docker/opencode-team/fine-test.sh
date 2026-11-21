@@ -7,7 +7,8 @@
 # browserless 取 manifest tag——bootstrap 要求先转正 browserless），本 hook 只做：
 #   1) identity：k3d 里跑的必须是刚打出来的 digest（kubectl 读 deploy image）。
 #   2) E2E：e2e-cases/select-cases.sh 选单（默认全量；E2E_CASES 可 skip/名单强制），逐个跑。
-# TOKEN 用 preflight-env.conf 里写死的 dummy-preflight（模板进仓，同 Secret 两边同值）。
+# TOKEN 用 hook 内写死的 dummy-preflight；browserless 侧同值经 Flux 解密 test enc 进来
+# （k8s/opencode-team-preflight，test age key），两边一致 CDP 才通。生产走真值，此处只验逻辑。
 set -euo pipefail
 
 [ -n "${K8S_DEPLOY:-}" ] || { echo "FAIL: K8S_DEPLOY 为空（骨架 k8s_app 未传）"; exit 1; }
@@ -35,6 +36,14 @@ identity() { # 货对单：跑的必须是刚打出来的 digest
 }
 
 identity
+
+# k3d 预检簇无 SOPS 解密器：kustomization 里的 browserless-env.enc.yaml 会让 sidecar 拿到密文 TOKEN，
+# 与客户端 dummy-preflight 不一致（CDP 401）。先暂停 Flux 防它把密文 Secret 改回去，再覆盖并重启 sidecar。
+flux -n flux-system suspend kustomization "${K8S_DEPLOY}-preflight" >/dev/null 2>&1 || true
+kubectl -n "$K8S_NS" create secret generic browserless-env \
+  --from-literal=BROWSERLESS_TOKEN="$TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n "$K8S_NS" rollout restart deploy/browserless >/dev/null
+kubectl -n "$K8S_NS" rollout status deploy/browserless --timeout=180s
 
 # --- E2E 选单 + 逐个跑 ---
 CASES="$(E2E_CASES="${E2E_CASES:-}" bash "$CASES_DIR/select-cases.sh")"

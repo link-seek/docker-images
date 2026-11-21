@@ -1,0 +1,23 @@
+# IngressRoute staging（Ingress 存不下 LE 证，见官方文档；HTTP 入口不动）。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: yingxin-staging-tls
+  namespace: opencode-yingxin
+  annotations:
+    route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE
+      certs)
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - match: Host(`opencode.yingxin.net.cn`)
+    kind: Rule
+    services:
+    - name: opencode-yingxin
+      port: 4097
+  tls:
+    certResolver: le-prod
+    domains:
+    - main: opencode.yingxin.net.cn
+    secretName: yingxin-staging-tls

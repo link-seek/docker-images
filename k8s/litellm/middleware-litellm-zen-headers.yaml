@@ -1,0 +1,11 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: litellm-zen-headers
+  namespace: litellm
+spec:
+  headers:
+    customRequestHeaders:
+      Host: opencode.ai
+      Authorization: ''
+      X-Api-Key: ''

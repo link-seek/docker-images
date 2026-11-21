@@ -46,7 +46,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
  && opencode --version
 
 # 版本 pin（沿用 tools 验证过的版本）
-ARG GH_VERSION=2.103.3
+ARG GH_VERSION=2.105.0
 ARG AGENT_BROWSER_VERSION=0.41.0
 
 # gh：官方 tarball（Go 静态二进制）

@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-go
+  namespace: litellm
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-go-rewrite@kubernetescrd,litellm-litellm-go-headers@kubernetescrd
+spec:
+  rules:
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /go/v1/models
+        pathType: Prefix
+        backend:
+          service:
+            name: opencode-ai
+            port:
+              number: 14443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-zen
+  namespace: litellm
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: litellm-litellm-zen-rewrite@kubernetescrd,litellm-litellm-zen-headers@kubernetescrd
+spec:
+  rules:
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /v1/models
+        pathType: Prefix
+        backend:
+          service:
+            name: opencode-ai
+            port:
+              number: 14443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-root
+  namespace: litellm
+spec:
+  rules:
+  - host: litellm.linkseek.net.cn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: litellm-gateway
+            port:
+              number: 4000

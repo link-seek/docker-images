@@ -6,3 +6,13 @@ resources:
 - deployment.yaml
 - rbac.yaml
 - opencode-xieyucheng-env.enc.yaml
+- ingress.yaml
+- ingressroute-staging-tls.yaml
+
+# 镜像 digest 单源头：升级/回滚只改这里一行（本目录 deployment.yaml 里是 :pin-required 占位，
+# 绕过 kustomize 直接 apply 会明确 ImagePullBackOff，不会静默跑 latest）。
+# chrome sidecar 仍内联 digest：骨架预检按原始 deployment.yaml 的 'image: .*chrome' 行去 pull，
+# 改占位会让它拉不存在的 tag（要一起收敛需先改骨架，另议）。
+images:
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
+    digest: sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102

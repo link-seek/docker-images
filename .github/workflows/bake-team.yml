@@ -57,6 +57,8 @@ jobs:
       k8s_app: opencode
       k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
       k8s_manifest_path: k8s/opencode-team
+      k8s_preflight_manifest_path: k8s/opencode-team-preflight # 预检 overlay：同机制解密 test 密文，生产路径不动
+      k8s_decrypt_preflight: true # 预检 Flux 开 SOPS 解密（test key；其他线默认关）
       k8s_manifest_ref: main
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team
       k8s_secret_env_file: docker/opencode-team/preflight-env.conf
@@ -76,3 +78,4 @@ jobs:
       ENV_SMTP_PASS: ${{ secrets.PROD_SMTP_PASS }}
       OBS_TEST_AK: ${{ secrets.PROD_HCLOUD_AK }}
       OBS_TEST_SK: ${{ secrets.PROD_HCLOUD_SK }}
+      SOPS_AGE_TEST_KEY: ${{ secrets.SOPS_AGE_TEST_KEY }}

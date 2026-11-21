@@ -60,6 +60,12 @@ owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pa
 - 用户的默认邮箱是 122306789@qq.com：用户说“发给我”又没给地址时直接发这里，不用再问；`MAIL_DEFAULT_TO` 已配好，收件人传空字符串即走默认，如 `send-mail "" "主题" "正文"`。
 - 发前确认收件人正确；缺配置时按报错补 `.env` 后重启容器生效，不要向用户索取密码。
 
+SSH 直连（`tssh` 已烘入镜像，key-only，免 pty 喂密码）：
+
+- `tssh [-i key] [-p port] <host> -- <cmd>`：key 路径 `-i` > `$TSSH_KEY` > `~/.ssh/id_hw21`（容器外挂载，私钥不进镜像）；端口 `-p` > `$TSSH_PORT` > 22。
+- 固定 `BatchMode + PasswordAuthentication=no + StrictHostKeyChecking=accept-new + ConnectTimeout`（默认 10，`TSSH_CONNECT_TIMEOUT` 可调）；无 key 直接报错，不回落密码。
+- 只验包装不断言真连：`tssh --dry-run <host> -- <cmd>` 打印最终 ssh 命令行（goss/e2e 靠它断言）。
+
 邮件读取（`fetch-mail` + 标准库 imaplib 只读，已烘入镜像；`IMAP_*` 缺省回落 `SMTP_*`，163 收发共用同一授权码）：
 
 - 163 配置：`IMAP_HOST=imap.163.com`，`IMAP_PORT=993 SSL`；`IMAP_USER/IMAP_PASS` 不配则自动用 `SMTP_USER/SMTP_PASS`。

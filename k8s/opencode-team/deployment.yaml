@@ -35,15 +35,35 @@ spec:
         kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
       imagePullSecrets:
         - name: swr-pull
+      initContainers:
+        # /root 挂 emptyDir 后需把镜像内烘好的 /root/.config（opencode 配置）、.agents 等 seed 进去。
+        # 与主容器同镜像；预检的 kustomize images 注入会同时覆盖 init 容器 digest。
+        - name: root-home-seed
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:747e167e5015f2b1b0548c657442d5f735ad2e513957994d59b8368de35332c5
+          command: ["/bin/sh", "-c", "cp -a /root/. /seed/"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - {name: root-home, mountPath: /seed}
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:10a2a229759f4928a9083effda70fb4a387ea5229922fa8b687271dc3197ad72
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:747e167e5015f2b1b0548c657442d5f735ad2e513957994d59b8368de35332c5
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
+          securityContext:
+            # A 档：根文件系统只读（镜像/系统文件不可改）；可写仅 /workspace、数据卷、/tmp。
+            # 注意：仅防“写”，不防“读”，也不是跨用户隔离（hostPath 仍共用）。
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
           ports:
             - {name: http, containerPort: 4097}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
+            # 只读根：/root 由可写 emptyDir 承接（initContainer seed 镜像内 .config），系统目录仍只读。
+            - {name: TMPDIR, value: /tmp}
             - {name: LITELLM_BASE_URL, value: "http://litellm-gateway.litellm.svc.cluster.local:4000"}
             - {name: SSH_TARGETS, value: "mesh-hw-21 mesh-hw-41"}
             - {name: SMTP_HOST, value: smtp.163.com}
@@ -85,7 +105,9 @@ spec:
           volumeMounts:
             - {name: prod-work, mountPath: /workspace}
             - {name: prod-data, mountPath: /root/.local/share/opencode}
+            - {name: root-home, mountPath: /root}
             - {name: entrypoint, mountPath: /entrypoint}
+            - {name: tmp, mountPath: /tmp}
           readinessProbe:
             httpGet: {path: /, port: 4097}
             initialDelaySeconds: 90
@@ -109,6 +131,11 @@ spec:
           hostPath: {path: /var/lib/opencode-team/data, type: DirectoryOrCreate}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 0755}
+        # 只读根文件系统下的可写家目录（seed 自镜像 /root/.）+ 临时区。
+        - name: root-home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 # browserless 独立 Pod（与 opencode 分开部署，经 Service 发现）。
 # /dev/shm 必须 2g（Docker 默认 64M 会崩 Chrome；k8s 用 Memory emptyDir 挂）。
