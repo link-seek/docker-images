@@ -1,0 +1,74 @@
+name: flux-artifact
+
+# 把 docker-images 仓打成 Flux OCI 制品推到 SWR（Gitless GitOps 的投递端）。
+# 集群用 OCIRepository 从 SWR 拉，避免 Flux 直连 github.com（国内 DNS 污染/TLS 超时）。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flux-artifact
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REG: swr.cn-north-9.myhuaweicloud.com/link-seek
+      DEST: swr.cn-north-9.myhuaweicloud.com/link-seek/docker-images-manifests
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      AK: ${{ secrets.PROD_HCLOUD_AK }}
+      SK: ${{ secrets.PROD_HCLOUD_SK }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install flux CLI
+        run: curl -fsSL https://fluxcd.io/install.sh | sudo bash
+
+      - name: login + push OCI artifact
+        run: |
+          set -euo pipefail
+          echo "$SWR_LOGIN_PASS" | docker login "$REG" -u "$SWR_LOGIN_USER" --password-stdin
+          REV="main@sha1:$(git rev-parse HEAD)"
+          flux push artifact "oci://$DEST:latest" \
+            --path=. \
+            --source="$(git config --get remote.origin.url)" \
+            --revision="$REV" \
+            --ignore-paths '.git/**,agent-out/**'
+          docker logout "$REG" >/dev/null 2>&1 || true
+
+      - name: make SWR repo public (cluster pulls anonymously)
+        if: always()
+        env:
+          AK: ${{ secrets.PROD_HCLOUD_AK }}
+          SK: ${{ secrets.PROD_HCLOUD_SK }}
+        run: |
+          python3 - <<'PY'
+          import os,hashlib,hmac,datetime,json,urllib.request,urllib.error
+          AK=os.environ["AK"].strip(); SK=os.environ["SK"].strip()
+          HOST="swr-api.cn-north-9.myhuaweicloud.com"
+          BASE="/v2/manage/namespaces/link-seek/repos/docker-images-manifests"
+          def sign(method,canon,req,body):
+              t=datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+              ph=hashlib.sha256(body).hexdigest()
+              ch=f"host:{HOST}\nx-sdk-date:{t}\n"; sh="host;x-sdk-date"
+              cr=f"{method}\n{canon}\n\n{ch}\n{sh}\n{ph}"
+              sts=f"SDK-HMAC-SHA256\n{t}\n{hashlib.sha256(cr.encode()).hexdigest()}"
+              sig=hmac.new(SK.encode(),sts.encode(),hashlib.sha256).hexdigest()
+              hdr={"Host":HOST,"X-Sdk-Date":t,"Content-Type":"application/json",
+                   "Authorization":f"SDK-HMAC-SHA256 Access={AK}, SignedHeaders={sh}, Signature={sig}"}
+              return hdr,req
+          body=json.dumps({"is_public":True}).encode()
+          h,p=sign("PATCH",BASE+"/",BASE,body)
+          try:
+              r=urllib.request.urlopen(urllib.request.Request("https://"+HOST+p,data=body,method="PATCH",headers=h),timeout=30)
+              print("make-public:",r.status)
+          except urllib.error.HTTPError as e:
+              print("make-public HTTP",e.code,e.read().decode()[:200])
+          PY
