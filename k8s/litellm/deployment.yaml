@@ -37,15 +37,11 @@ spec:
             - {name: http, containerPort: 4000}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
-            - {name: TS_HOSTNAME, value: litellm-gateway-k3s}
             - {name: DISABLE_ADMIN_UI, value: "True"}
             - {name: RULES_FILE, value: /app/guard-rules.json}
-            - name: TS_JOIN_KEY
-              valueFrom: {secretKeyRef: {name: litellm-env, key: TS_JOIN_KEY}}
             - name: LITELLM_MASTER_KEY
               valueFrom: {secretKeyRef: {name: litellm-env, key: LITELLM_MASTER_KEY}}
           volumeMounts:
-            - {name: ts-state, mountPath: /var/lib/tailscale}
             - {name: entrypoint, mountPath: /entrypoint}
             - {name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true}
           readinessProbe:
@@ -62,8 +58,6 @@ spec:
             requests: {cpu: 200m, memory: 512Mi}
             limits: {cpu: 1000m, memory: 2Gi}
       volumes:
-        - name: ts-state
-          persistentVolumeClaim: {claimName: ts-state}
         - name: entrypoint
           configMap: {name: litellm-entrypoint, defaultMode: 0755}
         - name: config
