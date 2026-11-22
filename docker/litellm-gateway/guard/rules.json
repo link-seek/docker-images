@@ -1,0 +1,77 @@
+[
+  {
+    "name": "tailscale-auth",
+    "pattern": "tskey-auth-[A-Za-z0-9_\\-]+",
+    "tag": "TSKEY"
+  },
+  {
+    "name": "tailscale-api",
+    "pattern": "tskey-api-[A-Za-z0-9_\\-]+",
+    "tag": "TSKEY"
+  },
+  {
+    "name": "github-pat",
+    "pattern": "ghp_[A-Za-z0-9]+",
+    "tag": "GHP"
+  },
+  {
+    "name": "generic-sk",
+    "pattern": "sk-[A-Za-z0-9\\-_]{16,}",
+    "tag": "SK"
+  },
+  {
+    "name": "aws-ak",
+    "pattern": "AKIA[0-9A-Z]{16}",
+    "tag": "AWS"
+  },
+  {
+    "name": "aliyun-ak",
+    "pattern": "LTAI[A-Za-z0-9]{12,}",
+    "tag": "ALI"
+  },
+  {
+    "name": "pem-block",
+    "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----",
+    "tag": "PEM"
+  },
+  {
+    "name": "oci-fingerprint",
+    "pattern": "\\b[0-9a-f]{2}(:[0-9a-f]{2}){15}\\b",
+    "tag": "OCI"
+  },
+  {
+    "name": "tailscale-tskls",
+    "pattern": "tskls-[A-Za-z0-9_\\-]{8,}",
+    "tag": "TSKEY"
+  },
+  {
+    "name": "opencode-oc-sk",
+    "pattern": "oc_sk_[A-Za-z0-9_\\-]+",
+    "tag": "GO"
+  },
+  {
+    "name": "hex48-secret",
+    "pattern": "(?<![A-Fa-f0-9])[A-Fa-f0-9]{48}(?![A-Fa-f0-9])",
+    "tag": "HEX"
+  },
+  {
+    "name": "huggingface",
+    "pattern": "hf_[A-Za-z0-9]{20,}",
+    "tag": "HF"
+  },
+  {
+    "name": "github-fine-grained",
+    "pattern": "github_pat_[A-Za-z0-9_]{20,}",
+    "tag": "GITHUB"
+  },
+  {
+    "name": "oci-resource",
+    "pattern": "ocid1\\.[a-z0-9.]+\\.[A-Za-z0-9_.-]{16,}",
+    "tag": "OCI"
+  },
+  {
+    "name": "cloud-keys",
+    "pattern": "(?i)(cli-access-key|cli-secret-key|access-key-id|access-key-secret|LMNR_PROJECT_API_KEY|CLOUDFLARE_API_TOKEN)\\s*[:=]\\s*\\S+",
+    "tag": "CLOUDKEY"
+  }
+]

@@ -1,0 +1,71 @@
+#!/bin/bash
+# stacks/litellm-gateway/healthcheck — 网关探针（bake 进镜像，部署线盲调）。
+# 用法：healthcheck --base-url URL --api-key KEY --level boot|full [--container NAME]
+#   boot：轻链路（容器在跑＋服务端有 HTTP 应答，不判业务）。
+#   full：boot＋/v1/models 200 且非空＋denied 名单在位且合法。
+# 约束：只读探针，不写任何状态；超时 fail-closed。
+set -uo pipefail
+
+BASE_URL=""
+API_KEY=""
+LEVEL="boot"
+CONTAINER=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base-url)  BASE_URL="${2:?}"; shift 2 ;;
+    --api-key)   API_KEY="${2:?}"; shift 2 ;;
+    --level)     LEVEL="${2:?}"; shift 2 ;;
+    --container) CONTAINER="${2:?}"; shift 2 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$BASE_URL" ] || { echo "FAIL: --base-url required" >&2; exit 2; }
+[ "$LEVEL" = "boot" ] || [ "$LEVEL" = "full" ] || { echo "FAIL: --level must be boot|full" >&2; exit 2; }
+
+if [ -n "$CONTAINER" ] && command -v docker >/dev/null 2>&1; then
+  if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    echo "FAIL: container $CONTAINER not found" >&2
+    exit 1
+  fi
+  if [ "$(docker inspect "$CONTAINER" --format '{{.State.Running}}')" != "true" ]; then
+    echo "FAIL: container $CONTAINER not running" >&2
+    exit 1
+  fi
+  echo "container OK: $CONTAINER running"
+fi
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+# boot：liveness 优先，缺端点时退到 /v1/models（有 HTTP 应答即活）。
+LIVE="$(curl -s -m 15 -o "$TMP/live.json" -w '%{http_code}' \
+  -H "Authorization: Bearer $API_KEY" "$BASE_URL/health/liveliness" || echo 000)"
+if [ "$LIVE" = "200" ]; then
+  echo "liveness OK: $LIVE"
+else
+  MCODE="$(curl -s -m 15 -o "$TMP/models.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $API_KEY" "$BASE_URL/v1/models" || echo 000)"
+  case "$MCODE" in
+    200|401|403) echo "alive OK: /v1/models http=$MCODE (liveness http=$LIVE)" ;;
+    *) echo "FAIL: no HTTP answer (liveness=$LIVE models=$MCODE)" >&2; exit 1 ;;
+  esac
+fi
+
+if [ "$LEVEL" = "full" ]; then
+  MCODE="$(curl -s -m 20 -o "$TMP/models.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $API_KEY" "$BASE_URL/v1/models" || echo 000)"
+  [ "$MCODE" = "200" ] || { echo "FAIL: /v1/models http=$MCODE" >&2; exit 1; }
+  N="$(python3 -c "import json; d=json.load(open('$TMP/models.json')); ms=d.get('data',[]); print(len(ms))" 2>/dev/null || echo 0)"
+  [ "$N" -gt 0 ] || { echo "FAIL: /v1/models empty" >&2; exit 1; }
+  echo "models OK: count=$N"
+  DENIED="$(dirname "$0")/models-denied.json"
+  [ -f "$DENIED" ] || DENIED="$(dirname "$0")/guard/models-denied.json"
+  [ -f "$DENIED" ] || DENIED="/app/models-denied.json"
+  [ -f "$DENIED" ] || { echo "FAIL: models-denied.json missing" >&2; exit 1; }
+  DN="$(python3 -c "import json; print(len(json.load(open('$DENIED'))))" 2>/dev/null || echo 0)"
+  [ "$DN" -gt 0 ] || { echo "FAIL: models-denied.json invalid/empty" >&2; exit 1; }
+  echo "denied OK: count=$DN"
+fi
+
+echo "HEALTH OK (level=$LEVEL)"

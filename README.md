@@ -20,7 +20,7 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 * 跟随：周一巡检已关，上游更新靠人发现后手点 dispatch 传版。
 * 审计：bake run 日志记 tag/digest（90 天）；仓里不记版本（无 sync-back）。
 * 测试：dgoss 成品自检＋双 runner 预检＋细测全绿才转正式版。
-* 部署侧（compose/`.env`）在 infra 仓，本仓只管构建。
+* 部署：应用清单同在本仓 `k8s/opencode-*`，集群 Flux 对账上线（旧 infra compose/deliver 已退役）。
 
 ## 手动触发
 
@@ -66,9 +66,9 @@ ghcr.io/browserless/chromium:<tag> + fonts-noto-cjk/emoji → ghcr.io/link-seek/
 3. `k8s/opencode-team/deployment.yaml` 改 digest pin 发 PR（manifest 跟镜像走，同一仓同一 PR）。
 4. infra 仓加 `clusters/k3s/apps-opencode-team.yaml`（Flux 收编）+ pipeline mint `opencode-team-env` Secret → 对账上线试用。
 
-## 分工：商家 vs 快递（2026-10-18，与 infra 仓 README 同源）
+## 分工：商家 vs 配送（2026-11-23 更新：应用配送已收归本仓 + Flux）
 
-- **商家（本仓 `bake-*`）对产品负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号。
-- **快递（`link-seek/infra` 的 `deliver-*`）只对运输负责**：compose pin digest + env 引用 → `up` 即部署，无业务逻辑，不碰内容。
+- **商家（本仓 `bake-*` + `k8s/`）对产品负责**：业务逻辑（guard、passthrough、auth、重试、默认配置、插件 bake）全部进镜像，digest 即行为版本号；应用 k8s 清单也同在本仓 `k8s/<app>`。
+- **配送 = Flux 拉本仓制品**：集群 Flux（`clusters/k3s/git-docker-images.yaml`）从 SWR 拉本仓 `flux-artifact.yml` 打出的 OCI 制品，按 `k8s/<app>` 对账上线；**infra 仓不再做应用配送（旧 `deliver-*` 已退役）**，只留底座。
 - **门（`secret-hygiene` / `render-check` 等）只验货**：核密钥卫生与键集合，不碰值。
 - **测试对象是镜像**：CI 拉 digest pin 跑 e2e；**回滚 = 换 digest 发 PR**，git 历史即备份。

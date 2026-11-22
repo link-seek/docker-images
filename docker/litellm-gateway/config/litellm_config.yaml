@@ -1,0 +1,25 @@
+# litellm_config.yaml — 透明代理模式
+# custom_auth 接受任意 key（官方键名；user_custom_auth 无人读取），passthrough_key callback 把客户端 key 传给上游
+# model_list 只做路由（api_key 是 dummy，会被 callback 覆盖）
+general_settings:
+  drop_params: true
+  forward_client_headers_to_llm_api: true
+  dangerously_permit_weak_or_unset_master_key: true
+  custom_auth: always_allow_auth.always_allow
+litellm_settings:
+  request_timeout: 120
+  num_retries: 2
+  drop_params: true
+  callbacks: passthrough_key.passthrough_callback
+guardrails:
+- guardrail_name: vault
+  litellm_params:
+    guardrail: vault_guard.SecretVaultGuardrail
+    mode: [pre_call, post_call]
+    default_on: true
+model_list:
+  - model_name: "*"
+    litellm_params:
+      model: openai/*
+      api_base: https://opencode.ai/zen/go/v1
+      api_key: sk-dummy-overridden-by-callback
