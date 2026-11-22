@@ -9,7 +9,7 @@ metadata:
   labels:
     app: opencode-yingxin
   annotations:
-    reloader.stakater.com/auto: "true" # 主 Secret 转 SOPS：Flux 更新 Secret 后自动重载（与 pilot 同机制）
+    reloader.stakater.com/auto: "true" # 主 Secret 走 Infisical Operator 同步：Secret 更新后自动重载
 spec:
   replicas: 1
   strategy:
@@ -54,7 +54,7 @@ spec:
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
             - {name: BROWSER_CDP_URL, value: "http://127.0.0.1:9222"}
             # LITELLM_API_KEY 是 opencode 认的变量名，值须为上游认可的 key（=OPENCODE_API_KEY 的值；网关透传，completions 路上游验签）。
-    # 命名易误解为网关的 key，实为 opencode 发出去鉴权用的；真值走 SOPS，改名随各 app 迁移 SOPS 时一并做。
+    # 命名易误解为网关的 key，实为 opencode 发出去鉴权用的；真值走 Infisical，改名随各 app 迁移时一并做。
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-yingxin-env, key: LITELLM_API_KEY}}
             - name: GH_TOKEN

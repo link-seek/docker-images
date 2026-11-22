@@ -14,7 +14,7 @@ metadata:
   labels:
     app: opencode-team
   annotations:
-    reloader.stakater.com/auto: "true" # SOPS 切换：Secret 更新后自动重载
+    reloader.stakater.com/auto: "true" # Secret 走 Infisical Operator 同步：更新后自动重载
 spec:
   replicas: 1
   strategy:

@@ -1,5 +1,5 @@
 name: bake-reloader
-# 薄调用：stakater/reloader 原样重打（SOPS 终局的自动 rollout 执行器）。
+# 薄调用：stakater/reloader 原样重打（Secret 变更自动 rollout 执行器）。
 # 上游已测，本线只 build→转正：k8s_app/infra_stack_dir 留空跳双预检，hook/goss 留空。
 # 版本：reloader_tag dispatch 传入（默认 v1.4.24）；转正以 run 日志 digest 为准，下游 manifests pin digest。
 
