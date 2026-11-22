@@ -28,9 +28,9 @@ USER root
 # guard + 配置 bake 进 /app（与生产 compose 挂载路径一致，行为一致）：
 # config/litellm_config.yaml（透明代理：custom_auth 全放行＋passthrough callback；官方键名 custom_auth，user_custom_auth 无人读取）
 # guard/*.py + guard/*.json（vault guard 黑名单规则）
-COPY litellm-gateway/config/litellm_config.yaml /app/config.yaml
-COPY litellm-gateway/guard/ /app/
-COPY litellm-gateway/healthcheck /app/healthcheck
+COPY docker/litellm-gateway/config/litellm_config.yaml /app/config.yaml
+COPY docker/litellm-gateway/guard/ /app/
+COPY docker/litellm-gateway/healthcheck /app/healthcheck
 # 启动校验：config 合法 + guard 模块可 import（构建期拦住，不是运行时炸）
 RUN python3 -c "import yaml; d=yaml.safe_load(open('/app/config.yaml')); print('models:', len(d['model_list'])); assert 'callbacks' in d.get('litellm_settings', {}); g=d.get('general_settings', {}); assert g.get('custom_auth')=='always_allow_auth.always_allow', 'custom_auth hook 缺失'; assert 'user_custom_auth' not in g, 'user_custom_auth 是无人读取的错键名'" \
  && python3 -c "import ast; [ast.parse(open(f'/app/{m}.py').read()) for m in ('always_allow_auth','passthrough_key','vault_guard')]; print('guard syntax OK')" \

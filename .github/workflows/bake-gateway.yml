@@ -21,7 +21,6 @@ on:
     paths:
       - docker/litellm-gateway/Dockerfile
       - k8s/litellm/**
-      - litellm-gateway/**
       - docker/litellm-gateway/**
       - .github/workflows/bake-gateway.yml
       - .github/workflows/bake-stack.yml
@@ -56,12 +55,6 @@ jobs:
       k8s_namespace: litellm
       fine_test_hook: docker/litellm-gateway/fine-test.sh
       e2e_cases: ${{ inputs.e2e_cases }}
-      sync_from_repo: link-seek/infra # 过渡：正本迁回商家后删
-      sync_paths: |
-        stacks/litellm-gateway/config
-        stacks/litellm-gateway/guard
-        stacks/litellm-gateway/healthcheck
-      sync_dest: litellm-gateway
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
