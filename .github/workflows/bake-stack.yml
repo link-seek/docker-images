@@ -34,8 +34,7 @@
 #                   空=走老 img-preflight（DEPRECATED）。
 #   k8s_manifest_repo  manifest 所在仓（如 link-seek/infra，过渡用）；空=本仓。
 #   k8s_manifest_path  manifest 目录（如 k8s/opencode）。
-#   k8s_preflight_manifest_path  预检 overlay 目录（默认回落 manifest；team 用 preflight overlay）。
-#   k8s_decrypt_preflight  预检 Flux 开 SOPS 解密（默认 false；开时需 SOPS_AGE_TEST_KEY，只解 test 密文）。
+#   k8s_preflight_manifest_path  预检 overlay 目录（默认回落 manifest；如 tools/team 线用 preflight overlay）。
 #   k8s_secret_env_file  Secret 模板（env 文件，__LITELLM_API_KEY__/__SMTP_PASS__ 占位由 secrets 注入）。
 #   k8s_secret_name Secret 名（如 opencode-env）；k8s_namespace 命名空间（如 opencode）。
 #   k8s_manifest_ref  跨仓时 manifest 分支（默认 main；同仓时忽略，用当前分支/Commit）。
@@ -196,11 +195,6 @@ on:
         required: false
         type: string
         default: ""
-      k8s_decrypt_preflight:
-        description: "预检 Flux 开 SOPS 解密（需 SOPS_AGE_TEST_KEY；默认 false，其他线行为不变）"
-        required: false
-        type: boolean
-        default: false
       k8s_secret_env_file:
         required: false
         type: string
@@ -251,9 +245,6 @@ on:
       OBS_TEST_AK:
         required: false
       OBS_TEST_SK:
-        required: false
-      SOPS_AGE_TEST_KEY:
-        description: "预检 test age 私钥（k3d flux-system/sops-age；只守 test 密文，默认空=不解密）"
         required: false
 
 permissions:
@@ -659,7 +650,6 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SMTP_PASS: ${{ secrets.ENV_SMTP_PASS }}
-          SOPS_AGE_TEST_KEY: ${{ secrets.SOPS_AGE_TEST_KEY }}
           OCI_U: ${{ secrets.OCI_USER_OCID }}
           OCI_FP: ${{ secrets.OCI_FINGERPRINT }}
           OCI_T: ${{ secrets.OCI_TENANCY_OCID }}
@@ -682,16 +672,6 @@ jobs:
           fi
           PREFLIGHT_REL="${PREFLIGHT_MANIFEST#k8s-src/}"
           [ -n "$PREFLIGHT_REL" ] || { echo "FAIL: 预检路径为空"; exit 1; }
-          # 预检 SOPS 解密（默认关；开时 Flux 走 sops-age 解密 test enc，生产解密路径不变）
-          DECRYPT_ON="false"
-          if [ "${{ inputs.k8s_decrypt_preflight }}" = "true" ]; then
-            [ -n "${SOPS_AGE_TEST_KEY:-}" ] || { echo "FAIL: k8s_decrypt_preflight 需要 SOPS_AGE_TEST_KEY"; exit 1; }
-            printf '%s' "$SOPS_AGE_TEST_KEY" | grep -q "^AGE-SECRET-KEY-" || { echo "FAIL: SOPS_AGE_TEST_KEY 格式不对（应为 AGE-SECRET-KEY- 开头）"; exit 1; }
-            kubectl -n flux-system create secret generic sops-age \
-              --from-literal=age.agekey="$SOPS_AGE_TEST_KEY" --dry-run=client -o yaml | kubectl apply -f -
-            DECRYPT_ON="true"
-            echo "DECRYPT-PREFLIGHT: Flux SOPS 解密已开（test key）"
-          fi
           [ -n "${{ inputs.k8s_image_names }}" ] || { echo "FAIL: k8s_image_names 未传"; exit 1; }
           # 镜像先 import 进簇（digest 对单，簇内免 pull）
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
@@ -773,9 +753,6 @@ jobs:
             path: ./$PREFLIGHT_REL
             prune: true
           EOF
-          if [ "$DECRYPT_ON" = "true" ]; then
-            printf '  decryption:\n    provider: sops\n    secretRef:\n      name: sops-age\n' >> /tmp/preflight-ks.yaml
-          fi
           cat >> /tmp/preflight-ks.yaml <<EOF
             wait: true
             timeout: 5m
