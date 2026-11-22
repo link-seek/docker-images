@@ -1,5 +1,5 @@
 # k8s/litellm — 网关 k3s 版（翻译自 stacks/litellm-gateway/compose.yml）。
-# 无状态：只有 ts-state 卷；config/guard 全 bake 进镜像（digest 即行为版本）。
+# 无状态：config/guard 全 bake 进镜像（digest 即行为版本）；不挂任何 PVC。
 # 灰度期 hostname=litellm-gateway-k3s（不抢 HW21 正式名）；Caddy 双挂加权。
 apiVersion: apps/v1
 kind: Deployment

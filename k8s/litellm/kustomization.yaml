@@ -4,7 +4,6 @@ resources:
 - namespace.yaml
 - entrypoint.yaml
 - litellm-config.yaml
-- pvc.yaml
 - deployment.yaml
 - service.yaml
 - middleware-litellm-go.yaml
