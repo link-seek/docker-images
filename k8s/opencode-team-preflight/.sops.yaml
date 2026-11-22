@@ -1,9 +1,0 @@
-# SOPS 加密规则：预检 test 密文目录，dummy 值，test age key 加密。
-# sops 按离目标文件最近的 .sops.yaml 选 key：本目录 *.enc.yaml 走 test key，
-# 生产目录（k8s/opencode-team/.sops.yaml）不受影响。
-# 私钥在 dimgs repo Secrets（SOPS_AGE_TEST_KEY），只守 test 值；生产 key 在此目录无 recipient。
-# 手工加密走 core（infra team-preflight-sops-reencrypt），本地 sops 会按本文件选 key。
-creation_rules:
-  - path_regex: .*\.enc\.yaml$
-    age: age167s7vc9ctur6vnfxkdg3yzrrwv3ske245q77v6dlzqf9tu5g8d5svj53mh
-    encrypted_regex: ^(data|stringData)$
