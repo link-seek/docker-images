@@ -57,7 +57,7 @@ Actions → bake-od → Run workflow，必填 `od_tag` / `opencode_tag`（combo 
 
 ## opencode-tools（glibc 线）
 
-第二条流水线：`docker/opencode-tools/Dockerfile` + `bake-tools.yml` + `test-memory.yml`。
+第二条流水线：`docker/opencode-tools/Dockerfile` + `bake-tools.yml`。
 
 ```text
 opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
