@@ -1,63 +1,10 @@
 # docker-images
 
-自用派生镜像的构建与发布。第一条流水线：OpenDesign（含固定版本 OpenCode CLI）。
-
-## 镜像
-
-| 镜像 | 说明 |
-| --- | --- |
-| `ghcr.io/link-seek/opendesign:<od>-oc<oc>`（+ `latest`）| 官方 `ghcr.io/nexu-io/od` + 固定版 `opencode` 二进制 + `--dir` shim，开箱即用，不再挂宿主机 CLI |
-| `swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign`（同 tag）| 国内加速镜像（SWR 华北九区组织数配额满，暂用个人命名空间） |
-
-## 为什么 OpenCode 版本要对死
-
-OpenDesign 调 CLI 参数是按版本写死的（如 `--dir`、`--pure`），新版 opencode 会直接报错
-（`Unrecognized flag: --pure`，`--dir` 靠 shim 硬转）。所以 OD / opencode 版本必须成对升级。
-`docker/opendesign/Dockerfile` 的 ARG 默认值（当前 `2.0.6` 配 `OD 0.24.1`）只给本地构建兜底，
-CI 不读默认值：版本全由手动 dispatch 必填传入（周一巡检已关，审计靠 run 日志）。
-
-升级 opencode 的唯一入口：手动 `workflow_dispatch` 同时传 `od_tag` / `opencode_tag`，并先在测试容器里确认
-daemon 日志 `test:agent ... ok` 再切生产。
-
-## 本地用法（HW21）
-
-```yaml
-# compose.yml：image 换掉；opencode 的 bind mount 已删（CLI 烘进镜像了）；
-# home 卷保留；LITELLM_* 走 .env（600 权限，不进仓库）
-services:
-  opendesign:
-    image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opendesign:0.24.1-oc2.0.6
-    env_file:
-      - /root/opendesign/.env   # LITELLM_BASE_URL=http://100.91.222.51:4000（容器内 host.docker.internal 不解析）+ LITELLM_API_KEY
-    volumes:
-      - od-data:/app/.od
-      - /root/opendesign/home:/home/open-design
-```
-
-说明：
-- 镜像里 `OPENCODE_CONFIG=/app/opencode/opencode.json`（默认 `opencode-go/muse-spark-1.3-contributor`，
-  内容镜像自 `xieyucheng123/opencode` 的 `docker/opendesign/opencode.jsonc`，那边改了这边同步改）。
-  放在 `/home/open-design` 之外是因为该目录会被宿主机 home 挂载遮住。
-- OD 选 Default（不传 `-m`）→ 走 jsonc 默认 muse-spark；OD 显式选模型（传 `-m`）→ 走网关对应模型。
-  注意网关侧各模型协议不同（如 muse-spark 只支持 responses，走 OD 传 `-m` 的 chat 路径会 400），
-  换默认模型前先用 `docker exec <c> opencode run` 验证。
-
-## 手动触发
-
-Actions → bake-od → Run workflow，必填 `od_tag` / `opencode_tag`（combo 自动组装为 `<od>-oc<opencode>`）。
-周一巡检已关，也没有 `repository_dispatch`；上游更新靠人发现后手点。main 上的 push 触发保留占位，
-但版本必须手传，空参数跳过（不拿 Dockerfile 旧默认值覆盖 `latest`）。
-
-* 行为门：构建后 `docker/opendesign/fine-test.sh` 先核 SWR 候选 pin 可拉取，再原样跑
-  `docker/opendesign/e2e.sh`（GHCR 同版存活 → litellm 免费档 byok 后端 →
-  建 project→run→轮询断言：单聊/切模型/多轮/免费档）。
-* 放行：细测绿才把 `ci-<run>` temp digest 转正式 tag/latest；红则只留临时 tag，不推 `latest`/正式 tag。
-* 不做 sync-back：仓里不记版本，审计看 run 日志（bake-stack 共用骨架）。
-* 产品行为门在商家侧闭环；infra 快递侧只剩运单 schema + 送达探针（见 #37）。
+自用派生镜像的构建与发布（opencode tools/team 线、browserless、litellm-gateway、erpnext、reloader）。
 
 ## opencode-tools（glibc 线）
 
-第二条流水线：`docker/opencode-tools/Dockerfile` + `bake-tools.yml`。
+第一条流水线：`docker/opencode-tools/Dockerfile` + `bake-tools.yml`。
 
 ```text
 opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制，glibc）
@@ -87,7 +34,7 @@ Actions → bake-tools → Run workflow，必填 `opencode_tag` / `opencode_mem_
 
 ## opencode-team（部门共用精简线）
 
-第三条流水线：`docker/opencode-team/Dockerfile` + `bake-team.yml` + `k8s/opencode-team/`。
+第二条流水线：`docker/opencode-team/Dockerfile` + `bake-team.yml` + `k8s/opencode-team/`。
 
 ```text
 opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser + mem插件 + 邮件三件套
@@ -102,7 +49,7 @@ opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser +
 
 ## browserless-chrome-cjk（远程浏览器，独立 Pod）
 
-第四条流水线：`docker/browserless-cjk/Dockerfile` + `bake-browserless-cjk.yml`。
+第三条流水线：`docker/browserless-cjk/Dockerfile` + `bake-browserless-cjk.yml`。
 
 ```text
 ghcr.io/browserless/chromium:<tag> + fonts-noto-cjk/emoji → ghcr.io/link-seek/browserless-chrome-cjk:<tag>
