@@ -39,6 +39,7 @@ jobs:
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/litellm-gateway
       tag_mode: date-sha
       force_retag: ${{ inputs.force_retag }}
+      layer_size_limit_mb: "1200" # gateway 底座 litellm 自带 ~866MB .venv 继承层，默认 500 门不适用（该层 SWR 已在，不重复上传）
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       k8s_app: litellm-gateway
