@@ -31,11 +31,6 @@ jobs:
       - name: install flux CLI
         run: curl -fsSL https://fluxcd.io/install.sh | sudo bash
 
-      - name: install skopeo (digest 读取)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq skopeo
-
       - name: login + push OCI artifact
         run: |
           set -euo pipefail
@@ -49,18 +44,28 @@ jobs:
             --revision="$REV" \
             --ignore-paths '.git/**,agent-out/**,docker/**,.github/**,images/**,scripts/**,docs/**,**/*.md,opencode.json,.opencode/**'
           # 不可变发布 tag：同 tag 不允许换 digest。
+          digest() { # $1=repo $2=tag -> manifest digest (registry 口径，非 artifact 存储摘要)
+            local repo="$1" tag="$2" host="swr.cn-north-9.myhuaweicloud.com" ns="link-seek" tok
+            tok="$(curl -s "https://$host/swr/auth/v2/registry/auth/?scope=repository:$ns/$repo:pull&service=dockyard" \
+              | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')"
+            curl -s -o /dev/null -D - -H "Authorization: Bearer $tok" \
+              -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json" \
+              "https://$host/v2/$ns/$repo/manifests/$tag" \
+              | awk 'tolower($1)=="docker-content-digest:"{print $2}' | tr -d '\r'
+          }
+          REPO="docker-images-manifests"
           if flux tag artifact "oci://$DEST:latest" --tag "$TAG" 2>/tmp/tag.err; then
             echo "tagged immutable: $TAG"
           else
             echo "tag $TAG exists; verifying digest"
-            EXISTING="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:$TAG" || true)"
-            CURRENT="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:latest")"
+            EXISTING="$(digest "$REPO" "$TAG")"
+            CURRENT="$(digest "$REPO" "latest")"
             if [ -z "$EXISTING" ] || [ "$EXISTING" != "$CURRENT" ]; then
               echo "FATAL: immutable tag $TAG points to a different digest ($EXISTING != $CURRENT)"; cat /tmp/tag.err || true; exit 1
             fi
             echo "tag $TAG unchanged ($CURRENT)"
           fi
-          DIGEST="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:$TAG")"
+          DIGEST="$(digest "$REPO" "$TAG")"
           test -n "$DIGEST"
           {
             echo "### release"
