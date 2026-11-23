@@ -89,6 +89,11 @@ on:
         required: false
         type: boolean
         default: false
+      cache_to_ghcr:
+        description: "用 buildx 把构建层缓存存到 GHCR（<ghcr_image>:buildcache，公开镜像免费），加速后续构建；默认 false 走普通 docker build"
+        required: false
+        type: boolean
+        default: false
       upstream_repo:
         required: false
         type: string
@@ -348,7 +353,16 @@ jobs:
             [ -n "$line" ] || continue
             BUILD_ARGS+=(--build-arg "$line")
           done <<< "$BUILD_ARGS_IN"
-          docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
+          if [ "${{ inputs.cache_to_ghcr }}" = "true" ]; then
+            echo "build cache: GHCR registry (${GHCR_IMAGE}:buildcache)"
+            docker buildx create --name odkcache --driver docker-container --use --bootstrap >/dev/null 2>&1 || true
+            docker buildx build --load \
+              --cache-from "type=registry,ref=${GHCR_IMAGE}:buildcache" \
+              --cache-to "type=registry,ref=${GHCR_IMAGE}:buildcache,mode=max" \
+              -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
+          else
+            docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
 

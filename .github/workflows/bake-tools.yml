@@ -67,6 +67,7 @@ jobs:
         OPENCODE_TAG=${{ inputs.opencode_tag }}
       push_temp_to_ghcr: true
       ghcr_temp_only: true
+      cache_to_ghcr: true
       k8s_app: opencode
       k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
       # tools 没有独立的 "opencode" 部署：只有 xieyucheng / yingxin 两个生产实例，team 线另走 bake-team。
