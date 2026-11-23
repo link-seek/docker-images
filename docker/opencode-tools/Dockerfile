@@ -23,16 +23,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
 
 # 基础运行时（放最前：裸 ubuntu 连 curl 都没有，后面所有下载都靠它）：
 # node22（npx/wrangler/agent-browser 要 node>=22，Ubuntu 自带 node18 不可用，
-# 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh + msmtp + gnupg
+# 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh(+sshpass) + msmtp + gnupg
+# sshpass 走密码认证（目标机只有密码、没铺 key 时用）；只在 universe，底座默认源已含。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip openssh-client msmtp gnupg \
+      ca-certificates curl git python3 python3-pip openssh-client sshpass msmtp gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
- && git --version && ssh -V && node --version && msmtp --version
+ && git --version && ssh -V && sshpass -V && node --version && msmtp --version
 
 # opencode 官方二进制（glibc 版；musl 版另有 -musl 后缀，不要拿错）
 # x64 取 baseline（随 brew 配方，最大 CPU 兼容）；arm64 无 baseline 变体

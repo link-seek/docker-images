@@ -36,6 +36,7 @@
 - `aliyun ecs DescribeInstances --RegionId cn-hangzhou`：阿里云杭州地域实例
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例
 - `tailscale status`：查看 tailnet 节点状态
+- `ssh` / `sshpass` 已烘入（openssh-client + 密码认证）：免密走 key/agent；只有密码时用 `SSHPASS="$PW" sshpass -e ssh -o StrictHostKeyChecking=accept-new user@host '<cmd>'`（`-p` 会把密码带进 ps，别用）。私钥/密码不进镜像，按目标机现场取。
 
 Cloudflare 自助（`wrangler` 已烘入镜像，token 走 `.env` 的 `CLOUDFLARE_API_TOKEN`，每次发版现签 90 天读写）：
 owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pages 等任务。

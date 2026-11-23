@@ -30,6 +30,7 @@
 - `send-mail` / `fetch-mail`（163 SMTP/IMAP）
 - open-design（MCP `open-design-mcp` + skill）
 - `opencode-mem`（L2 记忆）
+- `ssh` / `sshpass`（openssh-client + 密码认证）：免密走 key/agent；只有密码时用 `SSHPASS="$PW" sshpass -e ssh -o StrictHostKeyChecking=accept-new user@host '<cmd>'`（`-p` 会把密码带进 ps，别用）。本线不在 tailnet，目标机走可达 IP/域名；私钥/密码不进镜像。
 
 ## 本线没有（不要照抄 tools 线的命令）
 
