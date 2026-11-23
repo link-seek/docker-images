@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
 # 基础运行时（node22 + python/pip + git + ssh(+sshpass) + msmtp + gnupg；Ubuntu 自带 node18 不可用，走 NodeSource）。
 # sshpass 走密码认证（目标机只有密码、没铺 key 时用）；只在 universe，底座默认源已含。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip openssh-client sshpass msmtp gnupg \
+      ca-certificates curl git python3 python3-pip openssh-client openssh-server sshpass msmtp gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \

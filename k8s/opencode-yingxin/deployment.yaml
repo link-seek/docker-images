@@ -42,6 +42,7 @@ spec:
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           ports:
             - {name: http, containerPort: 4097}
+            - {name: ssh, containerPort: 2222}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
             # 网关走公网域名（用户已修复公网后端；网关迁 k3s 后改集群内 Service）。
@@ -124,6 +125,7 @@ spec:
   selector: {app: opencode-yingxin}
   ports:
     - {name: http, port: 44099, targetPort: 4097}
+    - {name: ssh, port: 2224, targetPort: 2222}
 ---
 # browserless 独立 Pod（本 ns 自用；opencode 经 Service 发现，CDP over ws）。
 # /dev/shm 2g（Chrome 崩于默认 64M）。探针 tcpSocket（/pressure 需 TOKEN，secret 值无法插进 httpGet path）。

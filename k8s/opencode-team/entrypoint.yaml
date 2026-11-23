@@ -49,4 +49,12 @@ data:
       printf 'endpoint=%s\nak=%s\nsk=%s\ntoken=\n' "${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}" "$OBS_AK" "$OBS_SK" > /root/.obsutilconfig
       chmod 600 /root/.obsutilconfig
     fi
+    # ---- SSH server（root + 密码 = $OPENCODE_SERVER_PASSWORD；端口 2222）----
+    if [ "${OPENCODE_SSH_ENABLE:-true}" = "true" ] && command -v sshd >/dev/null 2>&1; then
+      mkdir -p /run/sshd /root/.ssh/sshd
+      [ -f /root/.ssh/sshd/ssh_host_ed25519_key ] || ssh-keygen -t ed25519 -f /root/.ssh/sshd/ssh_host_ed25519_key -N '' -q
+      if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then echo "root:${OPENCODE_SERVER_PASSWORD}" | chpasswd || echo "WARN: set root pw failed" >&2; fi
+      printf '%s\n' 'Port 2222' 'ListenAddress 0.0.0.0' 'HostKey /root/.ssh/sshd/ssh_host_ed25519_key' 'PermitRootLogin yes' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication no' 'UsePAM no' 'PidFile /tmp/sshd.pid' > /root/.ssh/sshd/sshd_config
+      /usr/sbin/sshd -f /root/.ssh/sshd/sshd_config 2>/dev/null || echo 'WARN: sshd start failed' >&2
+    fi
     exec opencode "$@"
