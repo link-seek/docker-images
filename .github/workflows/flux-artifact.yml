@@ -92,6 +92,7 @@ jobs:
           cosign-release: 'v2.6.5'
 
       - name: sign artifact (cosign key-based)
+        if: env.RELEASE_DIGEST != ''
         env:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
