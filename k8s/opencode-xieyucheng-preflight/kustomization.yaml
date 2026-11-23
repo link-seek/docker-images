@@ -31,15 +31,15 @@ patches:
       metadata:
         name: opencode
         namespace: opencode-xieyucheng
-  # browser sidecar 镜像在个人 SWR 命名空间（xieyucheng123），流水线凭证拉不到；
-  # 预检先去掉该容器（case-browser 因而不可跑，tools 线浏览器覆盖暂由 team 线承接）。
-  # 长期解：把 chrome-cjk 镜像镜像到 link-seek 命名空间（或 GHCR 同 digest），再把这条 patch 删掉。
+  # 浏览器已迁本 ns 独立 browserless Deployment（link-seek 镜像，预检可拉）；预检不跑 browser e2e，
+  # 副本置 0 即不拉起（也避免它依赖预检里被删/重 mint 的 opencode-xieyucheng-env）。
   - target:
       kind: Deployment
-      name: opencode
+      name: browserless
     patch: |-
-      - op: remove
-        path: /spec/template/spec/containers/1
+      - op: replace
+        path: /spec/replicas
+        value: 0
   - target:
       kind: Deployment
       name: opencode
