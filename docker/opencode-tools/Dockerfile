@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
 # 走 NodeSource，与 Dockerfile.runner 同 pattern）+ python+pip + git + ssh(+sshpass) + msmtp + gnupg
 # sshpass 走密码认证（目标机只有密码、没铺 key 时用）；只在 universe，底座默认源已含。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip openssh-client openssh-server sshpass msmtp gnupg \
+      ca-certificates curl git python3 python3-pip openssh-client sshpass msmtp gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -34,6 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
  && git --version && ssh -V && sshpass -V && node --version && msmtp --version
+
+# openssh-server：单独一层（避免撑大基础层超"单层体积门"），并清掉安装时生成的 host 私钥
+# （运行时在 /root/.ssh/sshd 现生成；否则 Trivy 密钥扫描会把 baked 私钥判成 HIGH secret）。
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -f /etc/ssh/ssh_host_* \
+ && command -v sshd
 
 # opencode 官方二进制（glibc 版；musl 版另有 -musl 后缀，不要拿错）
 # x64 取 baseline（随 brew 配方，最大 CPU 兼容）；arm64 无 baseline 变体
