@@ -61,7 +61,7 @@ data:
     if [ -n "${V100_SSH_KEY:-}" ]; then
       mkdir -p /root/.ssh && chmod 700 /root/.ssh
       echo "${V100_SSH_KEY}" | base64 -d > /root/.ssh/id_v100 2>/dev/null && chmod 600 /root/.ssh/id_v100
-      printf '%s\n' 'Host v100-0001' '  HostName 1.94.192.234' '  User runner' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' 'Host v100-0002' '  HostName 114.116.228.0' '  User root' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' >> /root/.ssh/config
+      printf '%s\n' 'Host v100-0001' '  HostName 1.94.192.234' '  User runner' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' 'Host v100-0002' '  HostName 114.116.228.0' '  User runner' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' >> /root/.ssh/config
       chmod 600 /root/.ssh/config
     fi
     exec opencode "$@"
