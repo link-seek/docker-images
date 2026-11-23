@@ -15,8 +15,7 @@
 #   push_temp_to_ghcr  temp tag 是否同步推 GHCR（od e2e 要验 GHCR 同版；默认 false）
 #   ghcr_temp_only   temp 只推 GHCR，不推 SWR（tools 新预检用；SWR 只留正式版）
 #   upstream_repo / upstream_pattern / upstream_min_age_days / upstream_asset_url（{TAG} 占位）
-#   infra_stack_dir infra 栈目录（如 stacks/litellm-gateway），预检目标；空=跳过 img 预检（od 过渡）
-#   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
+##   sync_from_repo  过渡：正本在别仓时从该仓库 sparse 取（如 link-seek/infra），空=不取（正本在商家）
 #   sync_paths      取的子目录（空格分隔，如 "stacks/litellm-gateway/config stacks/litellm-gateway/guard"）
 #   sync_dest       落到本仓的目录（取之前清空，如 litellm-gateway）
 #   fine_test_hook  细测 hook 脚本路径（仓内），空=只到预检（od 过渡态）
@@ -31,7 +30,7 @@
 #   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/空=full）；骨架只透传不解释。
 #   layer_size_limit_mb 单层体积上限 MB（默认 500，超即红；0=跳过）。
 #   k8s_app         新预检开关：应用名（如 opencode），非空=走 k3d+Flux 预检（#505）；
-#                   空=走老 img-preflight（DEPRECATED）。
+#                   空=跳过预检。
 #   k8s_manifest_repo  manifest 所在仓（如 link-seek/infra，过渡用）；空=本仓。
 #   k8s_manifest_path  manifest 目录（如 k8s/opencode）。
 #   k8s_preflight_manifest_path  预检 overlay 目录（默认回落 manifest；如 tools/team 线用 preflight overlay）。
@@ -44,9 +43,8 @@
 #   k8s_preflight_command  预检覆盖命令（YAML flow 原样注入；默认 ["opencode"]；
 #                   网关传 '["litellm", "--config", ...]' 直跑主进程、跳过 entrypoint/tailscale）。
 #   k8s_skip_sidecar  无 sidecar 的应用传 true 跳过 sidecar import（默认 false；tools 有 browser sidecar，保持强制）。
-#   img_key_ttl     临 key 有效期秒（默认 21600，老预检用）
-# secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
-#          TS_API_KEY（老预检 mint）、ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
+## secrets: gh_token（gh api 用，PAT）、OPENCODE_API_KEY（真 key 细测）、SWR_LOGIN_USER/PASS、
+#          ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
 #          OCI_*（runner 侧探针直验钥匙；标识符在 manifest 明文，secret 只留 KEY_CONTENT；没传则跳过）
 #
 # 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
@@ -538,90 +536,6 @@ jobs:
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
           echo "DIGEST_SOURCE=$DIGEST_SOURCE" >> "$GITHUB_ENV"
 
-      - name: "[DEPRECATED] 本机加网（老预检；k8s_app 非空时跳过）"
-        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
-        run: |
-          set -euo pipefail
-          curl -fsSL https://tailscale.com/install.sh | sh
-          IMG_TAG="img-$GITHUB_RUN_ID"
-          echo "IMG_TAG=$IMG_TAG" >> "$GITHUB_ENV"
-          MINTED=""
-          TSKEY="${{ secrets.TS_API_KEY }}"
-          [ -z "$TSKEY" ] || echo "::add-mask::$TSKEY"
-          if [ -n "$TSKEY" ]; then
-            MINT_BODY="{\"capabilities\":{\"devices\":{\"create\":{\"reusable\":false,\"ephemeral\":true,\"preauthorized\":true,\"tags\":[\"tag:guest\"]}}},\"expirySeconds\":${{ inputs.img_key_ttl }}}"
-            MINT_RESP="$(mktemp)"
-            MINT_CODE="$(curl -sS -m 30 -o "$MINT_RESP" -w '%{http_code}' -X POST -H "Authorization: Bearer $TSKEY" -H 'Content-Type: application/json' \
-              -d "$MINT_BODY" \
-              https://api.tailscale.com/api/v2/tailnet/-/keys 2>/tmp/mint.err || true)"
-            if [ "$MINT_CODE" = "200" ] || [ "$MINT_CODE" = "201" ]; then
-              MINTED="$(python3 -c "import json; print(json.load(open('$MINT_RESP')).get('key',''))" || true)"
-              [ -n "$MINTED" ] && echo "::add-mask::$MINTED"
-            else
-              echo "mint-bearer: HTTP $MINT_CODE body: $(head -c 400 "$MINT_RESP")"
-            fi
-            rm -f "$MINT_RESP"
-          fi
-          if [ -n "$MINTED" ]; then
-            echo "ephemeral key minted（tag:guest，有效期 ${{ inputs.img_key_ttl }}s）"
-            # --ssh：guest 靶机；infra 部署方（tag:user，经 user→guest 放行）直接 tailscale ssh 进来，不需要单次钥匙/sshd
-            timeout 120 sudo tailscale up --authkey="$MINTED" --hostname="$IMG_TAG" --ssh --accept-routes=false --accept-dns=false
-          else
-            echo "FAIL: 现场 mint 未成功；本线 mint-only，不回退任何直连 key"; exit 1
-          fi
-          tailscale status --json | python3 -c "import json,sys; d=json.load(sys.stdin); print('self:', d.get('Self',{}).get('HostName'))"
-
-      - name: "[DEPRECATED] 触发 infra 部署到本机标签"
-        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
-        run: |
-          set -euo pipefail
-          START="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"  # 回拨 5 分钟防时钟偏差误滤
-          echo "START=$START" >> "$GITHUB_ENV"
-          gh workflow run img-preflight.yml -R link-seek/infra \
-            -f digest_or_tag="$DIGEST" \
-            -f stack_dir="${{ inputs.infra_stack_dir }}" \
-            -f node_tag="host:$IMG_TAG" \
-            -f ssh_transport="tailscale"
-
-      - name: "[DEPRECATED] 轮询 infra 部署结论"
-        if: env.skip != 'true' && inputs.infra_stack_dir != '' && inputs.k8s_app == ''
-        run: |
-          set -euo pipefail
-          EXPECTED_NODE_TAG="host:${IMG_TAG:?IMG_TAG 未设置，无法核对预检 run}"
-          EXPECTED_DIGEST="${DIGEST:?DIGEST 未设置，无法核对预检 run}"
-          RUN_ID=""
-          REJECTED="$(mktemp)"
-          LOG="$(mktemp)"
-          trap 'rm -f "$REJECTED" "$LOG"' EXIT
-          for i in $(seq 1 30); do
-            sleep 60
-            CANDIDATES="$(timeout 60 gh api "repos/link-seek/infra/actions/workflows/img-preflight.yml/runs?event=workflow_dispatch&per_page=100" \
-              -q "[.workflow_runs[] | select(.created_at >= \"$START\")] | sort_by(.created_at) | reverse | .[] | \"\(.id) \(.status)\"" 2>/dev/null || true)"
-            while read -r RUN_CANDIDATE RUN_STATUS; do
-              if [ -z "$RUN_CANDIDATE" ] || [ "$RUN_STATUS" != "completed" ]; then
-                continue
-              fi
-              if grep -qxF "$RUN_CANDIDATE" "$REJECTED"; then
-                continue
-              fi
-              if timeout 180 gh run view "$RUN_CANDIDATE" -R link-seek/infra --log >"$LOG" 2>/dev/null; then
-                if grep -qE -- "${EXPECTED_NODE_TAG}([^0-9]|$)" "$LOG" && grep -qF -- "$EXPECTED_DIGEST" "$LOG"; then
-                  RUN_ID="$RUN_CANDIDATE"
-                  break
-                fi
-                echo "$RUN_CANDIDATE" >> "$REJECTED"
-              fi
-            done <<< "$CANDIDATES"
-            if [ -n "$RUN_ID" ]; then
-              break
-            fi
-          done
-          [ -n "$RUN_ID" ] || { echo "FAIL: 预检 run 30 分钟未出现，或无 node_tag=$EXPECTED_NODE_TAG + digest=$EXPECTED_DIGEST 的可核对 run（fail-closed）"; exit 1; }
-          echo "preflight run: https://github.com/link-seek/infra/actions/runs/$RUN_ID (node_tag=$EXPECTED_NODE_TAG, digest=$EXPECTED_DIGEST)"
-          timeout 1800 gh run watch "$RUN_ID" -R link-seek/infra --interval 60 --exit-status \
-            || { echo "FAIL: 预检未过（PREFLIGHT-RED，见上 run 链接）"; exit 1; }
-          echo PREFLIGHT-GREEN
-
       - name: k3d 起簇（新预检；与生产同版 k3s，GHCR 内源，--no-lb）
         if: env.skip != 'true' && inputs.k8s_app != ''
         run: |
@@ -837,7 +751,7 @@ jobs:
           K8S_CONTAINER: ${{ inputs.k8s_app }}
         run: |
           set -euo pipefail
-          export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="${{ inputs.infra_stack_dir }}" CANARY="${{ inputs.canary_name }}" TEMP_TAG
+          export DIGEST API_KEY="$OPENCODE_API_KEY" STACK_DIR="" CANARY="${{ inputs.canary_name }}" TEMP_TAG
           bash "${{ inputs.fine_test_hook }}"
 
       - name: 下线收尾-k3d（新预检；ephemeral 簇即焚）
