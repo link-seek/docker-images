@@ -77,7 +77,7 @@ def make_public(ns: str, repo: str) -> None:
     payload = hashlib.sha256(body).hexdigest()
     canon_headers = f"host:{host}\nx-sdk-date:{now}\n"
     signed = "host;x-sdk-date"
-    canon = f"PATCH\n{path}\n\n{canon_headers}\n{signed}\n{payload}"
+    canon = f"PATCH\n{path}/\n\n{canon_headers}\n{signed}\n{payload}"  # SWR canonical URI 带尾斜杠
     sts = f"SDK-HMAC-SHA256\n{now}\n{hashlib.sha256(canon.encode()).hexdigest()}"
     sig = hmac.new(sk.encode(), sts.encode(), hashlib.sha256).hexdigest()
     req = urllib.request.Request(
