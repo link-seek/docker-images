@@ -28,8 +28,20 @@ def load():
     return reg, ns, imgs
 
 
+def item_ns(item, default_ns):
+    # 单条可用 ns: 覆盖顶层 namespace（组织配额满时用个人空间，如 xieyucheng123）
+    ns = item.get("ns") or default_ns
+    if not ns:
+        sys.exit(f"FAIL: 条目缺 ns 且顶层无默认: {item}")
+    return ns
+
+
 def full_dst(reg, ns, dst):
     return f"{reg}/{ns}/{dst}"
+
+
+def item_dst(reg, default_ns, item):
+    return full_dst(reg, item_ns(item, default_ns), item["dst"])
 
 
 def digest(ref):
@@ -53,9 +65,10 @@ def lint():
                 print(f"FAIL {k} 未带 tag: {ref}"); bad += 1
             if ref.endswith(":latest"):
                 print(f"FAIL {k} 禁 latest: {ref}"); bad += 1
-        if i["dst"] in seen:
-            print(f"FAIL dst 重复: {i['dst']}"); bad += 1
-        seen.add(i["dst"])
+        key = (item_ns(i, ns), i["dst"])
+        if key in seen:
+            print(f"FAIL dst 重复: {key}"); bad += 1
+        seen.add(key)
     print("LINT-OK" if not bad else "LINT-FAIL")
     sys.exit(1 if bad else 0)
 
@@ -64,7 +77,7 @@ def verify():
     reg, ns, imgs = load()
     bad = 0
     for i in imgs:
-        dst = full_dst(reg, ns, i["dst"])
+        dst = item_dst(reg, ns, i)
         dg = digest(dst)
         if not dg:
             print(f"MISSING {dst}"); bad += 1
@@ -78,19 +91,19 @@ def sync():
     reg, ns, imgs = load()
     fail = 0
     for i in imgs:
+        dst = item_dst(reg, ns, i)
         sd = digest(i["src"])
-        dd = digest(full_dst(reg, ns, i["dst"]))
+        dd = digest(dst)
         if sd and sd == dd:
             print(f"SKIP {i['dst']} (digest 一致 {sd})")
             continue
         src = "docker://" + i["src"]
-        dst = "docker://" + full_dst(reg, ns, i["dst"])
-        print(f"COPY {i['src']} -> {full_dst(reg, ns, i['dst'])}")
-        r = subprocess.run(["skopeo", "copy", "--all", "--retry-times", "3", src, dst])
+        print(f"COPY {i['src']} -> {dst}")
+        r = subprocess.run(["skopeo", "copy", "--all", "--retry-times", "3", src, "docker://" + dst])
         if r.returncode != 0:
             print(f"FAIL {i['dst']}"); fail += 1
         else:
-            print(f"SYNCED {i['dst']} @ {digest(full_dst(reg, ns, i['dst']))}")
+            print(f"SYNCED {i['dst']} @ {digest(dst)}")
     print("SYNC-OK" if not fail else "SYNC-FAIL")
     sys.exit(1 if fail else 0)
 
