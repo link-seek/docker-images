@@ -32,3 +32,4 @@ spec:
   selector: {app: opencode-team}
   ports:
     - {name: http, port: 44097, targetPort: 4097}
+    - {name: ssh, port: 2222, targetPort: 2222}

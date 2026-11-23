@@ -53,13 +53,16 @@ spec:
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           securityContext:
-            # A 档：根文件系统只读（镜像/系统文件不可改）；可写仅 /workspace、数据卷、/tmp。
-            # 注意：仅防“写”，不防“读”，也不是跨用户隔离（hostPath 仍共用）。
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
+            # 2026-11-23：为支持 root+密码 SSH 登录容器而放开本容器加固（仅影响本容器，不影响 k3s/其它 Pod）。
+            # sshd 需可写根（/run、/etc/shadow）+ setuid/setgid/chroot/audit_write 等能力。
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["SETUID","SETGID","CHOWN","DAC_OVERRIDE","FOWNER","SYS_CHROOT","AUDIT_WRITE"]
           ports:
             - {name: http, containerPort: 4097}
+            - {name: ssh, containerPort: 2222}
           env:
             - {name: PIPELINE_MANAGED, value: "true"}
             # 只读根：/root 由可写 emptyDir 承接（initContainer seed 镜像内 .config），系统目录仍只读。
