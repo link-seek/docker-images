@@ -16,7 +16,14 @@ spec:
     services:
     - name: opencode
       port: 4097
+  # 内网入口（HW VPC 内私有区 internal.linkseek.net.cn 解析到此内网 Traefik）
+  - match: Host(`team-agent.internal.linkseek.net.cn`)
+    kind: Rule
+    services:
+    - name: opencode
+      port: 4097
   tls:
     certResolver: le-prod
     domains:
     - main: team-agent.xieyucheng.top
+    - main: team-agent.internal.linkseek.net.cn
