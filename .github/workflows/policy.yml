@@ -1,13 +1,9 @@
 name: policy
 
-# 声明式发布纪律（先 audit）：渲染产物必须 digest-pin、禁 :latest。
-# 等 B1（不可变 tag + digest pin）稳定后，把 continue-on-error 去掉即变硬门禁。
+# 声明式发布纪律（硬门禁）：渲染产物必须 digest-pin、禁 :latest。
+# 全量 PR 触发（无 paths 过滤），可直接进 branch protection required checks。
 on:
   pull_request:
-    paths:
-      - "k8s/**"
-      - "scripts/policy_check.py"
-      - ".github/workflows/policy.yml"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +25,5 @@ jobs:
             curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
             sudo mv kustomize /usr/local/bin/ 2>/dev/null || true
           fi
-      - name: policy (audit mode)
-        continue-on-error: true
+      - name: policy (enforcing)
         run: python3 scripts/policy_check.py
