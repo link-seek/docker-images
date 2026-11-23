@@ -39,7 +39,7 @@ spec:
         # /root 挂 emptyDir 后需把镜像内烘好的 /root/.config（opencode 配置）、.agents 等 seed 进去。
         # 与主容器同镜像；预检的 kustomize images 注入会同时覆盖 init 容器 digest。
         - name: root-home-seed
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:747e167e5015f2b1b0548c657442d5f735ad2e513957994d59b8368de35332c5
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:50e3ff2a62c995d12c4f05f059df1c0379536dd3791a15d42e3423e6a0e1df96
           command: ["/bin/sh", "-c", "cp -a /root/. /seed/"]
           securityContext:
             readOnlyRootFilesystem: true
@@ -49,7 +49,7 @@ spec:
             - {name: root-home, mountPath: /seed}
       containers:
         - name: opencode
-          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:747e167e5015f2b1b0548c657442d5f735ad2e513957994d59b8368de35332c5
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:50e3ff2a62c995d12c4f05f059df1c0379536dd3791a15d42e3423e6a0e1df96
           command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
           args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
           securityContext:
