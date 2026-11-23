@@ -32,4 +32,11 @@ data:
       printf '%s\n' 'Port 2222' 'ListenAddress 0.0.0.0' 'HostKey /root/.ssh/sshd/ssh_host_ed25519_key' 'PermitRootLogin yes' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication no' 'UsePAM no' 'PidFile /tmp/sshd.pid' > /root/.ssh/sshd/sshd_config
       /usr/sbin/sshd -f /root/.ssh/sshd/sshd_config 2>/dev/null || echo 'WARN: sshd start failed' >&2
     fi
+    # ---- V100 免密（私钥 base64 由 env V100_SSH_KEY 注入；宿主机 authorized_keys 已铺）----
+    if [ -n "${V100_SSH_KEY:-}" ]; then
+      mkdir -p /root/.ssh && chmod 700 /root/.ssh
+      echo "${V100_SSH_KEY}" | base64 -d > /root/.ssh/id_v100 2>/dev/null && chmod 600 /root/.ssh/id_v100
+      printf '%s\n' 'Host v100-0001' '  HostName 1.94.192.234' '  User runner' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' 'Host v100-0002' '  HostName 114.116.228.0' '  User root' '  IdentityFile ~/.ssh/id_v100' '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' >> /root/.ssh/config
+      chmod 600 /root/.ssh/config
+    fi
     exec opencode "$@"

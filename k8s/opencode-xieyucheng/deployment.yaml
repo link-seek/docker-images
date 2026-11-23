@@ -68,6 +68,8 @@ spec:
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: GH_TOKEN}}
             - name: OPENCODE_SERVER_PASSWORD
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: OPENCODE_SERVER_PASSWORD}}
+            - name: V100_SSH_KEY
+              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: V100_SSH_KEY}}
             - name: CLOUDFLARE_API_TOKEN
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: CLOUDFLARE_API_TOKEN}}
             - name: CF_AI_TOKEN
