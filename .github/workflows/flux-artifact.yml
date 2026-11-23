@@ -87,20 +87,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           docker logout "$REG" >/dev/null 2>&1 || true
 
-      - uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.6.5'
-
-      - name: sign artifact (cosign key-based)
-        if: env.RELEASE_DIGEST != ''
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$DEST@$RELEASE_DIGEST"
-          echo "signed: $DEST@$RELEASE_DIGEST (tag $RELEASE_TAG)"
-
       - name: make SWR repo public (cluster pulls anonymously)
         if: always()
         env:
