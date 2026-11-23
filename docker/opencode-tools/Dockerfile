@@ -17,8 +17,13 @@ FROM node:22-bookworm-slim AS odk-builder
 ARG ODK_REF=fcf21f35113a4d0ea116b4d50e2251b0c52fc8bd
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+# 远程浏览器渲染修复（源码覆盖）：上游 startStaticServer 只绑 127.0.0.1，独立 Pod 的 browserless
+# 访问不到本 Pod loopback → check/export 渲染白页。用本仓覆盖文件：存在 OPEN_DESIGN_BROWSER_URL 时
+# 绑 0.0.0.0 且 baseUrl 用可达地址（Pod IP），本地浏览器模式仍 127.0.0.1。
+COPY docker/odk-overrides/staticServer.ts /tmp/staticServer.override.ts
 RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
  && cd /src && git checkout "${ODK_REF}" \
+ && cp /tmp/staticServer.override.ts /src/packages/core/src/export/staticServer.ts \
  && npm ci --no-audit --no-fund \
  && npm run compile -w packages/mcp-server \
  && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out
