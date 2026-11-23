@@ -12,4 +12,4 @@ resources:
 # 本目录已无 chrome sidecar（2026-11-23 迁 browserless）。
 images:
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
-    digest: sha256:cd309c907c7e8e916e510a21491c414801c9a8d4864f044dfd7962301ead0102
+    digest: sha256:f929cb12b7c798eae2e22e1860ef4297b76eff974616f7cdd807e6da75d004f7
