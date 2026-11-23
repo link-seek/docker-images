@@ -27,6 +27,8 @@ jobs:
       SK: ${{ secrets.PROD_HCLOUD_SK }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # 需要 HEAD^ 判断 k8s/** 是否变化
 
       - name: install flux CLI
         run: curl -fsSL https://fluxcd.io/install.sh | sudo bash
