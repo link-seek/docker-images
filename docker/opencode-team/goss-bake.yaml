@@ -60,3 +60,15 @@ command:
   obsutil:
     exec: "command -v obsutil"
     exit-status: 0
+
+  ssh:
+    exec: "command -v ssh"
+    exit-status: 0
+    stdout:
+      - '/usr/bin/ssh'
+
+  sshpass:
+    exec: "sshpass -V"
+    exit-status: 0
+    stdout:
+      - 'sshpass'

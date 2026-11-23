@@ -19,16 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade 
  && rm -rf /var/lib/apt/lists/* \
  && apt --version
 
-# 基础运行时（node22 + python/pip + git + ssh + msmtp + gnupg；Ubuntu 自带 node18 不可用，走 NodeSource）。
+# 基础运行时（node22 + python/pip + git + ssh(+sshpass) + msmtp + gnupg；Ubuntu 自带 node18 不可用，走 NodeSource）。
+# sshpass 走密码认证（目标机只有密码、没铺 key 时用）；只在 universe，底座默认源已含。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip openssh-client msmtp gnupg \
+      ca-certificates curl git python3 python3-pip openssh-client sshpass msmtp gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
- && git --version && ssh -V && node --version && msmtp --version
+ && git --version && ssh -V && sshpass -V && node --version && msmtp --version
 
 # opencode 官方二进制（glibc 版；x64 取 baseline，最大 CPU 兼容；arm64 无 baseline 变体）
 ARG OPENCODE_TAG
