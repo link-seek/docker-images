@@ -26,11 +26,16 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 
 Actions → bake-tools → Run workflow，必填 `opencode_tag` / `opencode_mem_version`。
 
-## 布局约定（2026-11-16 起）
+## 布局约定（2026-11-16 起，2026-11-23 规整）
 
 * Dockerfile 进各自目录：`docker/<名>/Dockerfile`（构建上下文仍是仓根，`docker build -f docker/<名>/Dockerfile .`）。
 * `docker/<名>/` 放 hook 与配置（`fine-test.sh`、`goss-bake.yaml`、`preflight-env.conf` 等）。
 * `bake-stack.yml` 的 `dockerfile:` 传分目录路径；push 触发 `paths:` 同步改。
+* **`docker/_shared/`**：多条镜像线共用的文件（`fetch-mail.py`、`md2html.py`、`send-mail.sh`、`opencode-mem.jsonc`、`staticServer.ts`）。Dockerfile 里 `COPY docker/_shared/x`；各线专属文件仍留 `docker/<名>/`。
+* **`k8s/<app>/`** 是生产清单（Flux `path: ./k8s/<app>` 对账）；**`k8s/_preflight/<app>/`** 是预检 overlay（`_` 前缀 = 不被 Flux 部署，仅供 bake 的 k3d 预检）。
+* 入口文件统一命名 `ingressroute-tls.yaml`（证书用 `le-prod`；旧名 `ingressroute-staging-tls.yaml` 已废弃）。
+* `.opencode/opencode.json` 是本仓 reviewer bot 的 agent 配置，不是任何镜像的运行时配置。
+* **workflow 文件名是跨仓契约，不要改**；名字与镜像目录不一致的对照：`bake-gateway`→`docker/litellm-gateway`、`bake-team`→`docker/opencode-team`、`bake-tools`→`docker/opencode-tools`。
 
 ## opencode-team（部门共用精简线）
 

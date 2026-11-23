@@ -9,4 +9,4 @@ resources:
 - app.yaml
 - service.yaml
 - jobs.yaml
-- ingressroute-staging-tls.yaml
+- ingressroute-tls.yaml
