@@ -4,7 +4,7 @@
 
 - **team 线**：opencode + agent-browser（远程 browserless）+ opencode-mem + 邮件 + obsutil + open-design。
 - **不含**：aliyun / hcloud / oci / wrangler / tailscale / lmnr / 本地 Chrome。
-- tools 线（整套云 CLI + 本地 Chrome）见 `docker/opencode-tools/AGENTS.md`。
+- tools 线（整套云 CLI）见 `docker/opencode-tools/AGENTS.md`；浏览器两条线都一样走独立 browserless，镜像内无本地 Chrome。
 
 # 打包 vs 部署分工铁律（2026-11-16 修订，与 infra#461/#490 同源）
 

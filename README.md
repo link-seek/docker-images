@@ -42,7 +42,7 @@ opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser +
   → SWR north-9 link-seek（同名，直推）
 ```
 
-* 与 tools 的区别：不要 aliyun/hcloud/oci/wrangler/tailscale/本地 chrome；浏览器走独立 browserless Pod。
+* 与 tools 的区别：不要 aliyun/hcloud/oci/wrangler/tailscale；其余同——浏览器均走各实例独立的 browserless Pod，镜像内无本地 chrome（team / tools / xieyucheng / yingxin 已统一 browserless）。
 * 预检（k3d+Flux，#505）：`k8s_app: opencode`，manifest 同仓 `k8s/opencode-team`；team digest 经 images 注入，
   browserless 取 manifest tag。
 * 细测：pod 内 `agent-browser connect ws://browserless:3000/chromium?token=…` → open → snapshot → screenshot → close。

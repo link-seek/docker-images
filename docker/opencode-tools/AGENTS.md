@@ -77,7 +77,7 @@ SSH 直连（`tssh` 已烘入镜像，key-only，免 pty 喂密码）：
 
 - 设计需求先走 MCP `open-design` 工具（`list_open_design_skills` → `prepare_open_design_brief`，绑 `DESIGN.md` 再写 HTML），模型走网关，产物即文件。
 - 邮件正文只认 `send-mail -m <.md>`，设计 kit 的 HTML 不许直接 `-f` 发（收件端兼容两条链，见 Dockerfile 注释）。
-- 要机器验（横滚/对比度/焦点）跑 `check_open_design_artifact`（本地 headless 浏览器已烘入）；`export email` 未启用前，营销邮件仍人眼终验。
+- 要机器验（横滚/对比度/焦点）跑 `check_open_design_artifact`（走 `$OPEN_DESIGN_BROWSER_URL` 指向的 browserless，镜像内无本地 headless 浏览器）；`export email` 未启用前，营销邮件仍人眼终验。
 
 工作区说明：
 
