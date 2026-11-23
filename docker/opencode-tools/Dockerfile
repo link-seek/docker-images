@@ -8,6 +8,21 @@
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.3.0
+
+# --- open-design MCP server 从 git main 构建（含 PR #114「远程 CDP 浏览器」能力；npm 最新 0.4.0 未含）---
+# 产物 out/index.js 由 esbuild 打成自包含 CJS（core + puppeteer-core 全 bundle），
+# 仅 content/sdk 两个外部依赖随 npm install 拉；构建独立放在 builder 阶段，不污染最终镜像层。
+# 版本 pin：ODK_REF（单源头）；bump=改这行发 PR。
+FROM node:22-bookworm-slim AS odk-builder
+ARG ODK_REF=fcf21f35113a4d0ea116b4d50e2251b0c52fc8bd
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
+ && cd /src && git checkout "${ODK_REF}" \
+ && npm ci --no-audit --no-fund \
+ && npm run compile -w packages/mcp-server \
+ && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out
+
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
 # 行为=digest：重打即刷新底座；bump=改这行发 PR。
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
@@ -119,15 +134,18 @@ RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
 
 # 设计能力（feimacode/open-design-agent-kit，社区包）：
 # - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills），浮动跟随，出问题再定。
-# - MCP server：烘焙进镜像（本地二进制直调，不走运行时 npx 现下；2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
-# - 版本 pin：ARG OD_MCP_VERSION 单源头（与 OPENCODE_MEM_VERSION 同 pattern）；bump=改这行发 PR。
-ARG OD_MCP_VERSION=0.4.0
+# - MCP server：从 git main 构建安装（npm 0.4.0 未含远程浏览器 PR #114，见文件头 odk-builder 阶段）；
+#   不走运行时 npx 现下（2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
+# - 版本 pin：ODK_REF（odk-builder 阶段 ARG，单源头）；bump=改那一行发 PR。
 RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
  && test -f /root/.agents/skills/open-design/SKILL.md \
- && npm install -g "@feimacode/open-design-agent-kit-mcp@${OD_MCP_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/*
+COPY --from=odk-builder /out/feimacode-open-design-agent-kit-mcp-*.tgz /tmp/odk-mcp.tgz
+RUN npm install -g /tmp/odk-mcp.tgz \
  && command -v open-design-mcp \
  && timeout 25 open-design-mcp --help \
- && npm cache clean --force && rm -rf /root/.npm
+ && rm -f /tmp/odk-mcp.tgz \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/*
 
 # tailscale：官方静态二进制（tailscale + tailscaled；userspace 模式无需 /dev/net/tun / NET_ADMIN）
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TS_ARCH=amd64;; aarch64) TS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
@@ -156,10 +174,11 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_
  && rm -f /tmp/flux.tar.gz \
  && flux --version
 
-# kit 的 check/export 走 sidecar 浏览器（CDP，上游 #114 已合；feimacode/open-design-agent-kit）。
-# 接线：OPEN_DESIGN_BROWSER_URL（DevTools HTTP endpoint，如 http://127.0.0.1:9222 同 pod sidecar）。
-# 本地 chrome 已删（-450M：headless-shell + 运行库 + CJK/emoji 字体）；无 sidecar 的环境不再支持设计 e2e。
-# 部署侧必须保证 sidecar 可达（k8s 同 pod browser 容器 / compose browser 服务），否则 check/export 失败。
+# kit 的 check/export 走远程浏览器（CDP；上游 #114 已合；feimacode/open-design-agent-kit）。
+# 接线：OPEN_DESIGN_BROWSER_URL（DevTools HTTP endpoint，如 http://browserless.<ns>.svc:3000，
+# 部署侧由 puppeteer.connect({browserURL}) 读取 /json/version 后连其 webSocketDebuggerUrl）。
+# 本地 chrome 已删（-450M）；无远程浏览器可用的环境不再支持设计 e2e。
+# 部署侧必须保证 browserless 可达且其 EXTERNAL 指向可路由地址（否则 /json/version 返回 ws://0.0.0.0 连不上）。
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem

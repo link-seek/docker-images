@@ -56,12 +56,9 @@ spec:
             - {name: SMTP_USER, value: 122306789@163.com}
             - {name: SMTP_FROM, value: 122306789@163.com}
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
-            # 浏览器走本 ns 独立 browserless Pod（CDP over ws；token 与 browserless 同 secret 两边一致）。
-            # 注意：BROWSERLESS_TOKEN 必须先于引用它的 $() 定义（k8s env 展开只看列表前面的变量）。
-            - name: BROWSERLESS_TOKEN
-              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: BROWSERLESS_TOKEN}}
-            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-xieyucheng.svc.cluster.local:3000/chromium?token=$(BROWSERLESS_TOKEN)"}
-            - {name: OPEN_DESIGN_BROWSER_URL, value: "ws://browserless.opencode-xieyucheng.svc.cluster.local:3000/chromium?token=$(BROWSERLESS_TOKEN)"}
+            # 浏览器走本 ns 独立 browserless Pod（CDP over ws；无 token，集群内裸用）。
+            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-xieyucheng.svc.cluster.local:3000/chromium"}
+            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://browserless.opencode-xieyucheng.svc.cluster.local:3000"}
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: LITELLM_API_KEY}}
             - name: GH_TOKEN
@@ -159,8 +156,6 @@ metadata:
   namespace: opencode-xieyucheng
   labels:
     app: browserless
-  annotations:
-    reloader.stakater.com/auto: "true" # 随 opencode-xieyucheng-env（含 BROWSERLESS_TOKEN）更新自动重载
 spec:
   replicas: 1
   strategy:
@@ -182,8 +177,9 @@ spec:
             - {name: http, containerPort: 3000}
           env:
             - {name: HOST, value: "0.0.0.0"}
-            - name: TOKEN
-              valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: BROWSERLESS_TOKEN}}
+            # 无 TOKEN：集群内裸用（ClusterIP 仅集群可达）。EXTERNAL 让 /json/version 的
+            # webSocketDebuggerUrl 指向 Service（默认按 HOST=0.0.0.0 生成 ws://0.0.0.0:3000/ 不可路由）。
+            - {name: EXTERNAL, value: "http://browserless.opencode-xieyucheng.svc.cluster.local:3000"}
             - {name: CONCURRENT, value: "10"}
             - {name: QUEUED, value: "10"}
             # 单会话上限 10min（同 team；30s 默认会截断真实自动化）。

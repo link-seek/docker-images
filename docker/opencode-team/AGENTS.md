@@ -42,7 +42,7 @@
 
 - `gh auth status`（GitHub 身份）
 - SMTP 建连（`send-mail` 发探针邮件走默认垃圾桶规则；批量群发先确认）
-- browserless 健康：`curl -sS "http://browserless.opencode-team.svc.cluster.local:3000/pressure?token=$BROWSERLESS_TOKEN"`（200 即通）
+- browserless 健康：`curl -sS "http://browserless.opencode-team.svc.cluster.local:3000/pressure"`（200 即通；本线 browserless 无 token，仅集群内可达）
 - Cloudflare 只读：`curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/zones?per_page=5"`
 - CF 记忆 key：对 bge-m3 调一次 embedding，1024 维回即通
 - 写操作（建 zone / 改 DNS / 删东西 / 发 Worker / 转 tag）除 Cloudflare 授权范围外一律先确认
@@ -82,8 +82,8 @@
 # 浏览器自动化（远程 browserless 独立 Pod）
 
 - 浏览器**不在本镜像内，也不在同 Pod**；是 `opencode-team` namespace 里独立的 `browserless` Deployment（Service 端口 3000）。
-- 地址一律取 `$BROWSER_CDP_URL`（形如 `ws://browserless.opencode-team.svc.cluster.local:3000/chromium?token=...`），**不要写死 `http://browser:9222`**（那是旧 compose 线，已不存在）。
-- 健康检查：`curl -sS "http://browserless.opencode-team.svc.cluster.local:3000/pressure?token=$BROWSERLESS_TOKEN"`，HTTP 200 即通；`/json/version` 同样需带 token。
+- 地址一律取 `$BROWSER_CDP_URL`（形如 `ws://browserless.opencode-team.svc.cluster.local:3000/chromium`，本线无 token），**不要写死 `http://browser:9222`**（那是旧 compose 线，已不存在）。
+- 健康检查：`curl -sS "http://browserless.opencode-team.svc.cluster.local:3000/pressure"`，HTTP 200 即通；`/json/version` 直接可读（无需 token）。
 - 动手前先拉配套用法：`agent-browser skills get core`（不要靠记忆拼命令）。
 - 典型流程：`agent-browser --cdp "$BROWSER_CDP_URL" open <url>` → `snapshot -i` → `click @e2` / `fill @e3 "文本"` → `screenshot` → `close`。
 - 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`。
@@ -102,7 +102,7 @@
 # 设计能力
 
 - 走 MCP `open-design` 工具（`list_open_design_skills` → `prepare_open_design_brief`，绑 `DESIGN.md` 再写 HTML），产物落 `/workspace`。
-- 本线**无本地 headless Chrome**；需要浏览器渲染/`check_open_design_artifact` 时走 `$OPEN_DESIGN_BROWSER_URL`（已指向 browserless）。
+- 本线**无本地 headless Chrome**；需要浏览器渲染/`check_open_design_artifact` 时走 `$OPEN_DESIGN_BROWSER_URL`（`http://browserless.opencode-team.svc.cluster.local:3000`，kit 经 puppeteer.connect 远程渲染）。
 - 邮件正文只认 `send-mail -m <.md>`；设计 kit 的 HTML 不许直接 `-f` 发。
 
 # 工作区与卷

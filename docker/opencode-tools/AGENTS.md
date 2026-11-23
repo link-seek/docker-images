@@ -45,13 +45,13 @@ owner 已授权你直接操作，用于 DNS 调整、yingxin 迁移、Workers/Pa
 - 红线：切 NS（注册商侧）、删 zone/记录等影响现网的步骤，执行前必须先向用户确认；只动授权范围内的域。
 - token 90 天过期，发版自动续；过期报错先看 token 有效期，不要怀疑人生。
 
-浏览器自动化（`agent-browser` CLI 已烘入镜像 + 独立 `browser` sidecar，经 CDP 连接；浏览器不在本镜像内）：
+浏览器自动化（`agent-browser` CLI 已烘入镜像 + 本 ns 独立 `browserless` Pod，经 CDP 连接；浏览器不在本镜像内）：
 
-- 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`（默认 `http://browser:9222`，compose 服务名即地址）。
+- 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`（形如 `ws://browserless.opencode-xieyucheng.svc.cluster.local:3000/chromium`，本线无 token）。
 - 动手前先拉与安装版本配套的用法：`agent-browser skills get core`（不要靠记忆拼命令）。
 - 典型流程：`agent-browser --cdp "$BROWSER_CDP_URL" open <url>` → `snapshot -i` → `click @e2` / `fill @e3 "文本"` → `screenshot` → `close`。
-- 先确认浏览器在线：`curl -s http://browser:9222/json/version`。
-- 禁止在本容器内运行 `agent-browser install`（Chrome 由 browser sidecar 提供，不要装进 tools 镜像）。
+- 先确认浏览器在线：`curl -s "http://browserless.opencode-xieyucheng.svc.cluster.local:3000/json/version"`（无需 token）。
+- 禁止在本容器内运行 `agent-browser install`（Chrome 由 browserless Pod 提供，不要装进 tools 镜像）。
 
 邮件通知（`send-mail` + msmtp 已烘入镜像，SMTP 配置走 `.env` 的 `SMTP_*`，密钥不进镜像）：
 
