@@ -4,7 +4,7 @@
 # - browserless 仓库名带 chrome：bake-stack 新预检按镜像名含 chrome 抓 sidecar 行做 k3d import，
 #   缺该子串会 PREFLIGHT-RED；改骨架影响全线，故命名适配。
 # - 镜像 tag 即行为版本：首 bake 出 tag 后改 digest pin 发 PR（与旧线同语义）。
-# - BROWSER_CDP_URL 指向同 ns browserless Service；TOKEN 经 $(BROWSERLESS_TOKEN) 展开（k8s env 引用，要求先定义）。
+# - BROWSER_CDP_URL / OPEN_DESIGN_BROWSER_URL 指向同 ns browserless Service（无 token，集群内裸用；ClusterIP 仅集群可达）。
 # - Secret opencode-team-env 不进仓：Flux 对账前先经 pipeline mint（缺 Secret 时 pod 报 CreateContainerConfigError，属预期）。
 apiVersion: apps/v1
 kind: Deployment
@@ -74,10 +74,8 @@ spec:
             - {name: SMTP_USER, value: 122306789@163.com}
             - {name: SMTP_FROM, value: 122306789@163.com}
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
-            - name: BROWSERLESS_TOKEN
-              valueFrom: {secretKeyRef: {name: opencode-team-env, key: BROWSERLESS_TOKEN}}
-            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-team.svc.cluster.local:3000/chromium?token=$(BROWSERLESS_TOKEN)"}
-            - {name: OPEN_DESIGN_BROWSER_URL, value: "ws://browserless.opencode-team.svc.cluster.local:3000/chromium?token=$(BROWSERLESS_TOKEN)"}
+            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-team.svc.cluster.local:3000/chromium"}
+            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://browserless.opencode-team.svc.cluster.local:3000"}
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-team-env, key: LITELLM_API_KEY}}
             - name: MAAS_KEY
@@ -137,7 +135,7 @@ spec:
 ---
 # browserless 独立 Pod（与 opencode 分开部署，经 Service 发现）。
 # /dev/shm 必须 2g（Docker 默认 64M 会崩 Chrome；k8s 用 Memory emptyDir 挂）。
-# 探针用 tcpSocket：/pressure 需 TOKEN 鉴权，secret 值无法插进 httpGet path。
+# 探针用 tcpSocket（无需鉴权，简单稳妥）。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -145,8 +143,6 @@ metadata:
   namespace: opencode-team
   labels:
     app: browserless
-  annotations:
-    reloader.stakater.com/auto: "true" # 独立 Secret browserless-env
 spec:
   replicas: 1
   strategy:
@@ -168,8 +164,10 @@ spec:
             - {name: http, containerPort: 3000}
           env:
             - {name: HOST, value: "0.0.0.0"}
-            - name: TOKEN
-              valueFrom: {secretKeyRef: {name: browserless-env, key: BROWSERLESS_TOKEN}}
+            # 无 TOKEN：集群内裸用（ClusterIP 仅集群可达）。EXTERNAL 让 /json/version 的
+            # webSocketDebuggerUrl 指向 Service（默认按 HOST=0.0.0.0 会生成不可路由的 ws://0.0.0.0:3000/，
+            # 导致 puppeteer.connect({browserURL}) 连不上；open-design check/export 依赖此）。
+            - {name: EXTERNAL, value: "http://browserless.opencode-team.svc.cluster.local:3000"}
             - {name: CONCURRENT, value: "10"}
             - {name: QUEUED, value: "10"}
             # 单会话上限；30s(官方示例默认)会截断真实自动化(登录+多步CRUD+等待返回常>30s)。

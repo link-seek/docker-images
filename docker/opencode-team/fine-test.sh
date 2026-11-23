@@ -7,8 +7,7 @@
 # browserless 取 manifest tag——bootstrap 要求先转正 browserless），本 hook 只做：
 #   1) identity：k3d 里跑的必须是刚打出来的 digest（kubectl 读 deploy image）。
 #   2) E2E：e2e-cases/select-cases.sh 选单（默认全量；E2E_CASES 可 skip/名单强制），逐个跑。
-# TOKEN 用 hook 内写死的 dummy-preflight；browserless 侧同值由预检 Secret
-# （preflight-env.conf 的 BROWSERLESS_TOKEN dummy）注入，两边一致 CDP 才通。生产走真值，此处只验逻辑。
+# browserless 已改无 token（tokenless）；case-link 仍传 dummy token query（服务端忽略），仅验 CDP 连通逻辑。
 set -euo pipefail
 
 [ -n "${K8S_DEPLOY:-}" ] || { echo "FAIL: K8S_DEPLOY 为空（骨架 k8s_app 未传）"; exit 1; }

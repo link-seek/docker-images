@@ -11,7 +11,7 @@
   // 设计 MCP（feimacode/open-design-agent-kit-mcp，烘焙进镜像走本地二进制直调；
   // 2.1.4 实测：timeout 必须是完整对象（含 catalog），缺键整段 mcp 被静默丢弃；
   // 数字也行（会展开成三键同值），但对象保留 startup<execution 的分级意图）。
-  // 版本见 Dockerfile ARG OD_MCP_VERSION；本地二进制无下载等待（startup 照给，防冷机慢），生成类工具跑得久（execution 给足）；密钥不进镜像（模型走网关，MCP server 本身不调模型）。
+  // 版本见 Dockerfile 的 odk-builder ARG ODK_REF（从 git main 构建，含远程浏览器 PR #114）；本地二进制无下载等待（startup 照给，防冷机慢），生成类工具跑得久（execution 给足）；密钥不进镜像（模型走网关，MCP server 本身不调模型）。
   "mcp": {
     "servers": {
       "open-design": {
