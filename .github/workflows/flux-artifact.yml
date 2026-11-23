@@ -36,6 +36,12 @@ jobs:
           set -euo pipefail
           echo "$SWR_LOGIN_PASS" | docker login "$REG" -u "$SWR_LOGIN_USER" --password-stdin
           REV="main@sha1:$(git rev-parse HEAD)"
+          # 制品只含 k8s/**：若本次提交没动 k8s，跳过重打包（避免 digest 非确定性带来的假 bump）。
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && git rev-parse HEAD^ >/dev/null 2>&1 \
+             && git diff --quiet HEAD^ HEAD -- k8s/; then
+            echo "k8s/** unchanged; skip artifact publish"
+            exit 0
+          fi
           TAG="v$(date -u +%Y.%m.%d)-$(git rev-parse --short=7 HEAD)"
           # 制品只装部署清单（k8s/**）：digest 变化 == 一次部署变更，而不是任意 commit 快照。
           flux push artifact "oci://$DEST:latest" \
