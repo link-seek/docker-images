@@ -20,16 +20,15 @@ spec:
   ports:
     - {name: http, port: 3000, targetPort: 3000}
 ---
-# opencode-vpc：历史 VPC 内网口（原 k3s ServiceLB，节点 IP 直达）。2026-11-22 退役外部暴露：
-# 无任何 Ingress/IngressRoute/pod 引用、无活跃连接，降级为 ClusterIP（不再占节点 hostPort / 不再暴露节点 IP）。
-# 如后续确认彻底无用可直接删除。
+# opencode-vpc：VPC 内网口（k3s ServiceLB，节点 IP:44097 直达）。2026-11-22 曾退役为 ClusterIP，
+# 2026-11-23 恢复为 LoadBalancer（仅内网节点，节点已打 enablelb=true，公网/边缘节点不绑），纯 HTTP、内网直连用。
 apiVersion: v1
 kind: Service
 metadata:
   name: opencode-vpc
   namespace: opencode-team
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector: {app: opencode-team}
   ports:
     - {name: http, port: 44097, targetPort: 4097}

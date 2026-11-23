@@ -120,7 +120,7 @@ metadata:
   name: opencode-vpc
   namespace: opencode-yingxin
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector: {app: opencode-yingxin}
   ports:
     - {name: http, port: 44099, targetPort: 4097}
