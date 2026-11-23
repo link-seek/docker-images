@@ -1,0 +1,89 @@
+name: mirror-images
+
+# 声明式镜像同步：把 images/mirror.yaml 里声明的镜像从上游复制进 SWR。
+# 关键：执行在 GitHub runner（有干净外网出口），不在集群内跑——集群连上游不稳，只负责从 SWR 拉。
+#   push main（清单/脚本变更）→ 自动 sync
+#   每日定时 → verify（漂移检测：声明了却不在 SWR 即红）
+#   workflow_dispatch → 手动 sync/verify
+#   pull_request（images/** 变更）→ 只 lint 清单形状（不连网、不查存在性）
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "sync=复制缺失；verify=只查存在性"
+        type: choice
+        options: [sync, verify]
+        default: verify
+        required: true
+  push:
+    branches: [main]
+    paths:
+      - images/**
+      - scripts/mirror_images.py
+      - .github/workflows/mirror-images.yml
+  pull_request:
+    paths:
+      - images/**
+  schedule:
+    - cron: "30 20 * * *"   # 每日 04:30 CST verify 漂移检测
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-images
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 PyYAML
+        run: python3 -m pip install --quiet pyyaml || pip3 install --quiet pyyaml
+      - name: lint 清单
+        run: python3 scripts/mirror_images.py lint
+
+  mirror:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SWR_REG: swr.cn-north-9.myhuaweicloud.com
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 决定模式
+        id: mode
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            M="${{ inputs.mode }}"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            M="verify"
+          else
+            M="sync"   # push main
+          fi
+          echo "mode=$M" >> "$GITHUB_OUTPUT"
+          echo "MODE=$M"
+
+      - name: 安装 skopeo + PyYAML
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+          python3 -m pip install --quiet pyyaml || pip3 install --quiet pyyaml
+          skopeo --version
+
+      - name: 登录 SWR
+        run: |
+          set -euo pipefail
+          [ -n "${SWR_LOGIN_USER:-}" ] && [ -n "${SWR_LOGIN_PASS:-}" ] || { echo "FAIL: 缺 SWR 凭据"; exit 1; }
+          echo "$SWR_LOGIN_PASS" | skopeo login "$SWR_REG" -u "$SWR_LOGIN_USER" --password-stdin
+
+      - name: "${{ steps.mode.outputs.mode }}"
+        run: python3 scripts/mirror_images.py "${{ steps.mode.outputs.mode }}"

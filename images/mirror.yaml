@@ -1,0 +1,16 @@
+# 声明式镜像同步清单（唯一真相）：这些镜像必须存在于 SWR。
+# 由 .github/workflows/mirror-images.yml 在 GitHub runner（有干净外网出口）上执行 sync/verify。
+# 为什么在 runner 上做：集群/节点连上游镜像源不稳，集群只负责从 SWR 拉；复制上游→SWR 必须跑在有出口的执行者。
+#
+# 增删镜像 = 改本文件 + 合 PR（push main 自动 sync；每日定时 verify 做漂移检测）。
+# 规则：src 必须带 tag；dst 必须带 tag；禁止 :latest（可审计、可复现）。
+registry: swr.cn-north-9.myhuaweicloud.com
+namespace: link-seek
+images:
+  # system-upgrade-controller（infra #844 依赖）
+  - src: docker.io/rancher/system-upgrade-controller:v0.20.1
+    dst: system-upgrade-controller:v0.20.1
+  - src: docker.io/rancher/kubectl:v1.30.3
+    dst: kubectl:v1.30.3
+  - src: docker.io/rancher/k3s-upgrade:v1.37.2-k3s1
+    dst: k3s-upgrade:v1.37.2-k3s1

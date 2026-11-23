@@ -72,3 +72,19 @@ ghcr.io/browserless/chromium:<tag> + fonts-noto-cjk/emoji → ghcr.io/link-seek/
 - **配送 = Flux 拉本仓制品**：集群 Flux（`clusters/k3s/git-docker-images.yaml`）从 SWR 拉本仓 `flux-artifact.yml` 打出的 OCI 制品，按 `k8s/<app>` 对账上线；**infra 仓不再做应用配送（旧 `deliver-*` 已退役）**，只留底座。
 - **门（`secret-hygiene` / `render-check` 等）只验货**：核密钥卫生与键集合，不碰值。
 - **测试对象是镜像**：CI 拉 digest pin 跑 e2e；**回滚 = 换 digest 发 PR**，git 历史即备份。
+
+## 声明式镜像同步（`images/mirror.yaml` + `mirror-images.yml`）
+
+把"哪些上游镜像必须复制进 SWR"变成**声明清单**，在 **GitHub runner**（有干净外网出口）上收敛，**不在集群内跑**（集群连上游不稳，只从 SWR 拉）。
+
+```text
+images/mirror.yaml（唯一真相：src → SWR dst）
+  → push main / 手动 dispatch：runner 上 skopeo copy --all 复制缺失/不一致镜像进 SWR
+  → 每日定时：verify 每个 dst 是否在 SWR（漂移检测，缺失即红）
+  → PR（images/** 变更）：只 lint 清单形状（不连网）
+```
+
+- 增删镜像 = 改 `images/mirror.yaml` 合 PR。
+- 规则：`src`/`dst` 必带 tag、禁 `:latest`（可审计/可复现）；`skopeo copy --all` 保多架构与摘要。
+- 凭据：复用 `SWR_LOGIN_USER` / `SWR_LOGIN_PASS`（`skopeo login`，脚本不接触密码）。
+- 典型用途：给 infra 的 k3s 组件（如 system-upgrade-controller）提供 SWR 镜像，集群无需外网。
