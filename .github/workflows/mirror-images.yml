@@ -54,6 +54,8 @@ jobs:
       SWR_REG: swr.cn-north-9.myhuaweicloud.com
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      PROD_HCLOUD_AK: ${{ secrets.PROD_HCLOUD_AK }}
+      PROD_HCLOUD_SK: ${{ secrets.PROD_HCLOUD_SK }}
     steps:
       - uses: actions/checkout@v4
 

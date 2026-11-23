@@ -10,8 +10,15 @@
 凭据：先 `skopeo login $REG`，本脚本不接触密码。
 """
 import argparse
+import datetime
+import hashlib
+import hmac
+import json
+import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 import yaml
 
@@ -40,6 +47,10 @@ def full_dst(reg, ns, dst):
     return f"{reg}/{ns}/{dst}"
 
 
+def repo_of(dst: str) -> str:
+    return dst.rsplit(":", 1)[0]
+
+
 def item_dst(reg, default_ns, item):
     return full_dst(reg, item_ns(item, default_ns), item["dst"])
 
@@ -50,6 +61,41 @@ def digest(ref):
         capture_output=True, text=True,
     )
     return r.stdout.strip() if r.returncode == 0 else None
+
+
+def make_public(ns: str, repo: str) -> None:
+    """把 SWR 仓库设为公开（集群匿名拉取）；幂等，缺 AK/SK 时跳过。"""
+    ak = os.environ.get("PROD_HCLOUD_AK", "").strip()
+    sk = os.environ.get("PROD_HCLOUD_SK", "").strip()
+    if not ak or not sk:
+        print(f"SKIP make-public {ns}/{repo} (no AK/SK)")
+        return
+    host = "swr-api.cn-north-9.myhuaweicloud.com"
+    path = f"/v2/manage/namespaces/{ns}/repos/{repo}"
+    body = json.dumps({"is_public": True}).encode()
+    now = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    payload = hashlib.sha256(body).hexdigest()
+    canon_headers = f"host:{host}\nx-sdk-date:{now}\n"
+    signed = "host;x-sdk-date"
+    canon = f"PATCH\n{path}\n\n{canon_headers}\n{signed}\n{payload}"
+    sts = f"SDK-HMAC-SHA256\n{now}\n{hashlib.sha256(canon.encode()).hexdigest()}"
+    sig = hmac.new(sk.encode(), sts.encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(
+        "https://" + host + path,
+        data=body,
+        method="PATCH",
+        headers={
+            "Host": host,
+            "X-Sdk-Date": now,
+            "Content-Type": "application/json",
+            "Authorization": f"SDK-HMAC-SHA256 Access={ak}, SignedHeaders={signed}, Signature={sig}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            print(f"PUBLIC {ns}/{repo}: {r.status}")
+    except urllib.error.HTTPError as e:
+        print(f"WARN make-public {ns}/{repo}: HTTP {e.code} {e.read().decode()[:120]}")
 
 
 def lint():
@@ -96,6 +142,7 @@ def sync():
         dd = digest(dst)
         if sd and sd == dd:
             print(f"SKIP {i['dst']} (digest 一致 {sd})")
+            make_public(item_ns(i, ns), repo_of(i["dst"]))
             continue
         src = "docker://" + i["src"]
         print(f"COPY {i['src']} -> {dst}")
@@ -104,6 +151,7 @@ def sync():
             print(f"FAIL {i['dst']}"); fail += 1
         else:
             print(f"SYNCED {i['dst']} @ {digest(dst)}")
+            make_public(item_ns(i, ns), repo_of(i["dst"]))
     print("SYNC-OK" if not fail else "SYNC-FAIL")
     sys.exit(1 if fail else 0)
 
