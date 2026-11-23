@@ -196,7 +196,7 @@ on:
         type: string
         default: ""
       k8s_preflight_manifest_path:
-        description: "预检用 overlay 目录（默认回落 k8s_manifest_path；team 用 k8s/opencode-team-preflight，同机制解密 test 密文）"
+        description: "预检用 overlay 目录（默认回落 k8s_manifest_path；team 用 k8s/_preflight/opencode-team，同机制解密 test 密文）"
         required: false
         type: string
         default: ""

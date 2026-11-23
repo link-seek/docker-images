@@ -4,7 +4,7 @@ resources:
 - namespace.yaml
 - entrypoint.yaml
 - deployment.yaml
-- ingressroute-staging-tls.yaml
+- ingressroute-tls.yaml
 
 # 镜像 digest 单源头：升级/回滚只改这里一行（本目录 deployment.yaml 里是 :pin-required 占位，
 # 绕过 kustomize 直接 apply 会明确 ImagePullBackOff，不会静默跑 latest）。

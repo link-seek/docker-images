@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 # 远程浏览器渲染修复（源码覆盖）：上游 startStaticServer 只绑 127.0.0.1，独立 Pod 的 browserless
 # 访问不到本 Pod loopback → check/export 渲染白页。用本仓覆盖文件：存在 OPEN_DESIGN_BROWSER_URL 时
 # 绑 0.0.0.0 且 baseUrl 用可达地址（Pod IP），本地浏览器模式仍 127.0.0.1。
-COPY docker/odk-overrides/staticServer.ts /tmp/staticServer.override.ts
+COPY docker/_shared/staticServer.ts /tmp/staticServer.override.ts
 RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
  && cd /src && git checkout "${ODK_REF}" \
  && cp /tmp/staticServer.override.ts /src/packages/core/src/export/staticServer.ts \
@@ -192,7 +192,8 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_
 # 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
 # 注意：源文件叫 opencode.jsonc（保留注释），但必须落盘为 opencode.json——
 # 2.1.4 实测 daemon 只读 opencode.json，.jsonc 同内容零命中（debug config 0 结果）。
-COPY docker/opencode-tools/opencode-mem.jsonc docker/opencode-tools/AGENTS.md /root/.config/opencode/
+COPY docker/_shared/opencode-mem.jsonc /root/.config/opencode/
+COPY docker/opencode-tools/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
 # 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
@@ -204,9 +205,9 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）
-COPY docker/opencode-tools/send-mail.sh /usr/local/bin/send-mail
-COPY docker/opencode-tools/fetch-mail.py /usr/local/bin/fetch-mail
-COPY docker/opencode-tools/md2html.py /usr/local/lib/send-mail/md2html.py
+COPY docker/_shared/send-mail.sh /usr/local/bin/send-mail
+COPY docker/_shared/fetch-mail.py /usr/local/bin/fetch-mail
+COPY docker/_shared/md2html.py /usr/local/lib/send-mail/md2html.py
 COPY docker/opencode-tools/tssh.sh /usr/local/bin/tssh
 # send-mail -m 烘焙依赖（社区标准配方；goss 转换冒烟不过则不发版）
 ARG MD_DEPS="markdown==3.7 premailer==3.10.0"

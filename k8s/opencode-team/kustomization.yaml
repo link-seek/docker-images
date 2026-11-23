@@ -6,4 +6,4 @@ resources:
 - deployment.yaml
 - service.yaml
 - rbac.yaml
-- ingressroute-staging-tls.yaml
+- ingressroute-tls.yaml

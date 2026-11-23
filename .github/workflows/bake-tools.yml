@@ -73,7 +73,7 @@ jobs:
       # tools 没有独立的 "opencode" 部署：只有 xieyucheng / yingxin 两个生产实例，team 线另走 bake-team。
       # 预检 base 取 xieyucheng，overlay 去 nodeSelector/hostPath + 删生产 enc Secret/Ingress。
       k8s_manifest_path: k8s/opencode-xieyucheng
-      k8s_preflight_manifest_path: k8s/opencode-xieyucheng-preflight
+      k8s_preflight_manifest_path: k8s/_preflight/opencode-xieyucheng
       k8s_manifest_ref: main
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
       k8s_secret_env_file: docker/opencode-tools/preflight-env.conf
