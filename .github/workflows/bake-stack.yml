@@ -47,7 +47,7 @@
 #          ENV_SMTP_PASS（新预检 mail 用例，无则 fail-closed 提示补仓 secret）、
 #          OCI_*（runner 侧探针直验钥匙；标识符在 manifest 明文，secret 只留 KEY_CONTENT；没传则跳过）
 #
-# 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：老 img-preflight，DEPRECATED）
+# 固定四拍：build（temp tag）→ 预检（k8s_app 非空：k3d+Flux 同货验证；空：跳过预检）
 #           → 本地细测（hook）→ 转正（retag 不 rebuild）。
 # 安全门：只有 main 分支才转正式 tag；分支 dispatch 只跑到细测（TRIAL-ONLY），合前可验骨架本身。
 # 轮询门：gh run watch --interval 默认 60s，急活 30s，底线 15s（短轮询撞次级限流；骨架内已用 60s）。
@@ -108,10 +108,6 @@ on:
         required: false
         type: string
         default: ""
-      infra_stack_dir:
-        required: false
-        type: string
-        default: ""
       fine_test_hook:
         required: false
         type: string
@@ -152,10 +148,6 @@ on:
         required: false
         type: string
         default: ""
-      img_key_ttl:
-        required: false
-        type: string
-        default: "21600"
       k8s_app:
         required: false
         type: string
