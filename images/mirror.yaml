@@ -33,3 +33,6 @@ images:
     dst: omnara-maintenance:v0.2.7
   - src: ghcr.io/omnara-ai/omnara-migrations:v0.2.7
     dst: omnara-migrations:v0.2.7
+  # cosign（签名工具；v2 保持 legacy .sig 格式，Flux verify 兼容）
+  - src: ghcr.io/sigstore/cosign/cosign:v2.6.5
+    dst: cosign:v2.6.5
