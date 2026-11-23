@@ -141,7 +141,7 @@ metadata:
   name: opencode-vpc
   namespace: opencode-xieyucheng
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector: {app: opencode}
   ports:
     - {name: http, port: 44098, targetPort: 4097}
