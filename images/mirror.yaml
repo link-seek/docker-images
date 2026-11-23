@@ -4,6 +4,7 @@
 #
 # 增删镜像 = 改本文件 + 合 PR（push main 自动 sync；每日定时 verify 做漂移检测）。
 # 规则：src 必须带 tag；dst 必须带 tag；禁止 :latest（可审计、可复现）。
+# 命名空间：默认用顶层 namespace；配额满时单条可用 `ns:` 覆盖（如 xieyucheng123）。
 registry: swr.cn-north-9.myhuaweicloud.com
 namespace: link-seek
 images:
@@ -14,3 +15,21 @@ images:
     dst: kubectl:v1.30.3
   - src: docker.io/rancher/k3s-upgrade:v1.37.2-k3s1
     dst: k3s-upgrade:v1.37.2-k3s1
+  # Omnara 控制面自托管底座（compose.yaml 对齐；ghcr 可直拉，SWR 做集群内唯一源）
+  - src: docker.io/library/postgres:18-alpine
+    dst: postgres:18-alpine
+  - src: docker.io/valkey/valkey:9-alpine
+    dst: valkey:9-alpine
+  - src: docker.io/rustfs/rustfs:1.0.4
+    dst: rustfs:1.0.4
+  # Omnara 服务镜像（v0.2.7 为当前最高版本化 tag；禁止 latest，升级改 tag）
+  - src: ghcr.io/omnara-ai/omnara-api:v0.2.7
+    dst: omnara-api:v0.2.7
+  - src: ghcr.io/omnara-ai/omnara-worker:v0.2.7
+    dst: omnara-worker:v0.2.7
+  - src: ghcr.io/omnara-ai/omnara-web:v0.2.7
+    dst: omnara-web:v0.2.7
+  - src: ghcr.io/omnara-ai/omnara-maintenance:v0.2.7
+    dst: omnara-maintenance:v0.2.7
+  - src: ghcr.io/omnara-ai/omnara-migrations:v0.2.7
+    dst: omnara-migrations:v0.2.7
