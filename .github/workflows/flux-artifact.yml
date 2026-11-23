@@ -31,16 +31,45 @@ jobs:
       - name: install flux CLI
         run: curl -fsSL https://fluxcd.io/install.sh | sudo bash
 
+      - name: install skopeo (digest 读取)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+
       - name: login + push OCI artifact
         run: |
           set -euo pipefail
           echo "$SWR_LOGIN_PASS" | docker login "$REG" -u "$SWR_LOGIN_USER" --password-stdin
           REV="main@sha1:$(git rev-parse HEAD)"
+          TAG="v$(date -u +%Y.%m.%d)-$(git rev-parse --short=7 HEAD)"
+          # 制品只装部署清单（k8s/**）：digest 变化 == 一次部署变更，而不是任意 commit 快照。
           flux push artifact "oci://$DEST:latest" \
             --path=. \
             --source="$(git config --get remote.origin.url)" \
             --revision="$REV" \
-            --ignore-paths '.git/**,agent-out/**'
+            --ignore-paths '.git/**,agent-out/**,docker/**,.github/**,images/**,scripts/**,docs/**,**/*.md,opencode.json,.opencode/**'
+          # 不可变发布 tag：同 tag 不允许换 digest。
+          if flux tag artifact "oci://$DEST:latest" --tag "$TAG" 2>/tmp/tag.err; then
+            echo "tagged immutable: $TAG"
+          else
+            echo "tag $TAG exists; verifying digest"
+            EXISTING="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:$TAG" || true)"
+            CURRENT="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:latest")"
+            if [ -z "$EXISTING" ] || [ "$EXISTING" != "$CURRENT" ]; then
+              echo "FATAL: immutable tag $TAG points to a different digest ($EXISTING != $CURRENT)"; cat /tmp/tag.err || true; exit 1
+            fi
+            echo "tag $TAG unchanged ($CURRENT)"
+          fi
+          DIGEST="$(skopeo inspect --format '{{.Digest}}' "docker://$DEST:$TAG")"
+          test -n "$DIGEST"
+          {
+            echo "### release"
+            echo "- tag: \`$TAG\`"
+            echo "- digest: \`$DIGEST\`"
+            echo "- revision: \`$REV\`"
+            echo ""
+            echo "pin in infra: \`ref: { digest: $DIGEST }\`"
+          } >> "$GITHUB_STEP_SUMMARY"
           docker logout "$REG" >/dev/null 2>&1 || true
 
       - name: make SWR repo public (cluster pulls anonymously)
