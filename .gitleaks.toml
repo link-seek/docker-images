@@ -1,0 +1,19 @@
+title = "gitleaks config"
+
+# 用官方默认规则 + 本仓已知非密钥的允许清单（gitleaks 规则库随上游更新）。
+[extend]
+useDefault = true
+
+[allowlist]
+description = "已知非密钥：git 元数据 / env 变量引用 / dummy 占位 / RFC6455 示例 nonce"
+paths = [
+  '''(^|/)\.git/''',
+  '''docker/opencode-team/preflight-env.conf''',
+  '''docker/opencode-tools/preflight-env.conf''',
+]
+regexes = [
+  '''ZHVtbXktcHJlZmxpZ2h0''',      # base64("dummy-preflight")，预检占位
+  '''ci-probe''',                  # litellm 健康探针的 dummy bearer
+  '''dGhlIHNhbXBsZSBub25jZQ==''',  # RFC6455 文档示例 websocket nonce
+  '''\$TSKEY''',                   # curl 使用环境变量引用，非字面量
+]
