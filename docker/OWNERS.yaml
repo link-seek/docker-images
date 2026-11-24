@@ -1,0 +1,10 @@
+# 各线归属（消费方负责）：本仓是组织镜像工厂，只保证构建纪律。
+# 业务线归商家，底座线归 infra。owner 负责版本跟进 + 评审本线 PR。
+lines:
+  opencode-tools: {owner: 商家, note: "主力工具镜像"}
+  opencode-team: {owner: 商家, note: "部门共用线"}
+  browserless-cjk: {owner: 商家, note: "远程浏览器，各实例独立 Pod"}
+  litellm-gateway: {owner: 商家, note: "网关"}
+  erpnext: {owner: 商家, note: "ERP（含 mariadb/redis sidecar 镜像）"}
+  reloader: {owner: infra-base, note: "Secret 滚动执行器，上游原样重打"}
+  nfs-server: {owner: infra-base, note: "集群 RWX 底座，自打；清单在 infra k8s/nfs"}
