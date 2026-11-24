@@ -1,0 +1,6 @@
+{}
+
+# 默认空；实际用 -f values-<instance>.yaml。schema:
+# namespace: <ns>
+# deployments: [{name, labels, annotations, replicas, strategy, selector, podLabels, podAnnotations, podSpec}]
+# resources: [raw k8s objects]
