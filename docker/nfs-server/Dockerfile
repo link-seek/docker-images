@@ -1,5 +1,6 @@
 # nfs-server：Alpine + nfs-utils 的 NFSv4-only 内核服务端（自打，digest pin 即版本）。
 # 用途：nfs-subdir-external-provisioner 的后端，给 Omnara memory-data 提供 RWX。
+# 实测约束见 run.sh 头注（-N 2 非法；需 mount nfsd）。
 # 为什么自打：上游 itsthenetwork/nfs-server-alpine 只有 latest 可用（本仓禁 latest），
 # 自打则 base 钉死、可复现。NFSv4-only，单 export（/exports），provisioner 按 PVC 建子目录。
 # 运行要求：privileged（内核 nfsd 必需），见 infra k8s/nfs/。
@@ -12,5 +13,5 @@ COPY docker/nfs-server/exports /etc/exports
 COPY docker/nfs-server/run.sh /run.sh
 RUN chmod +x /run.sh
 VOLUME ["/exports"]
-EXPOSE 2049
+EXPOSE 2049 111
 ENTRYPOINT ["/run.sh"]
