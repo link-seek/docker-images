@@ -1,0 +1,49 @@
+name: bake-nfs-server
+# 薄调用：nfs-server 自打（Alpine + nfs-utils，NFSv4-only，provisioner 后端）。
+# 上游无可用 pin tag（itsthenetwork 只有 latest，本仓禁用），故自打：base 钉 ALPINE_TAG。
+# 版本：nfs_tag dispatch 传入（默认 1.0；Dockerfile 改动则 bump）；转正以 run 日志 digest 为准。
+
+on:
+  workflow_dispatch:
+    inputs:
+      nfs_tag:
+        description: "本镜像 tag（如 1.0）"
+        required: false
+        type: string
+        default: "1.0"
+      alpine_tag:
+        description: "Alpine base tag（如 3.22.1）"
+        required: false
+        type: string
+        default: "3.22.1"
+  push:
+    branches: [main]
+    paths:
+      - docker/nfs-server/Dockerfile
+      - docker/nfs-server/**
+      - .github/workflows/bake-nfs-server.yml
+      - .github/workflows/bake-stack.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: nfs-server
+      dockerfile: docker/nfs-server/Dockerfile
+      ghcr_image: ghcr.io/link-seek/nfs-server
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/nfs-server
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.nfs_tag }}
+      build_args: |
+        ALPINE_TAG=${{ inputs.alpine_tag }}
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}

@@ -22,17 +22,20 @@ images:
     dst: valkey:9-alpine
   - src: docker.io/rustfs/rustfs:1.0.4
     dst: rustfs:1.0.4
-  # Omnara 服务镜像（v0.2.7 为当前最高版本化 tag；禁止 latest，升级改 tag）
-  - src: ghcr.io/omnara-ai/omnara-api:v0.2.7
-    dst: omnara-api:v0.2.7
-  - src: ghcr.io/omnara-ai/omnara-worker:v0.2.7
-    dst: omnara-worker:v0.2.7
-  - src: ghcr.io/omnara-ai/omnara-web:v0.2.7
-    dst: omnara-web:v0.2.7
-  - src: ghcr.io/omnara-ai/omnara-maintenance:v0.2.7
-    dst: omnara-maintenance:v0.2.7
-  - src: ghcr.io/omnara-ai/omnara-migrations:v0.2.7
-    dst: omnara-migrations:v0.2.7
+  # Omnara 服务镜像（cluster-v0.2.27；禁止 latest，升级改 tag；tag 存在性已用 ghcr API 逐个验过）
+  - src: ghcr.io/omnara-ai/omnara-api:v0.2.27
+    dst: omnara-api:v0.2.27
+  - src: ghcr.io/omnara-ai/omnara-worker:v0.2.27
+    dst: omnara-worker:v0.2.27
+  - src: ghcr.io/omnara-ai/omnara-web:v0.2.27
+    dst: omnara-web:v0.2.27
+  - src: ghcr.io/omnara-ai/omnara-maintenance:v0.2.27
+    dst: omnara-maintenance:v0.2.27
+  - src: ghcr.io/omnara-ai/omnara-migrations:v0.2.27
+    dst: omnara-migrations:v0.2.27
+  # NFS 动态供给（RWX 给 Omnara memory-data；server 自打，provisioner 上游原样重打）
+  - src: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.18
+    dst: nfs-provisioner:v4.0.18
   # cosign（签名工具；v2 保持 legacy .sig 格式，Flux verify 兼容）
   - src: ghcr.io/sigstore/cosign/cosign:v2.6.5
     dst: cosign:v2.6.5
