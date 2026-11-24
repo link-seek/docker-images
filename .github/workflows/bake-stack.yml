@@ -260,7 +260,7 @@ on:
         required: false
 
 permissions:
-  contents: read
+  contents: write # 产 releases/<tag>.json 的 GH Release 资产（#317 item4）
   packages: write # push 镜像
 
 env:
@@ -831,6 +831,56 @@ jobs:
           TAG="${{ steps.build.outputs.tag }}"
           python3 scripts/verify_pull.py auth "${{ env.SWR_IMAGE }}:$TAG"
           python3 scripts/verify_pull.py auth "${{ env.SWR_IMAGE }}:latest"
+
+      - name: 产出 releases 元数据（#317 item4 生产者）
+        if: env.skip != 'true'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          SLUG="${{ inputs.image_slug }}"
+          mkdir -p /tmp/release-out
+          OUT="/tmp/release-out/release-${SLUG}-${TAG}.json"
+          cat > "$OUT" <<JSON
+          {
+            "image": "${SLUG}",
+            "tag": "${TAG}",
+            "source_commit": "${GITHUB_SHA}",
+            "images": [
+              {"name": "${{ env.SWR_IMAGE }}", "tag": "${TAG}", "digest": "${DIGEST:-}"}
+            ],
+            "verification": "${{ inputs.verification }}",
+            "created_at": "$(date -u +%FT%TZ)"
+          }
+          JSON
+          python3 -c "import json; json.load(open('$OUT')); print('release.json valid:', '$OUT')"
+
+      - name: 上传 releases 元数据（artifact）
+        if: env.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.image_slug }}-${{ steps.build.outputs.tag }}
+          path: /tmp/release-out/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 发布 releases 资产（main；GH Release，供 item6 机器人开 bump PR）
+        if: env.skip != 'true' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"; SLUG="${{ inputs.image_slug }}"
+          RTAG="release/${SLUG}/${TAG}"
+          F="/tmp/release-out/release-${SLUG}-${TAG}.json"
+          if gh release view "$RTAG" >/dev/null 2>&1; then
+            gh release upload "$RTAG" "$F" --clobber
+            echo "RELEASE UPDATED $RTAG"
+          else
+            gh release create "$RTAG" "$F" --target "$GITHUB_SHA" \
+              --title "image ${SLUG}:${TAG}" \
+              --notes "auto: ${SLUG}@${TAG} digest=${DIGEST:-unknown} verification=${{ inputs.verification }}"
+            echo "RELEASE CREATED $RTAG"
+          fi
 
       - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
         if: always() && env.skip != 'true'
