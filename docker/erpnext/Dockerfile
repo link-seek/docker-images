@@ -4,7 +4,7 @@
 # 版本 pin：BASE_TAG（dispatch 必填传入）；Dockerfile 默认值只给本地构建兜底，CI 不读。
 # base 与产出分仓：base 走 url2hc 中转常驻（link-seek/erpnext），产出走 bake 转正（link-seek/erpnext-cn）。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
-ARG BASE_TAG=v15.94.1
+ARG BASE_TAG=v15.94.1@sha256:7e497eff17c26f9002c701dab9063ad88bc0e0e79644b41cad4778e282d8e594
 # digest-exempt: 内部派生 base，BASE_TAG dispatch 即版本（tag 无法静态锁 digest）exp:2027-06-30
 FROM swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext:${BASE_TAG}
 
