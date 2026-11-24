@@ -44,6 +44,58 @@ def walk_images(node, out):
             walk_images(v, out)
 
 
+def check_bake_verification(violations):
+    """item1: 每个 bake-stack caller 必须声明 verification=full|upstream；
+    upstream 必须带 reason + 未过期 exp（沿用 .trivyignore 的 exp 记法）。"""
+    import datetime
+
+    wf = ROOT / ".github" / "workflows"
+    if not wf.is_dir():
+        return
+    today = datetime.date.today()
+    callers = 0
+    for f in sorted(wf.glob("bake-*.yml")):
+        if f.name == "bake-stack.yml":
+            continue
+        try:
+            doc = yaml.safe_load(f.read_text()) or {}
+        except Exception as e:  # noqa: BLE001
+            violations.append(f"{f.name}: yaml parse failed: {e}")
+            continue
+        for _jid, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            if job.get("uses") != "./.github/workflows/bake-stack.yml":
+                continue
+            callers += 1
+            w = job.get("with") or {}
+            v = str(w.get("verification", "")).strip()
+            if v not in ("full", "upstream"):
+                violations.append(
+                    f"{f.name}: bake caller verification 缺/非法（须 full|upstream，实际='{v}'）"
+                )
+                continue
+            if v == "upstream":
+                r = str(w.get("verification_reason", "")).strip()
+                e = str(w.get("verification_exp", "")).strip()
+                if not r:
+                    violations.append(f"{f.name}: verification=upstream 缺 verification_reason")
+                if not re.match(r"^\d{4}-\d{2}-\d{2}$", e):
+                    violations.append(
+                        f"{f.name}: verification=upstream 缺/非法 verification_exp='{e}'"
+                    )
+                else:
+                    try:
+                        if datetime.date.fromisoformat(e) < today:
+                            violations.append(
+                                f"{f.name}: verification=upstream 已过期 exp={e} (< {today})"
+                            )
+                    except ValueError:
+                        violations.append(f"{f.name}: verification_exp 无法解析 '{e}'")
+    if callers == 0:
+        violations.append("未发现任何 bake-stack caller（检查 .github/workflows/bake-*.yml 路径）")
+
+
 def main():
     violations = []
     targets = [p for p in sorted((ROOT / "k8s").iterdir()) if p.is_dir() and p.name not in SKIP_DIRS]
@@ -77,6 +129,7 @@ def main():
         for entry in k.get("images") or []:
             if "newTag" in entry and "digest" not in entry:
                 violations.append(f"{d.name}/kustomization.yaml: images[].newTag without digest -> {entry}")
+    check_bake_verification(violations)
     if violations:
         print("POLICY-VIOLATIONS")
         for v in violations:

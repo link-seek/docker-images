@@ -55,6 +55,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: opencode-tools
+      verification: full
       dockerfile: docker/opencode-tools/Dockerfile
       ghcr_image: ghcr.io/link-seek/opencode-tools
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools

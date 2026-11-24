@@ -59,6 +59,18 @@ on:
       image_slug:
         required: true
         type: string
+      verification:
+        description: "验证档位：full=自打/有自研改动（须有 goss 或 fine-test）；upstream=上游镜像原样重打，需 verification_reason + 未过期 verification_exp（沿用 .trivyignore 的 exp 记法）"
+        required: true
+        type: string
+      verification_reason:
+        required: false
+        type: string
+        default: ""
+      verification_exp:
+        required: false
+        type: string
+        default: ""
       dockerfile:
         required: true
         type: string
@@ -267,6 +279,21 @@ jobs:
       GHCR_IMAGE: ${{ inputs.ghcr_image }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: 验证档位声明（verification gate）
+        run: |
+          set -euo pipefail
+          V='${{ inputs.verification }}'
+          case "$V" in full|upstream) ;; *) echo "FAIL: verification 必须 full|upstream，实际='$V'"; exit 1;; esac
+          if [ "$V" = "upstream" ]; then
+            R='${{ inputs.verification_reason }}'; E='${{ inputs.verification_exp }}'
+            [ -n "$R" ] || { echo "FAIL: upstream 需 verification_reason"; exit 1; }
+            [[ "$E" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "FAIL: verification_exp 需 YYYY-MM-DD，实际='$E'"; exit 1; }
+            TODAY="$(date -u +%F)"
+            [[ ! "$E" < "$TODAY" ]] || { echo "FAIL: upstream 验证已过期 verification_exp=$E (< $TODAY)，请复审"; exit 1; }
+            echo "upstream: 理由=$R 到期=$E"
+          fi
+          echo "VERIFICATION OK: $V"
 
       - name: Sync 来源（正本在他仓时过渡用；商家正本到位后删）
         if: inputs.sync_from_repo != ''
