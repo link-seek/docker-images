@@ -1,0 +1,33 @@
+{{- range .Values.deployments }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+{{ toYaml .labels | indent 4 }}
+{{- with .annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .replicas }}
+{{- with .strategy }}
+  strategy:
+{{ toYaml . | indent 4 }}
+{{- end }}
+  selector:
+    matchLabels:
+{{ toYaml .selector | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ toYaml .podLabels | indent 8 }}
+{{- with .podAnnotations }}
+      annotations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+{{ toYaml .podSpec | indent 6 }}
+---
+{{- end }}

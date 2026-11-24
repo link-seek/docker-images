@@ -1,0 +1,35 @@
+name: helm-parity
+
+# #317 Phase 2：charts/opencode 渲染必须与现有 kustomize 清单字段级一致。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: ensure kubectl
+        run: |
+          set -euo pipefail
+          command -v kubectl >/dev/null || {
+            curl -fsSL -o /tmp/kubectl https://dl.k8s.io/release/v1.30.3/bin/linux/amd64/kubectl
+            sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+          }
+          kubectl version --client
+      - name: install helm (pinned)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz
+          tar xzf /tmp/helm.tgz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version
+      - name: parity
+        run: python3 scripts/helm_parity.py
