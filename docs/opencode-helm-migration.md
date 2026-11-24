@@ -61,3 +61,11 @@ entrypoint: {script}
 - 双 reconciler 抢同一对象（Kustomization ↔ HelmRelease）：切换必须原子、先切后删。
 - 预检（bake）当前读 docker-images `k8s/_preflight`；清单迁移后需改 `k8s_manifest_repo/path`。
 - entrypoint/RBAC 归一若与现网行为不一致，可能影响 SSH/工具权限 → 需 parity 验证。
+
+## 落地记录（PR1→PR2→PR3）
+- PR1：`_helpers.tpl`（REC labels）+ `rbac.create`/`serviceAccount` 开关；k8s 源同步加注；parity 全绿。
+- PR2：values 瘦身（文档化默认 + 三实例差异）+ 模板按 kind 拆分 + `values.schema.json`；
+  parity 退役→`helm lint` + kubeconform；bake 预检改 YAML 感知替换；Chart 0.1.0→0.2.0。
+  渲染等价：team 全同；xie/ying 仅 entrypoint TS 注释归一。
+- PR3：删 `k8s/opencode-*` 与 `_preflight/opencode-*` overlay；bake caller 去 kustomize 遗留输入；
+  README/intake 示例路径更新。Flux 只走 HelmRelease（chart 0.2.0）。

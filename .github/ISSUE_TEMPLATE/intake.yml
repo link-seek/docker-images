@@ -26,9 +26,9 @@ body:
     id: affected
     attributes:
       label: 影响文件
-      description: Repo-relative paths, one per line. Optional. Example: k8s/opencode-team/deployment.yaml
+      description: Repo-relative paths, one per line. Optional. Example: charts/opencode/values-team.yaml
       placeholder: |
-        k8s/opencode-team/deployment.yaml
+        charts/opencode/values-team.yaml
       render: text
     validations:
       required: false
