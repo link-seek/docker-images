@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && mkdir -p /out && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscale" /out/tailscale \
  && mv "/tmp/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}/tailscaled" /out/tailscaled
 
-FROM ghcr.io/berriai/litellm@sha256:11175975a3093e05e92faee2fe2fe3412a3ae2fcaa849eb0fe25d5f0d8bcb2e9
+FROM ghcr.io/berriai/litellm@sha256:1050d2c9ca58399de9cd51df6eb503812af697717f54d2f08c1c30589c75e1f7
 
 USER root
 
