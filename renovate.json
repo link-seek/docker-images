@@ -1,0 +1,9 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "schedule:weekly"],
+  "dependencyDashboard": true,
+  "packageRules": [
+    { "matchUpdateTypes": ["major"], "dependencyDashboardApproval": true },
+    { "matchManagers": ["dockerfile"], "pinDigests": true }
+  ]
+}
