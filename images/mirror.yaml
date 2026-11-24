@@ -40,3 +40,14 @@ images:
   # cosign（签名工具；v2 保持 legacy .sig 格式，Flux verify 兼容）
   - src: ghcr.io/sigstore/cosign/cosign:v2.6.5
     dst: cosign:v2.6.5
+  # Kyverno 策略引擎（#317 item7）：5 个控制器镜像，从 ghcr 镜像进 SWR（reg.kyverno.io 国内不可达）。
+  - src: ghcr.io/kyverno/kyverno:v1.20.0
+    dst: kyverno:v1.20.0
+  - src: ghcr.io/kyverno/kyvernopre:v1.20.0
+    dst: kyverno-kyvernopre:v1.20.0
+  - src: ghcr.io/kyverno/background-controller:v1.20.0
+    dst: kyverno-background-controller:v1.20.0
+  - src: ghcr.io/kyverno/cleanup-controller:v1.20.0
+    dst: kyverno-cleanup-controller:v1.20.0
+  - src: ghcr.io/kyverno/reports-controller:v1.20.0
+    dst: kyverno-reports-controller:v1.20.0
