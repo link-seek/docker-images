@@ -168,8 +168,9 @@ spec:
             # webSocketDebuggerUrl 指向 Service（默认按 HOST=0.0.0.0 会生成不可路由的 ws://0.0.0.0:3000/，
             # 导致 puppeteer.connect({browserURL}) 连不上；open-design check/export 依赖此）。
             - {name: EXTERNAL, value: "http://browserless.opencode-team.svc.cluster.local:3000"}
-            - {name: CONCURRENT, value: "10"}
-            - {name: QUEUED, value: "10"}
+            # 共享实例：3 个租户（team/xie/ying）软隔离共用；并发按 3 租户调大。
+            - {name: CONCURRENT, value: "20"}
+            - {name: QUEUED, value: "20"}
             # 单会话上限；30s(官方示例默认)会截断真实自动化(登录+多步CRUD+等待返回常>30s)。
             # 10min 兼顾长任务与资源回收；如需更久可调大，或用 -1(需保证客户端 close)。
             - {name: TIMEOUT, value: "600000"}

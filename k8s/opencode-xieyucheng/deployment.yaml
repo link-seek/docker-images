@@ -57,8 +57,9 @@ spec:
             - {name: SMTP_FROM, value: 122306789@163.com}
             - {name: MAIL_DEFAULT_TO, value: xieyucheng@outlook.com}
             # 浏览器走本 ns 独立 browserless Pod（CDP over ws；无 token，集群内裸用）。
-            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-xieyucheng.svc.cluster.local:3000/chromium"}
-            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://browserless.opencode-xieyucheng.svc.cluster.local:3000"}
+            # 软隔离：共用 opencode-team 的共享 browserless（会话级隔离，接受资源争用）。
+            - {name: BROWSER_CDP_URL, value: "ws://browserless.opencode-team.svc.cluster.local:3000/chromium"}
+            - {name: OPEN_DESIGN_BROWSER_URL, value: "http://browserless.opencode-team.svc.cluster.local:3000"}
             - name: LITELLM_API_KEY
               valueFrom: {secretKeyRef: {name: opencode-xieyucheng-env, key: LITELLM_API_KEY}}
             - name: GH_TOKEN
@@ -157,7 +158,7 @@ metadata:
   labels:
     app: browserless
 spec:
-  replicas: 1
+  replicas: 0 # 软隔离：共用 opencode-team 的 browserless（保留 doc 供预检镜像探测；不拉起）
   strategy:
     type: Recreate # 单副本：滚动无意义。
   selector:
