@@ -6,5 +6,7 @@
 
 # 本仓定位
 
+本仓是组织镜像工厂（构建纪律归工厂），各线归属消费方（归属见 docker/OWNERS.yaml）：业务线归商家，底座线归 infra。
+
 商家对运行结果负责：业务逻辑 + 镜像 + manifest + 配送闭环，digest 即行为版本号；manifest 跟镜像走，同一仓同一 PR。镜像只经 GH 流水线打包（bake-tools），不在本地手打。
 构建细则按线分读：tools 线见 `docker/opencode-tools/AGENTS.md`，team 线见 `docker/opencode-team/AGENTS.md`（两线各自独立维护，勿互相照抄）。
