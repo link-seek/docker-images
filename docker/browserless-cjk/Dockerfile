@@ -6,7 +6,8 @@
 # 底座为 Ubuntu 24.04（v2.56 实测），apt 装 fonts-noto-cjk + emoji 后 fc-cache。
 # 注意：CI 全按 dispatch 必填参数构建，不读这里默认值；默认值只给本地 docker build 兜底。
 ARG BROWSERLESS_TAG=2.63.1
-FROM ghcr.io/browserless/chromium:v2.63.1
+# 底座 digest pin（v2.63.1 多架构 manifest，2026-11-24 解析）；bump = 改 tag@digest 这行。
+FROM ghcr.io/browserless/chromium:v2.63.1@sha256:a79e03601b98ca7dc69bb518e7ffec9bbc7e368cde9b28d793a0c81e3193c0bb
 
 USER root
 SHELL ["/bin/bash", "-c"]

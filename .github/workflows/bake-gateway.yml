@@ -31,6 +31,8 @@ permissions:
 
 jobs:
   release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（补齐此前缺失的守卫）
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: litellm-gateway

@@ -13,6 +13,7 @@ ARG OPENCODE_TAG=2.3.0
 # 产物 out/index.js 由 esbuild 打成自包含 CJS（core + puppeteer-core 全 bundle），
 # 仅 content/sdk 两个外部依赖随 npm install 拉；构建独立放在 builder 阶段，不污染最终镜像层。
 # 版本 pin：ODK_REF（单源头）；bump=改这行发 PR。
+# digest-exempt: builder-stage（编译期，不发布）
 FROM node:22-bookworm-slim AS odk-builder
 ARG ODK_REF=fcf21f35113a4d0ea116b4d50e2251b0c52fc8bd
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \

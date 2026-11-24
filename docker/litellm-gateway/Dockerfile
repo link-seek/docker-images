@@ -9,6 +9,7 @@ ARG TAILSCALE_VERSION=1.102.4
 
 # tailscale 官方静态二进制下载（上游 litellm 底座是 Wolfi，无 apt-get；
 # 用 ubuntu 阶段下载再 COPY，静态二进制底座无关；与 opencode-tools 同版本 pin）。
+# digest-exempt: builder-stage（仅下载 tailscale 静态二进制，不发布）
 FROM ubuntu:24.04 AS ts-fetch
 ARG TAILSCALE_VERSION=1.102.4
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
