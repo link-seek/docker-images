@@ -71,22 +71,17 @@ jobs:
           echo "mode=$M" >> "$GITHUB_OUTPUT"
           echo "MODE=$M"
 
-      - name: 安装 skopeo + PyYAML + regctl/regsync
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 安装 skopeo + PyYAML + regctl
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq skopeo
           python3 -m pip install --quiet pyyaml || pip3 install --quiet pyyaml
           skopeo --version
-          REGCLIENT=v0.11.7
-          gh release download "$REGCLIENT" -R regclient/regclient -p 'regctl-linux-amd64' -D /tmp/rc --clobber
-          gh release download "$REGCLIENT" -R regclient/regclient -p 'regsync-linux-amd64' -D /tmp/rc --clobber
-          sudo install -m 0755 /tmp/rc/regctl-linux-amd64 /usr/local/bin/regctl
-          sudo install -m 0755 /tmp/rc/regsync-linux-amd64 /usr/local/bin/regsync
+          REGCTL=v0.11.7
+          curl -fsSL -o /tmp/regctl "https://github.com/regclient/regclient/releases/download/${REGCTL}/regctl-linux-amd64"
+          sudo install -m 0755 /tmp/regctl /usr/local/bin/regctl
           regctl version | head -1
-          regsync version | head -1
 
       - name: 登录 SWR
         run: |
@@ -95,15 +90,4 @@ jobs:
           echo "$SWR_LOGIN_PASS" | skopeo login "$SWR_REG" -u "$SWR_LOGIN_USER" --password-stdin
 
       - name: "${{ steps.mode.outputs.mode }}"
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.mode.outputs.mode }}" = "sync" ]; then
-            # 复制由 regsync（regclient，社区维护）执行；公开策略仍走 SWR API（薄壳）。
-            python3 scripts/gen_regsync.py > /tmp/regsync.yaml
-            grep -q '^creds:' /tmp/regsync.yaml && echo "regsync creds: present" || echo "regsync creds: MISSING"
-            sed -E 's/(user|pass): .*/\1: ***/' /tmp/regsync.yaml | head -5
-            regsync once -c /tmp/regsync.yaml
-            python3 scripts/mirror_images.py make-public
-          else
-            python3 scripts/mirror_images.py verify
-          fi
+        run: python3 scripts/mirror_images.py "${{ steps.mode.outputs.mode }}"
