@@ -1,0 +1,27 @@
+# nfs-server 成品自检（dgoss 静态）：nfs-utils 已装、关键二进制/文件在位。
+# 用 --entrypoint sleep 起容器（不真正 mount nfsd，故无需 privileged / 内核 nfsd），
+# 只做镜像内容自检；运行时 identity+exportfs 由 fine-test / k3d 预检覆盖（待 item9 认 StatefulSet）。
+command:
+  exportfs:
+    exec: "command -v exportfs"
+    exit-status: 0
+  rpc-nfsd:
+    exec: "command -v rpc.nfsd"
+    exit-status: 0
+  rpc-mountd:
+    exec: "command -v rpc.mountd"
+    exit-status: 0
+  nfs-utils-pkg:
+    exec: "apk info -e nfs-utils"
+    exit-status: 0
+file:
+  /etc/exports:
+    exists: true
+    contents:
+      - '/exports'
+  /run.sh:
+    exists: true
+    mode: "0755"
+  /exports:
+    exists: true
+    filetype: directory
