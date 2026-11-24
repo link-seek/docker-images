@@ -2,6 +2,11 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-team
+    app.kubernetes.io/managed-by: Helm
   name: team-agent-staging-tls
   namespace: opencode-team
   annotations:

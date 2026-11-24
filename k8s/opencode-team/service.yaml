@@ -3,6 +3,11 @@
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-team
+    app.kubernetes.io/managed-by: Helm
   name: opencode
   namespace: opencode-team
 spec:
@@ -13,6 +18,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-team
+    app.kubernetes.io/managed-by: Helm
   name: browserless
   namespace: opencode-team
 spec:
@@ -25,6 +35,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-team
+    app.kubernetes.io/managed-by: Helm
   name: opencode-vpc
   namespace: opencode-team
 spec:

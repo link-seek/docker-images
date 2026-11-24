@@ -1,11 +1,12 @@
 {{- range .Values.deployments }}
+{{- $std := include "opencode.labels" $ | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .name }}
   namespace: {{ $.Values.namespace }}
   labels:
-{{ toYaml .labels | indent 4 }}
+{{ toYaml (merge (deepCopy .labels) $std) | indent 4 }}
 {{- with .annotations }}
   annotations:
 {{ toYaml . | indent 4 }}
@@ -22,7 +23,7 @@ spec:
   template:
     metadata:
       labels:
-{{ toYaml .podLabels | indent 8 }}
+{{ toYaml (merge (deepCopy .podLabels) $std) | indent 8 }}
 {{- with .podAnnotations }}
       annotations:
 {{ toYaml . | indent 8 }}

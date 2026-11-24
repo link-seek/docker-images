@@ -16,9 +16,11 @@ KUBECTL = os.environ.get("KUBECTL", "kubectl")
 HELM = os.environ.get("HELM", "helm")
 
 INST = {
-    "team": ("k8s/opencode-team", "opencode-team"),
-    "xieyucheng": ("k8s/opencode-xieyucheng", "opencode-xieyucheng"),
-    "yingxin": ("k8s/opencode-yingxin", "opencode-yingxin"),
+    # (kustomize 路径, ns, helm release 名)。release 名即 Flux HelmRelease 名，
+    # 与 helpers 的 app.kubernetes.io/instance 对齐。
+    "team": ("k8s/opencode-team", "opencode-team", "opencode-team"),
+    "xieyucheng": ("k8s/opencode-xieyucheng", "opencode-xieyucheng", "opencode-xieyucheng"),
+    "yingxin": ("k8s/opencode-yingxin", "opencode-yingxin", "opencode-yingxin"),
 }
 
 
@@ -40,14 +42,14 @@ def norm(docs):
 
 def main() -> int:
     ok = True
-    for inst, (path, ns) in INST.items():
+    for inst, (path, ns, release) in INST.items():
         r = subprocess.run([KUBECTL, "kustomize", path], capture_output=True, text=True)
         if r.returncode != 0:
             print(f"[{inst}] kustomize FAIL: {r.stderr[-300:]}")
             ok = False
             continue
         h = subprocess.run(
-            [HELM, "template", "opencode", "charts/opencode", "-n", ns,
+            [HELM, "template", release, "charts/opencode", "-n", ns,
              "-f", f"charts/opencode/values-{inst}.yaml"],
             capture_output=True, text=True,
         )
