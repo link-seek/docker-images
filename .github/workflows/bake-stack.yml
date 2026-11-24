@@ -260,7 +260,7 @@ on:
         required: false
 
 permissions:
-  contents: write # 产 releases/<tag>.json 的 GH Release 资产（#317 item4）
+  contents: read
   packages: write # push 镜像
 
 env:
@@ -866,7 +866,7 @@ jobs:
       - name: 发布 releases 资产（main；GH Release，供 item6 机器人开 bump PR）
         if: env.skip != 'true' && github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.gh_token }}
         run: |
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"; SLUG="${{ inputs.image_slug }}"
