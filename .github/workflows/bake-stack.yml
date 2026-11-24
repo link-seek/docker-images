@@ -646,10 +646,9 @@ jobs:
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml 2>/dev/null | awk '{print $2}' || true)"
-          # chart 预检时从 values 取 sidecar 镜像（正则与 gen 逻辑一致，values 含 browserless-chrome-cjk）
-          if [ -n "${{ inputs.k8s_helm_chart }}" ] && [ -z "${SIDECAR_IMG:-}" ]; then
+          # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
+          if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
             SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
-          fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
             SIDECAR_IMG=""
@@ -731,8 +730,9 @@ jobs:
           open("/tmp/preflight-values.yaml", "w").write(text)
           PYEOF
             [ -n "${SIDECAR_PATCH:-}" ] && {
-              GHCR_IMG="$(echo "$SIDECAR_PATCH" | awk '/newName:/{print $3}')"
+              GHCR_IMG="$(echo "$SIDECAR_PATCH" | awk '/newName:/{print $2}')"
               GHCR_DIG="$(echo "$SIDECAR_PATCH" | awk -F'"' '/digest:/{print $2}')"
+              [ -n "$GHCR_IMG" ] && [ -n "$GHCR_DIG" ] || { echo "FAIL: sidecar GHCR 解析失败"; exit 1; }
               GHCR_IMG="$GHCR_IMG" GHCR_DIG="$GHCR_DIG" python3 - <<'PYEOF'
           import os, re
           text = open("/tmp/preflight-values.yaml").read()
