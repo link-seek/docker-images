@@ -824,6 +824,14 @@ jobs:
           fi
           echo "released $TAG $DIGEST"
 
+      - name: 发布后可拉验证（认证拉；失败整单红）
+        if: env.skip != 'true' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.build.outputs.tag }}"
+          python3 scripts/verify_pull.py auth "${{ env.SWR_IMAGE }}:$TAG"
+          python3 scripts/verify_pull.py auth "${{ env.SWR_IMAGE }}:latest"
+
       - name: 下线收尾（无条件 logout：ephemeral 节点注销，不留 Expired 尸体）
         if: always() && env.skip != 'true'
         run: |

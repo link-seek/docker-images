@@ -89,3 +89,6 @@ jobs:
 
       - name: "${{ steps.mode.outputs.mode }}"
         run: python3 scripts/mirror_images.py "${{ steps.mode.outputs.mode }}"
+
+      - name: 匿名拉验证（public 镜像，失败整单红）
+        run: python3 scripts/verify_pull.py anon-file images/mirror.yaml
