@@ -649,6 +649,7 @@ jobs:
           # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
           if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
             SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
+          fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
             SIDECAR_IMG=""
