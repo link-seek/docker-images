@@ -22,3 +22,5 @@
 - **决策**：保留 `skopeo` 作为同步引擎（skopeo 本身是社区维护件；自研仅为 `make-public` 的 SWR API 薄壳）。
 - **验证**：`mirror-images` 在 main 上 `workflow_dispatch(mode=sync)` 实跑成功（见 #317 评论 run id）。
 - 若未来仍要 regsync：需 SWR 侧确认 token 兼容，或改用 regctl 读取 docker config 的凭据链。
+
+> 注：regsync 改动曾误随 #342 并入 main（导致一次 mirror sync 失败），已回退为 skopeo；`scripts/gen_regsync.py` 保留为评估产物，不再在流水线使用。
