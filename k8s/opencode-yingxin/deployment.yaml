@@ -7,6 +7,10 @@ metadata:
   name: opencode-yingxin
   namespace: opencode-yingxin
   labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-yingxin
+    app.kubernetes.io/managed-by: Helm
     app: opencode-yingxin
   annotations:
     reloader.stakater.com/auto: "true" # 主 Secret 走 Infisical Operator 同步：Secret 更新后自动重载
@@ -20,6 +24,10 @@ spec:
   template:
     metadata:
       labels:
+        helm.sh/chart: opencode-0.1.0
+        app.kubernetes.io/name: opencode
+        app.kubernetes.io/instance: opencode-yingxin
+        app.kubernetes.io/managed-by: Helm
         app: opencode-yingxin
     spec:
       imagePullSecrets:
@@ -105,6 +113,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-yingxin
+    app.kubernetes.io/managed-by: Helm
   name: opencode-yingxin
   namespace: opencode-yingxin
 spec:
@@ -118,6 +131,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-yingxin
+    app.kubernetes.io/managed-by: Helm
   name: opencode-vpc
   namespace: opencode-yingxin
 spec:
@@ -135,6 +153,10 @@ metadata:
   name: browserless
   namespace: opencode-yingxin
   labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-yingxin
+    app.kubernetes.io/managed-by: Helm
     app: browserless
 spec:
   replicas: 0 # 软隔离：共用 opencode-team 的 browserless（保留 doc 供预检镜像探测；不拉起）
@@ -146,6 +168,10 @@ spec:
   template:
     metadata:
       labels:
+        helm.sh/chart: opencode-0.1.0
+        app.kubernetes.io/name: opencode
+        app.kubernetes.io/instance: opencode-yingxin
+        app.kubernetes.io/managed-by: Helm
         app: browserless
     spec:
       imagePullSecrets:
@@ -185,6 +211,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-yingxin
+    app.kubernetes.io/managed-by: Helm
   name: browserless
   namespace: opencode-yingxin
 spec:

@@ -3,6 +3,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-team
+    app.kubernetes.io/managed-by: Helm
   name: opencode-entrypoint
   namespace: opencode-team
 data:

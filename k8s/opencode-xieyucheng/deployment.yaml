@@ -8,6 +8,10 @@ metadata:
   name: opencode
   namespace: opencode-xieyucheng
   labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-xieyucheng
+    app.kubernetes.io/managed-by: Helm
     app: opencode
   annotations:
     reloader.stakater.com/auto: "true" # Secret 走 Infisical Operator 同步：更新后自动重载
@@ -21,6 +25,10 @@ spec:
   template:
     metadata:
       labels:
+        helm.sh/chart: opencode-0.1.0
+        app.kubernetes.io/name: opencode
+        app.kubernetes.io/instance: opencode-xieyucheng
+        app.kubernetes.io/managed-by: Helm
         app: opencode
     spec:
       nodeSelector:
@@ -126,6 +134,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-xieyucheng
+    app.kubernetes.io/managed-by: Helm
   name: opencode
   namespace: opencode-xieyucheng
 spec:
@@ -139,6 +152,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-xieyucheng
+    app.kubernetes.io/managed-by: Helm
   name: opencode-vpc
   namespace: opencode-xieyucheng
 spec:
@@ -156,6 +174,10 @@ metadata:
   name: browserless
   namespace: opencode-xieyucheng
   labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-xieyucheng
+    app.kubernetes.io/managed-by: Helm
     app: browserless
 spec:
   replicas: 0 # 软隔离：共用 opencode-team 的 browserless（保留 doc 供预检镜像探测；不拉起）
@@ -167,6 +189,10 @@ spec:
   template:
     metadata:
       labels:
+        helm.sh/chart: opencode-0.1.0
+        app.kubernetes.io/name: opencode
+        app.kubernetes.io/instance: opencode-xieyucheng
+        app.kubernetes.io/managed-by: Helm
         app: browserless
     spec:
       imagePullSecrets:
@@ -206,6 +232,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    helm.sh/chart: opencode-0.1.0
+    app.kubernetes.io/name: opencode
+    app.kubernetes.io/instance: opencode-xieyucheng
+    app.kubernetes.io/managed-by: Helm
   name: browserless
   namespace: opencode-xieyucheng
 spec:
