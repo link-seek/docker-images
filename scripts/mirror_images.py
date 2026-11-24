@@ -156,8 +156,15 @@ def sync():
     sys.exit(1 if fail else 0)
 
 
+def make_public_all():
+    reg, ns, imgs = load()
+    for i in imgs:
+        make_public(item_ns(i, ns), repo_of(i["dst"]))
+    print("MAKE-PUBLIC-OK")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["lint", "verify", "sync"])
+    ap.add_argument("cmd", choices=["lint", "verify", "sync", "make-public"])
     a = ap.parse_args()
-    {"lint": lint, "verify": verify, "sync": sync}[a.cmd]()
+    {"lint": lint, "verify": verify, "sync": sync, "make-public": make_public_all}[a.cmd]()
