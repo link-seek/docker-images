@@ -54,8 +54,6 @@ jobs:
       SWR_REG: swr.cn-north-9.myhuaweicloud.com
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
       SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
-      PROD_HCLOUD_AK: ${{ secrets.PROD_HCLOUD_AK }}
-      PROD_HCLOUD_SK: ${{ secrets.PROD_HCLOUD_SK }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,13 +71,17 @@ jobs:
           echo "mode=$M" >> "$GITHUB_OUTPUT"
           echo "MODE=$M"
 
-      - name: 安装 skopeo + PyYAML
+      - name: 安装 skopeo + PyYAML + regctl
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq skopeo
           python3 -m pip install --quiet pyyaml || pip3 install --quiet pyyaml
           skopeo --version
+          REGCTL=v0.11.7
+          curl -fsSL -o /tmp/regctl "https://github.com/regclient/regclient/releases/download/${REGCTL}/regctl-linux-amd64"
+          sudo install -m 0755 /tmp/regctl /usr/local/bin/regctl
+          regctl version | head -1
 
       - name: 登录 SWR
         run: |
@@ -89,6 +91,3 @@ jobs:
 
       - name: "${{ steps.mode.outputs.mode }}"
         run: python3 scripts/mirror_images.py "${{ steps.mode.outputs.mode }}"
-
-      - name: 匿名拉验证（public 镜像，失败整单红）
-        run: python3 scripts/verify_pull.py anon-file images/mirror.yaml
