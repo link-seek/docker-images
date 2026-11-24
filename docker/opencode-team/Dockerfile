@@ -27,7 +27,8 @@ RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
  && cp /tmp/staticServer.override.ts /src/packages/core/src/export/staticServer.ts \
  && npm ci --no-audit --no-fund \
  && npm run compile -w packages/mcp-server \
- && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out
+ && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out \
+ && cp -a /src/.agents/skills/open-design /out/open-design-skill
 
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
@@ -101,9 +102,12 @@ RUN chmod +x /usr/local/bin/gh \
 # obsutil（华为云 OBS 官方 CLI，单二进制；agent 直调做上传/下载；endpoint/ak/sk 全走 env，密钥不进镜像）。
 # 下载站为华为云内网域名（国内直连）；该桶仅 current 路径公开，pin 策略=URL 取 current + 构建期断言版本号漂移即红。
 ARG OBSUTIL_EXPECT_VERSION=5.8.9
+# /current/ 无版本化路径；对 amd64 钉 sha256，上游漂移即构建失败（fail-closed，显式 bump）。
+ARG OBSUTIL_SHA256_AMD64=1f9111dde3fd9e894978b3281159d385f13bfd24beaad34a9bfb959f10013905
 RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) OBS_ARCH=amd64;; aarch64) OBS_ARCH=arm64;; *) echo "unsupported arch $ARCH" && exit 1;; esac \
  && curl -fsSL -o /tmp/obsutil.tar.gz \
       "https://obs-community.obs.cn-north-1.myhuaweicloud.com/obsutil/current/obsutil_linux_${OBS_ARCH}.tar.gz" \
+ && if [ "$OBS_ARCH" = "amd64" ]; then echo "${OBSUTIL_SHA256_AMD64}  /tmp/obsutil.tar.gz" | sha256sum -c -; fi \
  && tar -xzf /tmp/obsutil.tar.gz -C /tmp \
  && mv /tmp/obsutil_linux_${OBS_ARCH}_*/obsutil /usr/local/bin/obsutil \
  && chmod +x /usr/local/bin/obsutil && rm -rf /tmp/obsutil.tar.gz /tmp/obsutil_linux_${OBS_ARCH}_* \
@@ -115,13 +119,10 @@ RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm
 
 # 设计能力（feimacode/open-design-agent-kit，社区包）：
-# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills），浮动跟随，出问题再定。
-# - MCP server：从 git main 构建安装（npm 0.4.0 未含远程浏览器 PR #114，见文件头 odk-builder 阶段）；
-#   不走运行时 npx 现下（2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
-# - 版本 pin：ODK_REF（odk-builder 阶段 ARG，单源头）；bump=改那一行发 PR。
-RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
- && test -f /root/.agents/skills/open-design/SKILL.md \
- && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.npm/_npx
+# - skill：从 odk-builder（ODK_REF 固定）直接 COPY，构建期不再 npx 联网拉浮动 main。
+# - MCP server：从 ODK_REF 构建安装。
+# - 版本 pin：ODK_REF（单源头）；bump=改那一行发 PR。
+COPY --from=odk-builder /out/open-design-skill /root/.agents/skills/open-design
 COPY --from=odk-builder /out/feimacode-open-design-agent-kit-mcp-*.tgz /tmp/odk-mcp.tgz
 RUN npm install -g /tmp/odk-mcp.tgz \
  && command -v open-design-mcp \

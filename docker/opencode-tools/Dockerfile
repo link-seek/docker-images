@@ -27,7 +27,8 @@ RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
  && cp /tmp/staticServer.override.ts /src/packages/core/src/export/staticServer.ts \
  && npm ci --no-audit --no-fund \
  && npm run compile -w packages/mcp-server \
- && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out
+ && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out \
+ && cp -a /src/.agents/skills/open-design /out/open-design-skill
 
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
 # 行为=digest：重打即刷新底座；bump=改这行发 PR。
@@ -84,7 +85,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
 # 版本 pin（沿用 Dockerfile.tools 验证过的版本）
 ARG GH_VERSION=2.103.3
 ARG ALIYUN_VERSION=3.5.2
-ARG OCI_SPEC=oci-cli
+ARG OCI_SPEC=oci-cli==3.97.0
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 ARG KUBECTL_VERSION=1.37.2
@@ -121,7 +122,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
 # certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）
 RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" "certifi==2026.10.23" \
  && oci --version
-RUN pip3 install --no-cache-dir --break-system-packages markitdown \
+RUN pip3 install --no-cache-dir --break-system-packages markitdown==0.1.9 \
  && markitdown --version
 
 # crypto 后升层（与 oci-cli 的上古 pin 解耦）：CVE-2026-26007 等要求新版；
@@ -131,7 +132,7 @@ RUN pip3 install --no-cache-dir --break-system-packages --upgrade "cryptography=
  && oci --version
 
 # wrangler + agent-browser + lmnr-cli：npm 全局
-RUN npm install -g wrangler \
+RUN npm install -g wrangler@4.167.0 \
  && wrangler --version \
  && npm cache clean --force && rm -rf /root/.npm
 RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
@@ -139,13 +140,10 @@ RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" lmnr-cli \
  && npm cache clean --force && rm -rf /root/.npm
 
 # 设计能力（feimacode/open-design-agent-kit，社区包）：
-# - skill 文件：build 期 `skills add -a opencode -g` 装到 opencode 认的全局目录（~/.agents/skills），浮动跟随，出问题再定。
-# - MCP server：从 git main 构建安装（npm 0.4.0 未含远程浏览器 PR #114，见文件头 odk-builder 阶段）；
-#   不走运行时 npx 现下（2026-11-17 常驻容器 _npx 脏缓存致 stdio.js 缺失教训）。
-# - 版本 pin：ODK_REF（odk-builder 阶段 ARG，单源头）；bump=改那一行发 PR。
-RUN npx -y skills add https://github.com/feimacode/open-design-agent-kit --skill open-design -a opencode -g --yes \
- && test -f /root/.agents/skills/open-design/SKILL.md \
- && npm cache clean --force && rm -rf /root/.npm /tmp/*
+# - skill：从 odk-builder（ODK_REF 固定）直接 COPY，构建期不再 npx 联网拉浮动 main。
+# - MCP server：从 ODK_REF 构建安装。
+# - 版本 pin：ODK_REF（单源头）；bump=改那一行发 PR。
+COPY --from=odk-builder /out/open-design-skill /root/.agents/skills/open-design
 COPY --from=odk-builder /out/feimacode-open-design-agent-kit-mcp-*.tgz /tmp/odk-mcp.tgz
 RUN npm install -g /tmp/odk-mcp.tgz \
  && command -v open-design-mcp \
