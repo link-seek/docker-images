@@ -33,9 +33,10 @@ images:
     dst: omnara-maintenance:v0.2.27
   - src: ghcr.io/omnara-ai/omnara-migrations:v0.2.27
     dst: omnara-migrations:v0.2.27
-  # NFS 动态供给（RWX 给 Omnara memory-data；server 自打，provisioner 上游原样重打）
-  - src: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.18
-    dst: nfs-provisioner:v4.0.18
+  # NFS 动态供给（RWX 给 Omnara memory-data；server 自打，provisioner 上游原样重打）。
+  # 注意：上游只发过 v4.0.0/1/2 三个镜像 tag（k8s.io/images.yaml 实锤），release 号 4.0.18 无对应镜像，用 v4.0.2。
+  - src: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+    dst: nfs-provisioner:v4.0.2
   # cosign（签名工具；v2 保持 legacy .sig 格式，Flux verify 兼容）
   - src: ghcr.io/sigstore/cosign/cosign:v2.6.5
     dst: cosign:v2.6.5
