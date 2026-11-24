@@ -19,6 +19,22 @@
   - 同一 `SWR_LOGIN_USER/PASS` 用 skopeo 可 push（原同步路径一直可用）；
   - regsync creds 已确认写入配置（日志 `regsync creds: present`）。
   → 判定为 **regclient 与 SWR registry 的 token/push 交互不兼容**（至少当前版本）。
+
+## regsync 定案（2026-11-25 trace 诊断）
+- 在控制节点用 k3d 现场凭据（`swr-pull` 解出的同一 AK/SK）跑 `regsync once -v trace`：
+  SWR 的 401 挑战为 `Bearer realm="…/swr/auth/v2/registry/auth/",service="dockyard"`；
+  regsync 自动追加 `scope=repository:<repo>`（无动作后缀）+ `scope=repository:<repo>:pull`，
+  但 **HTTP 请求从未带出 `Authorization` 头**（trace 里所有请求的 headers 均无该字段）。
+- 取 token 端点实测：
+  - `…/auth/?service=dockyard&scope=repository:link-seek/trace-valkey:pull,push` **不带 Basic → DENIED**（符合预期）；
+  - **带 Basic（U/PW）→ HTTP 200，返回真实 token（2351 字符）** → SWR 对该凭据颁发 push token 正常。
+- 对照实验（同一凭据、同一 SWR、regclient 生态）：
+  - `regctl image copy --host "reg=swr.cn-north-9.myhuaweicloud.com,user=$U,pass=$PW,tls=enabled"` **成功**，
+    `Copy layer/config` 全绿，digest 与源一致（`trace-valkey:copy3 = c8e2d174…`）。
+- **判定**：不是 SWR 兼容问题。问题在 regsync 的 `creds:` 块（v0.11.7）未被实际应用到 push 认证链；
+  `regctl --host` 凭据链是通的。是否算 regclient 上游行为差异需提 upstream 确认。
+- 落实：诊断分支 `diag/regsync-trace` 已删除；CI 已回退为 skopeo（#343）。
+  若未来要走 regclient，用 `regctl` 的 `--host` 凭据链或排查 regsync 的 cred 注入。
 - **决策**：保留 `skopeo` 作为同步引擎（skopeo 本身是社区维护件；自研仅为 `make-public` 的 SWR API 薄壳）。
 - **验证**：`mirror-images` 在 main 上 `workflow_dispatch(mode=sync)` 实跑成功（见 #317 评论 run id）。
 - 若未来仍要 regsync：需 SWR 侧确认 token 兼容，或改用 regctl 读取 docker config 的凭据链。
