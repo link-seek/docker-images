@@ -5,6 +5,7 @@
 # base 与产出分仓：base 走 url2hc 中转常驻（link-seek/erpnext），产出走 bake 转正（link-seek/erpnext-cn）。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG BASE_TAG=v15.94.1
+# digest-exempt: 内部派生 base，BASE_TAG dispatch 即版本（tag 无法静态锁 digest）exp:2027-06-30
 FROM swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext:${BASE_TAG}
 
 USER root

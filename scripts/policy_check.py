@@ -96,6 +96,49 @@ def check_bake_verification(violations):
         violations.append("未发现任何 bake-stack caller（检查 .github/workflows/bake-*.yml 路径）")
 
 
+def check_dockerfile_pins(violations):
+    """item2: docker/*/Dockerfile 的 FROM 必须 @sha256: 固定。
+    例外：紧邻上一行写 `# digest-exempt: <理由> [exp:YYYY-MM-DD]`（过期即红；builder/内部派生 base 用）。"""
+    import datetime
+
+    today = datetime.date.today()
+    docker_dir = ROOT / "docker"
+    if not docker_dir.is_dir():
+        return
+    for f in sorted(docker_dir.glob("*/Dockerfile")):
+        pending = None
+        for ln, raw in enumerate(f.read_text().splitlines(), 1):
+            s = raw.strip()
+            if s.startswith("#") and "digest-exempt:" in s:
+                pending = s
+                continue
+            if not s or s.startswith("#"):
+                continue
+            if s.upper().startswith("FROM "):
+                if "@sha256:" in s or "scratch" in s.lower():
+                    pending = None
+                    continue
+                if pending:
+                    em = re.search(r"exp:(\d{4}-\d{2}-\d{2})", pending)
+                    if em:
+                        try:
+                            if datetime.date.fromisoformat(em.group(1)) < today:
+                                violations.append(
+                                    f"{f.relative_to(ROOT)}:{ln}: digest-exempt 已过期 exp={em.group(1)} -> {s}"
+                                )
+                        except ValueError:
+                            violations.append(
+                                f"{f.relative_to(ROOT)}:{ln}: digest-exempt exp 非法 '{em.group(1)}'"
+                            )
+                    pending = None
+                    continue
+                violations.append(
+                    f"{f.relative_to(ROOT)}:{ln}: FROM 未 digest pin（缺 @sha256:，且无紧邻 digest-exempt）-> {s}"
+                )
+            else:
+                pending = None
+
+
 def main():
     violations = []
     targets = [p for p in sorted((ROOT / "k8s").iterdir()) if p.is_dir() and p.name not in SKIP_DIRS]
@@ -130,6 +173,7 @@ def main():
             if "newTag" in entry and "digest" not in entry:
                 violations.append(f"{d.name}/kustomization.yaml: images[].newTag without digest -> {entry}")
     check_bake_verification(violations)
+    check_dockerfile_pins(violations)
     if violations:
         print("POLICY-VIOLATIONS")
         for v in violations:
