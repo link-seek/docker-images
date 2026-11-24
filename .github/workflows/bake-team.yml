@@ -30,6 +30,7 @@ on:
       - docker/opencode-team/Dockerfile
       - docker/opencode-team/**
       - k8s/opencode-team/**
+      - charts/opencode/**
       - .github/workflows/bake-team.yml
       - .github/workflows/bake-stack.yml
 
@@ -59,7 +60,9 @@ jobs:
       k8s_app: opencode
       k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
       k8s_manifest_path: k8s/opencode-team
-      k8s_preflight_manifest_path: k8s/_preflight/opencode-team # 预检 overlay：去 nodeSelector、hostPath→emptyDir、browserless 副本置 0（预检专用，无加密依赖）
+      k8s_preflight_manifest_path: k8s/_preflight/opencode-team # 兼容保留；chart 预检启用后不再使用（见 k8s_helm_*）
+      k8s_helm_chart: charts/opencode
+      k8s_helm_values: charts/opencode/values-team.yaml
       k8s_manifest_ref: main
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team
       k8s_secret_env_file: docker/opencode-team/preflight-env.conf

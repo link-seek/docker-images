@@ -203,7 +203,17 @@ on:
         type: string
         default: ""
       k8s_preflight_manifest_path:
-        description: "预检用 overlay 目录（默认回落 k8s_manifest_path；team 用 k8s/_preflight/opencode-team，同机制解密 test 密文）"
+        description: "预检用 overlay 目录（默认回落 k8s_manifest_path；opencode 三线改用 chart 预检：k8s_helm_chart + k8s_helm_values）"
+        required: false
+        type: string
+        default: ""
+      k8s_helm_chart:
+        description: "预检用 Helm chart 目录（如 charts/opencode）；传了则走 chart 预检（helm template），忽略 kustomize overlay"
+        required: false
+        type: string
+        default: ""
+      k8s_helm_values:
+        description: "预检用 chart values 文件（如 charts/opencode/values-team.yaml）；与 k8s_helm_chart 同用"
         required: false
         type: string
         default: ""
@@ -595,6 +605,8 @@ jobs:
           sparse-checkout: |
             ${{ inputs.k8s_manifest_path }}
             ${{ inputs.k8s_preflight_manifest_path }}
+            ${{ inputs.k8s_helm_chart }}
+            ${{ inputs.k8s_helm_values }}
           sparse-checkout-cone-mode: false
 
       - name: flux 对账（新预检；digest 经 images 注入，免提交）
@@ -633,7 +645,11 @@ jobs:
           # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
-          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml | awk '{print $2}' || true)"
+          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml 2>/dev/null | awk '{print $2}' || true)"
+          # chart 预检时从 values 取 sidecar 镜像（正则与 gen 逻辑一致，values 含 browserless-chrome-cjk）
+          if [ -n "${{ inputs.k8s_helm_chart }}" ] && [ -z "${SIDECAR_IMG:-}" ]; then
+            SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
+          fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
             SIDECAR_IMG=""
@@ -689,6 +705,101 @@ jobs:
               "$DIGEST_SOURCE" ecs DescribeInstances \
               --RegionId cn-hangzhou --PageSize 1 | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'Instances' in d, d; print('ALI PROBE OK: TotalCount', d.get('TotalCount'))"
           fi
+          # chart 预检（opencode 三线）：helm template 渲染 + values digest 替换 + 去节点/卷补丁，直接 apply。
+          # 与 kustomize 预检等价（namespace/secret/sidecar/images 同逻辑），跳过 Flux Kustomization。
+          CHART_SKIP_KUSTOMIZE=""
+          if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
+            HELM_CHART="k8s-src/${{ inputs.k8s_helm_chart }}"
+            HELM_VALUES="k8s-src/${{ inputs.k8s_helm_values }}"
+            [ -d "$HELM_CHART" ] || { echo "FAIL: chart 缺失 $HELM_CHART"; exit 1; }
+            [ -f "$HELM_VALUES" ] || { echo "FAIL: values 缺失 $HELM_VALUES"; exit 1; }
+            curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz
+            tar xzf /tmp/helm.tgz -C /tmp && sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+            cp "$HELM_VALUES" /tmp/preflight-values.yaml
+            DIGEST="${DIGEST:?DIGEST 未设置}" DIGEST_SOURCE="${DIGEST_SOURCE:?}" python3 - <<'PYEOF'
+          import os, re
+          digest = os.environ["DIGEST"]
+          new_name = os.environ["DIGEST_SOURCE"].rsplit(":", 1)[0]
+          text = open("/tmp/preflight-values.yaml").read()
+          def sub_opencode(m):
+              img = m.group(1)
+              base = img.rsplit("/", 1)[-1].split("@", 1)[0]
+              if base in ("opencode-team", "opencode-tools"):
+                  return "image: " + new_name + "@" + digest
+              return m.group(0)
+          text = re.sub(r"image:\s*(\S+)", sub_opencode, text)
+          open("/tmp/preflight-values.yaml", "w").write(text)
+          PYEOF
+            [ -n "${SIDECAR_PATCH:-}" ] && {
+              GHCR_IMG="$(echo "$SIDECAR_PATCH" | awk '/newName:/{print $3}')"
+              GHCR_DIG="$(echo "$SIDECAR_PATCH" | awk -F'"' '/digest:/{print $2}')"
+              GHCR_IMG="$GHCR_IMG" GHCR_DIG="$GHCR_DIG" python3 - <<'PYEOF'
+          import os, re
+          text = open("/tmp/preflight-values.yaml").read()
+          text = re.sub(r"image:\s*swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}",
+                        "image: " + os.environ["GHCR_IMG"] + "@" + os.environ["GHCR_DIG"], text)
+          open("/tmp/preflight-values.yaml", "w").write(text)
+          PYEOF
+            }
+            helm template "$APP-preflight" "$HELM_CHART" -n "$NS" -f /tmp/preflight-values.yaml > /tmp/preflight-render.yaml
+            python3 - <<'PYEOF'
+          import yaml
+          docs = [d for d in yaml.safe_load_all(open("/tmp/preflight-render.yaml")) if d]
+          for d in docs:
+              md = d.get("metadata", {})
+              if d.get("kind") == "Deployment" and md.get("name") == "browserless":
+                  d["spec"]["replicas"] = 0
+              if d.get("kind") == "Deployment" and md.get("name") in ("opencode", "opencode-yingxin"):
+                  ts = d["spec"]["template"]["spec"]
+                  ts.pop("nodeSelector", None)
+                  for v in ts.get("volumes", []):
+                      if "hostPath" in v:
+                          v.pop("hostPath")
+                          v["emptyDir"] = {}
+          with open("/tmp/preflight-apply.yaml", "w") as f:
+              for x in docs:
+                  f.write("---\n" + yaml.safe_dump(x, sort_keys=False))
+          PYEOF
+            # 预检命令覆盖（与 kustomize 预检的 patch 等价；默认 ["opencode"]）
+            python3 - <<'PYEOF'
+          import json, shlex, yaml
+          raw = """${{ inputs.k8s_preflight_command }}"""
+          try:
+              cmd = json.loads(raw)
+          except Exception:
+              cmd = shlex.split(raw)
+          docs = [d for d in yaml.safe_load_all(open("/tmp/preflight-apply.yaml")) if d]
+          for d in docs:
+              md = d.get("metadata", {})
+              if d.get("kind") == "Deployment" and md.get("name") in ("opencode", "opencode-yingxin"):
+                  d["spec"]["template"]["spec"]["containers"][0]["command"] = cmd
+          with open("/tmp/preflight-apply.yaml", "w") as f:
+              for x in docs:
+                  f.write("---\n" + yaml.safe_dump(x, sort_keys=False))
+          print("command override:", cmd)
+          PYEOF
+            kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+            kubectl -n "$NS" create secret docker-registry swr-pull \
+              --docker-server="${{ env.SWR_REGISTRY }}" \
+              --docker-username="${{ secrets.SWR_LOGIN_USER }}" \
+              --docker-password="${{ secrets.SWR_LOGIN_PASS }}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            if [ -n "${{ inputs.k8s_secret_env_file }}" ]; then
+              [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空"; exit 1; }
+              sed -e "s/__LITELLM_API_KEY__/${OPENCODE_API_KEY}/g" -e "s/__SMTP_PASS__/${SMTP_PASS}/g" -e "s/__ALI_AK__/${ALI_U:-}/g" -e "s/__ALI_SK__/${ALI_S:-}/g" \
+                "${{ inputs.k8s_secret_env_file }}" > /tmp/preflight-secret.env
+              kubectl -n "$NS" create secret generic "${{ inputs.k8s_secret_name }}" \
+                --from-env-file=/tmp/preflight-secret.env --dry-run=client -o yaml | kubectl apply -f -
+              rm -f /tmp/preflight-secret.env
+            fi
+            kubectl apply -f /tmp/preflight-apply.yaml
+            kubectl -n "$NS" wait --for=condition=available deployment/"$DEPLOY" --timeout=300s || { echo "FAIL: chart 预检 deploy 未 Ready"; exit 1; }
+            echo "HELM-PREFLIGHT-GREEN $APP-preflight == ${DIGEST} (helm template)"
+            CHART_SKIP_KUSTOMIZE=1
+          fi
+          if [ -n "${CHART_SKIP_KUSTOMIZE:-}" ]; then
+            echo "chart 预检已完成，跳过 kustomize 路径"
+          else
           # GitRepository 指被测代码，Kustomization 经 images 注入刚打 digest（主容器+init 全覆盖）
           SRC_REPO="${{ inputs.k8s_manifest_repo != '' && inputs.k8s_manifest_repo || github.repository }}"
           SRC_REF="${{ inputs.k8s_manifest_repo == '' && github.ref_name || inputs.k8s_manifest_ref }}"
@@ -750,6 +861,7 @@ jobs:
             echo "FAIL: Kustomization 未 Ready，dump 诊断"; FAIL_DUMP=1; }
           echo "FLUX-RECONCILE-GREEN $APP-preflight == ${DIGEST}"
           [ -z "${FAIL_DUMP:-}" ] || exit 1
+          fi # 结束：chart 预检走 helm template（上） vs kustomize（上上）
 
       - name: 预检诊断（新预检；失败时 dump，成功只留一行）
         if: always() && env.skip != 'true' && inputs.k8s_app != ''
