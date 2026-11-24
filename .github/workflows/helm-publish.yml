@@ -1,0 +1,37 @@
+name: helm-publish
+
+# 发布 opencode chart 到 SWR OCI（helm push）。tag=chart version（不可变纪律）。
+on:
+  push:
+    branches: [main]
+    paths:
+      - charts/opencode/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REG: swr.cn-north-9.myhuaweicloud.com
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install helm (pinned)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz
+          tar xzf /tmp/helm.tgz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          helm version
+      - name: login + package + push
+        run: |
+          set -euo pipefail
+          echo "$SWR_LOGIN_PASS" | helm registry login "$REG" -u "$SWR_LOGIN_USER" --password-stdin
+          helm package charts/opencode -d /tmp/charts
+          ls -l /tmp/charts
+          helm push /tmp/charts/opencode-*.tgz "oci://$REG/link-seek"
