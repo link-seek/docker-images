@@ -8,8 +8,8 @@ FROM docker.io/library/alpine:${ALPINE_TAG}
 RUN apk add --no-cache nfs-utils \
  && mkdir -p /exports /var/lib/nfs/rpc_pipefs /var/lib/nfs/v4recovery \
  && chmod 777 /exports
-COPY exports /etc/exports
-COPY run.sh /run.sh
+COPY docker/nfs-server/exports /etc/exports
+COPY docker/nfs-server/run.sh /run.sh
 RUN chmod +x /run.sh
 VOLUME ["/exports"]
 EXPOSE 2049
