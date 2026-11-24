@@ -658,6 +658,8 @@ jobs:
             --docker-password="${{ secrets.SWR_LOGIN_PASS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
           [ -n "${SIDECAR_IMG:-}" ] && echo "SIDECAR OK: $SIDECAR_IMG" || true
+          # 注意：此 Secret 仅用于 ephemeral k3d 预检（e2e），不是生产 Secrets 路径；
+          # 生产 Secrets 由 Infisical Operator（InfisicalStaticSecret）生成，见 docs/external-secrets.md。
           # Secret 预渲染（可选：未传 k8s_secret_env_file 则跳过；底座线如 nfs 不需要 env Secret）
           if [ -n "${{ inputs.k8s_secret_env_file }}" ]; then
             [ -n "${SMTP_PASS:-}" ] || { echo "FAIL: ENV_SMTP_PASS 为空：请给本仓加 secret PROD_SMTP_PASS（mail 用例要真 163 凭证），加完重跑"; exit 1; }
