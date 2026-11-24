@@ -41,6 +41,7 @@ on:
     paths:
       - docker/opencode-tools/Dockerfile
       - docker/opencode-tools/**
+      - charts/opencode/**
       - .github/workflows/bake-tools.yml
       - .github/workflows/bake-stack.yml
 
@@ -75,6 +76,8 @@ jobs:
       # 预检 base 取 xieyucheng，overlay 去 nodeSelector/hostPath + 删生产 enc Secret/Ingress。
       k8s_manifest_path: k8s/opencode-xieyucheng
       k8s_preflight_manifest_path: k8s/_preflight/opencode-xieyucheng
+      k8s_helm_chart: charts/opencode
+      k8s_helm_values: charts/opencode/values-xieyucheng.yaml
       k8s_manifest_ref: main
       k8s_image_names: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
       k8s_secret_env_file: docker/opencode-tools/preflight-env.conf
