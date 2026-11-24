@@ -30,6 +30,9 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: reloader
+      verification: upstream
+      verification_reason: "上游 stakater/reloader 原样重打（仅常驻 SWR，无自研改动）"
+      verification_exp: "2027-01-31"
       dockerfile: docker/reloader/Dockerfile
       ghcr_image: ghcr.io/link-seek/reloader
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/reloader

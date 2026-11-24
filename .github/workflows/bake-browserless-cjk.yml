@@ -33,6 +33,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: browserless-cjk
+      verification: full
       dockerfile: docker/browserless-cjk/Dockerfile
       ghcr_image: ghcr.io/link-seek/browserless-chrome-cjk
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk

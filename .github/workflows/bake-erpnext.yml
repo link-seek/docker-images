@@ -38,6 +38,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: erpnext-cn
+      verification: full
       dockerfile: docker/erpnext/Dockerfile
       ghcr_image: ghcr.io/link-seek/erpnext-cn
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/erpnext-cn

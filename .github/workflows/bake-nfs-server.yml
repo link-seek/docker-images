@@ -35,6 +35,7 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: nfs-server
+      verification: full
       dockerfile: docker/nfs-server/Dockerfile
       ghcr_image: ghcr.io/link-seek/nfs-server
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/nfs-server
