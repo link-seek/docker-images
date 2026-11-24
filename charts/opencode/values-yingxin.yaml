@@ -1,319 +1,79 @@
-# generated from k8s/opencode-yingxin (kustomize render); 2 deployments, 5 resources
+# yingxin 实例：与 values.yaml 默认值的差异。
 namespace: opencode-yingxin
-deployments:
-- name: browserless
-  labels:
-    app: browserless
-  annotations: {}
+appName: opencode-yingxin
+appLabel: opencode-yingxin
+image:
+  repository: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
+  digest: sha256:4334606278b024d91c654a4e2fadb4cca767a7f1d3c4c66e4208b9f573e13cd4
+env:
+  - name: PIPELINE_MANAGED
+    value: "true"
+  - name: LITELLM_BASE_URL
+    value: http://litellm-gateway.litellm.svc.cluster.local:4000
+  - name: SSH_TARGETS
+    value: "mesh-hw-21 mesh-hw-41"
+  - name: SMTP_HOST
+    value: smtp.163.com
+  - name: SMTP_PORT
+    value: "465"
+  - name: SMTP_USER
+    value: "122306789@163.com"
+  - name: SMTP_FROM
+    value: "122306789@163.com"
+  - name: MAIL_DEFAULT_TO
+    value: xieyucheng@outlook.com
+  - name: BROWSER_CDP_URL
+    value: ws://browserless.opencode-team.svc.cluster.local:3000/chromium
+  - name: OPEN_DESIGN_BROWSER_URL
+    value: http://browserless.opencode-team.svc.cluster.local:3000
+  - name: LITELLM_API_KEY
+    secretKey: LITELLM_API_KEY
+  - name: GH_TOKEN
+    secretKey: GH_TOKEN
+  - name: OPENCODE_SERVER_PASSWORD
+    secretKey: OPENCODE_SERVER_PASSWORD
+  - name: V100_SSH_KEY
+    secretKey: V100_SSH_KEY
+  - name: CLOUDFLARE_API_TOKEN
+    secretKey: CLOUDFLARE_API_TOKEN
+  - name: CF_AI_TOKEN
+    secretKey: CF_AI_TOKEN
+  - name: HCLOUD_AK
+    secretKey: HCLOUD_AK
+  - name: HCLOUD_SK
+    secretKey: HCLOUD_SK
+  - name: SMTP_PASS
+    secretKey: SMTP_PASS
+browserless:
   replicas: 0
-  strategy:
-    type: Recreate
-  selector:
-    app: browserless
-  podLabels:
-    app: browserless
-  podAnnotations: {}
-  podSpec:
-    containers:
-    - env:
-      - name: HOST
-        value: 0.0.0.0
-      - name: EXTERNAL
-        value: http://browserless.opencode-yingxin.svc.cluster.local:3000
-      - name: CONCURRENT
-        value: '10'
-      - name: QUEUED
-        value: '10'
-      - name: TIMEOUT
-        value: '600000'
-      - name: HEALTH
-        value: 'true'
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk@sha256:d9040011a12b23af21637e21be2b22e6ba144ad4b5f458dbc803a367aca9e92d
-      livenessProbe:
-        initialDelaySeconds: 60
-        periodSeconds: 30
-        tcpSocket:
-          port: 3000
-      name: browserless
-      ports:
-      - containerPort: 3000
-        name: http
-      readinessProbe:
-        initialDelaySeconds: 30
-        periodSeconds: 15
-        tcpSocket:
-          port: 3000
-      resources:
-        limits:
-          cpu: 4000m
-          memory: 8Gi
-        requests:
-          cpu: 1000m
-          memory: 2Gi
-      volumeMounts:
-      - mountPath: /dev/shm
-        name: dshm
-    imagePullSecrets:
-    - name: swr-pull
-    volumes:
-    - emptyDir:
-        medium: Memory
-        sizeLimit: 2Gi
-      name: dshm
-- name: opencode-yingxin
-  labels:
-    app: opencode-yingxin
+  image:
+    repository: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk
+    digest: sha256:d9040011a12b23af21637e21be2b22e6ba144ad4b5f458dbc803a367aca9e92d
+  concurrent: 10
+  queued: 10
+tmpdir: false
+rootHomeSeed: false
+privilegedSsh: false
+features:
+  cognee: false
+  obsutil: false
+  hcloud: true
+gitUser: opencode-prod
+nodeHostname: ""
+workHostPath: /var/lib/opencode-yingxin/work
+dataHostPath: /var/lib/opencode-yingxin/data
+cogneeMcpRev: ""
+vpc:
+  enabled: true
+  httpPort: 44099
+  sshPort: 2224
+ingress:
+  enabled: true
+  name: yingxin-staging-tls
+  hosts:
+    - opencode.yingxin.net.cn
   annotations:
-    reloader.stakater.com/auto: 'true'
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    app: opencode-yingxin
-  podLabels:
-    app: opencode-yingxin
-  podAnnotations: {}
-  podSpec:
-    containers:
-    - args:
-      - serve
-      - --port
-      - '4097'
-      - --hostname
-      - 0.0.0.0
-      command:
-      - /bin/sh
-      - /entrypoint/entrypoint.sh
-      env:
-      - name: PIPELINE_MANAGED
-        value: 'true'
-      - name: LITELLM_BASE_URL
-        value: http://litellm-gateway.litellm.svc.cluster.local:4000
-      - name: SSH_TARGETS
-        value: mesh-hw-21 mesh-hw-41
-      - name: SMTP_HOST
-        value: smtp.163.com
-      - name: SMTP_PORT
-        value: '465'
-      - name: SMTP_USER
-        value: 122306789@163.com
-      - name: SMTP_FROM
-        value: 122306789@163.com
-      - name: MAIL_DEFAULT_TO
-        value: xieyucheng@outlook.com
-      - name: BROWSER_CDP_URL
-        value: ws://browserless.opencode-team.svc.cluster.local:3000/chromium
-      - name: OPEN_DESIGN_BROWSER_URL
-        value: http://browserless.opencode-team.svc.cluster.local:3000
-      - name: LITELLM_API_KEY
-        valueFrom:
-          secretKeyRef:
-            key: LITELLM_API_KEY
-            name: opencode-yingxin-env
-      - name: GH_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: GH_TOKEN
-            name: opencode-yingxin-env
-      - name: OPENCODE_SERVER_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            key: OPENCODE_SERVER_PASSWORD
-            name: opencode-yingxin-env
-      - name: V100_SSH_KEY
-        valueFrom:
-          secretKeyRef:
-            key: V100_SSH_KEY
-            name: opencode-yingxin-env
-      - name: CLOUDFLARE_API_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: CLOUDFLARE_API_TOKEN
-            name: opencode-yingxin-env
-      - name: CF_AI_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: CF_AI_TOKEN
-            name: opencode-yingxin-env
-      - name: HCLOUD_AK
-        valueFrom:
-          secretKeyRef:
-            key: HCLOUD_AK
-            name: opencode-yingxin-env
-      - name: HCLOUD_SK
-        valueFrom:
-          secretKeyRef:
-            key: HCLOUD_SK
-            name: opencode-yingxin-env
-      - name: SMTP_PASS
-        valueFrom:
-          secretKeyRef:
-            key: SMTP_PASS
-            name: opencode-yingxin-env
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:4334606278b024d91c654a4e2fadb4cca767a7f1d3c4c66e4208b9f573e13cd4
-      livenessProbe:
-        httpGet:
-          path: /
-          port: 4097
-        initialDelaySeconds: 180
-        periodSeconds: 30
-        timeoutSeconds: 10
-      name: opencode-yingxin
-      ports:
-      - containerPort: 4097
-        name: http
-      - containerPort: 2222
-        name: ssh
-      readinessProbe:
-        httpGet:
-          path: /
-          port: 4097
-        initialDelaySeconds: 90
-        periodSeconds: 15
-        timeoutSeconds: 10
-      resources:
-        limits:
-          cpu: 3000m
-          memory: 8Gi
-        requests:
-          cpu: 1000m
-          memory: 2Gi
-      volumeMounts:
-      - mountPath: /workspace
-        name: prod-work
-      - mountPath: /root/.local/share/opencode
-        name: prod-data
-      - mountPath: /entrypoint
-        name: entrypoint
-    imagePullSecrets:
-    - name: swr-pull
-    initContainers:
-    - command:
-      - sh
-      - -c
-      - mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace
-        /root/.local/share/opencode || true
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:4334606278b024d91c654a4e2fadb4cca767a7f1d3c4c66e4208b9f573e13cd4
-      name: init-dirs
-      resources:
-        limits:
-          cpu: 500m
-          memory: 512Mi
-        requests:
-          cpu: 100m
-          memory: 128Mi
-      volumeMounts:
-      - mountPath: /workspace
-        name: prod-work
-      - mountPath: /root/.local/share/opencode
-        name: prod-data
-    volumes:
-    - hostPath:
-        path: /var/lib/opencode-yingxin/work
-        type: DirectoryOrCreate
-      name: prod-work
-    - hostPath:
-        path: /var/lib/opencode-yingxin/data
-        type: DirectoryOrCreate
-      name: prod-data
-    - configMap:
-        defaultMode: 493
-        name: opencode-entrypoint
-      name: entrypoint
-resources:
-- apiVersion: v1
-  data:
-    entrypoint.sh: "#!/bin/sh\nset -eu\nif [ \"${PIPELINE_MANAGED:-}\" != \"true\"\
-      \ ]; then\n  echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true).\
-      \ Refusing to start.' >&2\n  exit 1\nfi\nyes | hcloud configure set --cli-access-key=\"\
-      ${HCLOUD_AK}\" --cli-secret-key=\"${HCLOUD_SK}\" --cli-region=cn-north-4 >/dev/null\
-      \ 2>&1 || true\nsed -i 's/\"agreePrivacy\": \"false\"/\"agreePrivacy\": \"true\"\
-      /' /root/.hcloud/config.json 2>/dev/null || true\n# 去容器 TS 身份（2026-11-17）：入网走\
-      \ operator 代理，此处不再起 tailscaled（pilot 11-15 同款）。\nif [ ! -d /workspace/.git ];\
-      \ then\n  git init -b main /workspace >/dev/null 2>&1\n  git -C /workspace config\
-      \ user.name opencode-prod\n  git -C /workspace config user.email opencode-prod@local\n\
-      \  git -C /workspace commit --allow-empty -m init >/dev/null 2>&1\nfi\n# ----\
-      \ SSH server（root + 密码 = $OPENCODE_SERVER_PASSWORD；端口 2222）----\nif [ \"${OPENCODE_SSH_ENABLE:-true}\"\
-      \ = \"true\" ] && command -v sshd >/dev/null 2>&1; then\n  mkdir -p /run/sshd\
-      \ /root/.ssh/sshd\n  [ -f /root/.ssh/sshd/ssh_host_ed25519_key ] || ssh-keygen\
-      \ -t ed25519 -f /root/.ssh/sshd/ssh_host_ed25519_key -N '' -q\n  if [ -n \"\
-      ${OPENCODE_SERVER_PASSWORD:-}\" ]; then echo \"root:${OPENCODE_SERVER_PASSWORD}\"\
-      \ | chpasswd || echo \"WARN: set root pw failed\" >&2; fi\n  printf '%s\\n'\
-      \ 'Port 2222' 'ListenAddress 0.0.0.0' 'HostKey /root/.ssh/sshd/ssh_host_ed25519_key'\
-      \ 'PermitRootLogin yes' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication\
-      \ no' 'UsePAM no' 'PidFile /tmp/sshd.pid' > /root/.ssh/sshd/sshd_config\n  /usr/sbin/sshd\
-      \ -f /root/.ssh/sshd/sshd_config 2>/dev/null || echo 'WARN: sshd start failed'\
-      \ >&2\nfi\n# ---- V100 免密（私钥 base64 由 env V100_SSH_KEY 注入；宿主机 authorized_keys\
-      \ 已铺）----\nif [ -n \"${V100_SSH_KEY:-}\" ]; then\n  mkdir -p /root/.ssh && chmod\
-      \ 700 /root/.ssh\n  echo \"${V100_SSH_KEY}\" | base64 -d > /root/.ssh/id_v100\
-      \ 2>/dev/null && chmod 600 /root/.ssh/id_v100\n  printf '%s\\n' 'Host v100-0001'\
-      \ '  HostName 1.94.192.234' '  User runner' '  IdentityFile ~/.ssh/id_v100'\
-      \ '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' 'Host v100-0002'\
-      \ '  HostName 114.116.228.0' '  User runner' '  IdentityFile ~/.ssh/id_v100'\
-      \ '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' >> /root/.ssh/config\n\
-      \  chmod 600 /root/.ssh/config\nfi\nexec opencode \"$@\"\n"
-  kind: ConfigMap
-  metadata:
-    name: opencode-entrypoint
-    namespace: opencode-yingxin
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: browserless
-    namespace: opencode-yingxin
-  spec:
-    ports:
-    - name: http
-      port: 3000
-      targetPort: 3000
-    selector:
-      app: browserless
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: opencode-vpc
-    namespace: opencode-yingxin
-  spec:
-    ports:
-    - name: http
-      port: 44099
-      targetPort: 4097
-    - name: ssh
-      port: 2224
-      targetPort: 2222
-    selector:
-      app: opencode-yingxin
-    type: LoadBalancer
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: opencode-yingxin
-    namespace: opencode-yingxin
-  spec:
-    ports:
-    - name: http
-      port: 4097
-      targetPort: 4097
-    selector:
-      app: opencode-yingxin
-- apiVersion: traefik.io/v1alpha1
-  kind: IngressRoute
-  metadata:
-    annotations:
-      route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store
-        LE certs)
-    name: yingxin-staging-tls
-    namespace: opencode-yingxin
-  spec:
-    entryPoints:
-    - websecure
-    routes:
-    - kind: Rule
-      match: Host(`opencode.yingxin.net.cn`)
-      services:
-      - name: opencode-yingxin
-        port: 4097
-    tls:
-      certResolver: le-prod
-      domains:
-      - main: opencode.yingxin.net.cn
+    route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE certs)
+rbac:
+  create: false
+  extended: false

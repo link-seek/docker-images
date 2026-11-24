@@ -1,6 +1,7 @@
 name: helm-parity
 
-# #317 Phase 2：charts/opencode 渲染必须与现有 kustomize 清单字段级一致。
+# charts/opencode 门禁（PR2 起 parity 退役）：helm lint（含 values.schema.json 校验）
+# + kubeconform（跳过第三方 CRD IngressRoute，只校验 K8s 原生 kind）。
 on:
   pull_request:
   push:
@@ -16,14 +17,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: ensure kubectl
-        run: |
-          set -euo pipefail
-          command -v kubectl >/dev/null || {
-            curl -fsSL -o /tmp/kubectl https://dl.k8s.io/release/v1.30.3/bin/linux/amd64/kubectl
-            sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
-          }
-          kubectl version --client
       - name: install helm (pinned)
         run: |
           set -euo pipefail
@@ -31,5 +24,23 @@ jobs:
           tar xzf /tmp/helm.tgz -C /tmp
           sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
           helm version
-      - name: parity
-        run: python3 scripts/helm_parity.py
+      - name: install kubeconform (pinned)
+        run: |
+          set -euo pipefail
+          V=v0.7.0
+          curl -fsSL -o /tmp/kc.tgz "https://github.com/yannh/kubeconform/releases/download/${V}/kubeconform-linux-amd64.tar.gz"
+          tar xzf /tmp/kc.tgz -C /tmp
+          sudo install -m 0755 /tmp/kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+      - name: lint + render + conform
+        run: |
+          set -euo pipefail
+          helm lint charts/opencode -f charts/opencode/values-team.yaml
+          helm lint charts/opencode -f charts/opencode/values-xieyucheng.yaml
+          helm lint charts/opencode -f charts/opencode/values-yingxin.yaml
+          mkdir -p /tmp/render
+          helm template opencode-team charts/opencode -n opencode-team -f charts/opencode/values-team.yaml > /tmp/render/team.yaml
+          helm template opencode-xieyucheng charts/opencode -n opencode-xieyucheng -f charts/opencode/values-xieyucheng.yaml > /tmp/render/xie.yaml
+          helm template opencode-yingxin charts/opencode -n opencode-yingxin -f charts/opencode/values-yingxin.yaml > /tmp/render/ying.yaml
+          kubeconform -strict -ignore-missing-schemas -skip IngressRoute /tmp/render/team.yaml /tmp/render/xie.yaml /tmp/render/ying.yaml
+          echo LINT-CONFORM-OK

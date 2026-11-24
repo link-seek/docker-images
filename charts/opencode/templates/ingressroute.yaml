@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled }}
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ .Values.ingress.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+{{- with .Values.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  entryPoints: [websecure]
+  routes:
+{{- range .Values.ingress.hosts }}
+    - kind: Rule
+      match: Host(`{{ . }}`)
+      services:
+        - {name: {{ $.Values.appName }}, port: 4097}
+{{- end }}
+  tls:
+    certResolver: le-prod
+    domains:
+{{- range .Values.ingress.hosts }}
+      - main: {{ . }}
+{{- end }}
+{{- end }}

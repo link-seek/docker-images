@@ -1,411 +1,89 @@
-# generated from k8s/opencode-team (kustomize render); 2 deployments, 7 resources
+# team 实例：与 values.yaml 默认值的差异。
 namespace: opencode-team
-deployments:
-- name: browserless
-  labels:
-    app: browserless
-  annotations: {}
+appName: opencode
+appLabel: opencode-team
+image:
+  repository: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team
+  digest: sha256:40380fab65ab05cbce7fded42ed4ed2fb92a2f6f07c31cf2dd2b2539d15f9943
+env:
+  - name: PIPELINE_MANAGED
+    value: "true"
+  - name: TMPDIR
+    value: /tmp
+  - name: LITELLM_BASE_URL
+    value: http://litellm-gateway.litellm.svc.cluster.local:4000
+  - name: SSH_TARGETS
+    value: "mesh-hw-21 mesh-hw-41"
+  - name: SMTP_HOST
+    value: smtp.163.com
+  - name: SMTP_PORT
+    value: "465"
+  - name: SMTP_USER
+    value: "122306789@163.com"
+  - name: SMTP_FROM
+    value: "122306789@163.com"
+  - name: MAIL_DEFAULT_TO
+    value: xieyucheng@outlook.com
+  - name: BROWSER_CDP_URL
+    value: ws://browserless.opencode-team.svc.cluster.local:3000/chromium
+  - name: OPEN_DESIGN_BROWSER_URL
+    value: http://browserless.opencode-team.svc.cluster.local:3000
+  - name: LITELLM_API_KEY
+    secretKey: LITELLM_API_KEY
+  - name: MAAS_KEY
+    secretKey: MAAS_KEY
+  - name: OBS_AK
+    secretKey: OBS_AK
+  - name: OBS_SK
+    secretKey: OBS_SK
+  - name: OBS_ENDPOINT
+    value: https://obs.cn-north-9.myhuaweicloud.com
+  - name: GH_TOKEN
+    secretKey: GH_TOKEN
+  - name: OPENCODE_SERVER_PASSWORD
+    secretKey: OPENCODE_SERVER_PASSWORD
+  - name: V100_SSH_KEY
+    secretKey: V100_SSH_KEY
+  - name: OPENCODE_SERVER_USERNAME
+    value: team
+  - name: CLOUDFLARE_API_TOKEN
+    secretKey: CLOUDFLARE_API_TOKEN
+  - name: CF_AI_TOKEN
+    secretKey: CF_AI_TOKEN
+  - name: SMTP_PASS
+    secretKey: SMTP_PASS
+browserless:
   replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    app: browserless
-  podLabels:
-    app: browserless
-  podAnnotations: {}
-  podSpec:
-    containers:
-    - env:
-      - name: HOST
-        value: 0.0.0.0
-      - name: EXTERNAL
-        value: http://browserless.opencode-team.svc.cluster.local:3000
-      - name: CONCURRENT
-        value: '20'
-      - name: QUEUED
-        value: '20'
-      - name: TIMEOUT
-        value: '600000'
-      - name: HEALTH
-        value: 'true'
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk@sha256:d9040011a12b23af21637e21be2b22e6ba144ad4b5f458dbc803a367aca9e92d
-      livenessProbe:
-        initialDelaySeconds: 60
-        periodSeconds: 30
-        tcpSocket:
-          port: 3000
-      name: browserless
-      ports:
-      - containerPort: 3000
-        name: http
-      readinessProbe:
-        initialDelaySeconds: 30
-        periodSeconds: 15
-        tcpSocket:
-          port: 3000
-      resources:
-        limits:
-          cpu: 4000m
-          memory: 8Gi
-        requests:
-          cpu: 1000m
-          memory: 2Gi
-      volumeMounts:
-      - mountPath: /dev/shm
-        name: dshm
-    imagePullSecrets:
-    - name: swr-pull
-    volumes:
-    - emptyDir:
-        medium: Memory
-        sizeLimit: 2Gi
-      name: dshm
-- name: opencode
-  labels:
-    app: opencode-team
+  image:
+    repository: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk
+    digest: sha256:d9040011a12b23af21637e21be2b22e6ba144ad4b5f458dbc803a367aca9e92d
+  concurrent: 20
+  queued: 20
+tmpdir: true
+rootHomeSeed: true
+privilegedSsh: true
+features:
+  cognee: true
+  obsutil: true
+  hcloud: false
+gitUser: opencode-team
+nodeHostname: ecs-ies-euleros-jmupervm-zhangzhirui
+workHostPath: /var/lib/opencode-team/work
+dataHostPath: /var/lib/opencode-team/data
+cogneeMcpRev: "9437d3ea"
+vpc:
+  enabled: true
+  httpPort: 44097
+  sshPort: 2222
+ingress:
+  enabled: true
+  name: team-agent-staging-tls
+  hosts:
+    - team-agent.xieyucheng.top
+    - team-agent.internal.linkseek.net.cn
   annotations:
-    reloader.stakater.com/auto: 'true'
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    app: opencode-team
-  podLabels:
-    app: opencode-team
-  podAnnotations:
-    cognee-mcp-rev: 9437d3ea
-  podSpec:
-    containers:
-    - args:
-      - serve
-      - --port
-      - '4097'
-      - --hostname
-      - 0.0.0.0
-      command:
-      - /bin/sh
-      - /entrypoint/entrypoint.sh
-      env:
-      - name: PIPELINE_MANAGED
-        value: 'true'
-      - name: TMPDIR
-        value: /tmp
-      - name: LITELLM_BASE_URL
-        value: http://litellm-gateway.litellm.svc.cluster.local:4000
-      - name: SSH_TARGETS
-        value: mesh-hw-21 mesh-hw-41
-      - name: SMTP_HOST
-        value: smtp.163.com
-      - name: SMTP_PORT
-        value: '465'
-      - name: SMTP_USER
-        value: 122306789@163.com
-      - name: SMTP_FROM
-        value: 122306789@163.com
-      - name: MAIL_DEFAULT_TO
-        value: xieyucheng@outlook.com
-      - name: BROWSER_CDP_URL
-        value: ws://browserless.opencode-team.svc.cluster.local:3000/chromium
-      - name: OPEN_DESIGN_BROWSER_URL
-        value: http://browserless.opencode-team.svc.cluster.local:3000
-      - name: LITELLM_API_KEY
-        valueFrom:
-          secretKeyRef:
-            key: LITELLM_API_KEY
-            name: opencode-team-env
-      - name: MAAS_KEY
-        valueFrom:
-          secretKeyRef:
-            key: MAAS_KEY
-            name: opencode-team-env
-      - name: OBS_AK
-        valueFrom:
-          secretKeyRef:
-            key: OBS_AK
-            name: opencode-team-env
-      - name: OBS_SK
-        valueFrom:
-          secretKeyRef:
-            key: OBS_SK
-            name: opencode-team-env
-      - name: OBS_ENDPOINT
-        value: https://obs.cn-north-9.myhuaweicloud.com
-      - name: GH_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: GH_TOKEN
-            name: opencode-team-env
-      - name: OPENCODE_SERVER_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            key: OPENCODE_SERVER_PASSWORD
-            name: opencode-team-env
-      - name: V100_SSH_KEY
-        valueFrom:
-          secretKeyRef:
-            key: V100_SSH_KEY
-            name: opencode-team-env
-      - name: OPENCODE_SERVER_USERNAME
-        value: team
-      - name: CLOUDFLARE_API_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: CLOUDFLARE_API_TOKEN
-            name: opencode-team-env
-      - name: CF_AI_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: CF_AI_TOKEN
-            name: opencode-team-env
-      - name: SMTP_PASS
-        valueFrom:
-          secretKeyRef:
-            key: SMTP_PASS
-            name: opencode-team-env
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:40380fab65ab05cbce7fded42ed4ed2fb92a2f6f07c31cf2dd2b2539d15f9943
-      livenessProbe:
-        httpGet:
-          path: /
-          port: 4097
-        initialDelaySeconds: 180
-        periodSeconds: 30
-        timeoutSeconds: 10
-      name: opencode
-      ports:
-      - containerPort: 4097
-        name: http
-      - containerPort: 2222
-        name: ssh
-      readinessProbe:
-        httpGet:
-          path: /
-          port: 4097
-        initialDelaySeconds: 90
-        periodSeconds: 15
-        timeoutSeconds: 10
-      resources:
-        limits:
-          cpu: 3000m
-          memory: 8Gi
-        requests:
-          cpu: 1000m
-          memory: 2Gi
-      securityContext:
-        allowPrivilegeEscalation: true
-        capabilities:
-          add:
-          - SETUID
-          - SETGID
-          - CHOWN
-          - DAC_OVERRIDE
-          - FOWNER
-          - SYS_CHROOT
-          - AUDIT_WRITE
-          drop:
-          - ALL
-        readOnlyRootFilesystem: false
-      volumeMounts:
-      - mountPath: /workspace
-        name: prod-work
-      - mountPath: /root/.local/share/opencode
-        name: prod-data
-      - mountPath: /root
-        name: root-home
-      - mountPath: /entrypoint
-        name: entrypoint
-      - mountPath: /tmp
-        name: tmp
-    imagePullSecrets:
-    - name: swr-pull
-    initContainers:
-    - command:
-      - /bin/sh
-      - -c
-      - cp -a /root/. /seed/
-      image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-team@sha256:40380fab65ab05cbce7fded42ed4ed2fb92a2f6f07c31cf2dd2b2539d15f9943
-      name: root-home-seed
-      securityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-          - ALL
-        readOnlyRootFilesystem: true
-      volumeMounts:
-      - mountPath: /seed
-        name: root-home
-    nodeSelector:
-      kubernetes.io/hostname: ecs-ies-euleros-jmupervm-zhangzhirui
-    volumes:
-    - hostPath:
-        path: /var/lib/opencode-team/work
-        type: DirectoryOrCreate
-      name: prod-work
-    - hostPath:
-        path: /var/lib/opencode-team/data
-        type: DirectoryOrCreate
-      name: prod-data
-    - configMap:
-        defaultMode: 493
-        name: opencode-entrypoint
-      name: entrypoint
-    - emptyDir: {}
-      name: root-home
-    - emptyDir: {}
-      name: tmp
-resources:
-- apiVersion: rbac.authorization.k8s.io/v1
-  kind: Role
-  metadata:
-    name: opencode-self-verify
-    namespace: opencode-team
-  rules:
-  - apiGroups:
-    - ''
-    resources:
-    - pods
-    - pods/log
-    - events
-    - configmaps
-    - services
-    - endpoints
-    - persistentvolumeclaims
-    verbs:
-    - get
-    - list
-    - watch
-  - apiGroups:
-    - apps
-    resources:
-    - deployments
-    - replicasets
-    verbs:
-    - get
-    - list
-    - watch
-- apiVersion: rbac.authorization.k8s.io/v1
-  kind: RoleBinding
-  metadata:
-    name: opencode-self-verify
-    namespace: opencode-team
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: Role
-    name: opencode-self-verify
-  subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: opencode-team
-- apiVersion: v1
-  data:
-    entrypoint.sh: "#!/bin/sh\nset -eu\n# 只读根文件系统（securityContext.readOnlyRootFilesystem=true）：\n\
-      # /root 由可写 emptyDir 承接（initContainer 已把镜像内 /root/. 拷入），系统目录只读；\n# /workspace、/root/.local/share/opencode（数据卷）、/tmp\
-      \ 可写。\nexport TMPDIR=/tmp\n: \"${HOME:=/root}\"; export HOME\nif [ \"${PIPELINE_MANAGED:-}\"\
-      \ != \"true\" ]; then\n  echo 'FATAL: .env not pipeline-managed (PIPELINE_MANAGED!=true).\
-      \ Refusing to start.' >&2\n  exit 1\nfi\nif [ ! -d /workspace/.git ]; then\n\
-      \  git init -b main /workspace >/dev/null 2>&1\n  git -C /workspace config user.name\
-      \ opencode-team\n  git -C /workspace config user.email opencode-team@local\n\
-      \  git -C /workspace commit --allow-empty -m init >/dev/null 2>&1\nfi\n# 组织记忆\
-      \ trial：cognee 集中式（ClusterIP 集群内直达，无鉴权；隔离靠 dataset 约定）。\n# team 只用 trial-team（私库）+\
-      \ org-settled（共享），不用 trial-yingxin。\n# 注意：opencode.json 由 opencode.jsonc 落盘，含\
-      \ // 全行注释；json.load 直接读会炸，\n# 必须先剥注释再解析，否则 except 分支 d={} 会抹掉整份配置（白名单/模型全丢实锤）。\n\
-      python3 - <<'PY' 2>/dev/null || true\nimport json, re\np='/root/.config/opencode/opencode.json'\n\
-      raw=open(p).read() if __import__('os').path.exists(p) else '{}'\nraw=re.sub(r'^[\
-      \ \\t]*//.*$', '', raw, flags=re.M)\ntry:\n    d=json.loads(raw)\nexcept Exception:\n\
-      \    d={}\nm=d.setdefault('mcp',{}).setdefault('servers',{});\ncog={\"type\"\
-      :\"remote\",\"url\":\"http://cognee.cognee-trial.svc.cluster.local:8000/mcp\"\
-      ,\"oauth\":False,\"timeout\":{\"startup\":45000,\"catalog\":60000,\"execution\"\
-      :600000}}\nif m.get('cognee')!=cog:\n    m['cognee']=cog\n    json.dump(d,open(p,'w'),indent=2)\n\
-      \    print('cognee-mcp-injected')\nPY\n# obsutil 配置：env 全量（OBS_AK/OBS_SK 必填，OBS_ENDPOINT\
-      \ 缺省华北九；密钥不进镜像）。\nif [ -n \"${OBS_AK:-}\" ] && [ -n \"${OBS_SK:-}\" ]; then\n\
-      \  printf 'endpoint=%s\\nak=%s\\nsk=%s\\ntoken=\\n' \"${OBS_ENDPOINT:-https://obs.cn-north-9.myhuaweicloud.com}\"\
-      \ \"$OBS_AK\" \"$OBS_SK\" > /root/.obsutilconfig\n  chmod 600 /root/.obsutilconfig\n\
-      fi\n# ---- SSH server（root + 密码 = $OPENCODE_SERVER_PASSWORD；端口 2222）----\nif\
-      \ [ \"${OPENCODE_SSH_ENABLE:-true}\" = \"true\" ] && command -v sshd >/dev/null\
-      \ 2>&1; then\n  mkdir -p /run/sshd /root/.ssh/sshd\n  [ -f /root/.ssh/sshd/ssh_host_ed25519_key\
-      \ ] || ssh-keygen -t ed25519 -f /root/.ssh/sshd/ssh_host_ed25519_key -N '' -q\n\
-      \  if [ -n \"${OPENCODE_SERVER_PASSWORD:-}\" ]; then echo \"root:${OPENCODE_SERVER_PASSWORD}\"\
-      \ | chpasswd || echo \"WARN: set root pw failed\" >&2; fi\n  printf '%s\\n'\
-      \ 'Port 2222' 'ListenAddress 0.0.0.0' 'HostKey /root/.ssh/sshd/ssh_host_ed25519_key'\
-      \ 'PermitRootLogin yes' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication\
-      \ no' 'UsePAM no' 'PidFile /tmp/sshd.pid' > /root/.ssh/sshd/sshd_config\n  /usr/sbin/sshd\
-      \ -f /root/.ssh/sshd/sshd_config 2>/dev/null || echo 'WARN: sshd start failed'\
-      \ >&2\nfi\n# ---- V100 免密（私钥 base64 由 env V100_SSH_KEY 注入；宿主机 authorized_keys\
-      \ 已铺）----\nif [ -n \"${V100_SSH_KEY:-}\" ]; then\n  mkdir -p /root/.ssh && chmod\
-      \ 700 /root/.ssh\n  echo \"${V100_SSH_KEY}\" | base64 -d > /root/.ssh/id_v100\
-      \ 2>/dev/null && chmod 600 /root/.ssh/id_v100\n  printf '%s\\n' 'Host v100-0001'\
-      \ '  HostName 1.94.192.234' '  User runner' '  IdentityFile ~/.ssh/id_v100'\
-      \ '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' 'Host v100-0002'\
-      \ '  HostName 114.116.228.0' '  User runner' '  IdentityFile ~/.ssh/id_v100'\
-      \ '  StrictHostKeyChecking no' '  UserKnownHostsFile /dev/null' >> /root/.ssh/config\n\
-      \  chmod 600 /root/.ssh/config\nfi\nexec opencode \"$@\"\n"
-  kind: ConfigMap
-  metadata:
-    name: opencode-entrypoint
-    namespace: opencode-team
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: browserless
-    namespace: opencode-team
-  spec:
-    ports:
-    - name: http
-      port: 3000
-      targetPort: 3000
-    selector:
-      app: browserless
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: opencode
-    namespace: opencode-team
-  spec:
-    ports:
-    - name: http
-      port: 4097
-      targetPort: 4097
-    selector:
-      app: opencode-team
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: opencode-vpc
-    namespace: opencode-team
-  spec:
-    ports:
-    - name: http
-      port: 44097
-      targetPort: 4097
-    - name: ssh
-      port: 2222
-      targetPort: 2222
-    selector:
-      app: opencode-team
-    type: LoadBalancer
-- apiVersion: traefik.io/v1alpha1
-  kind: IngressRoute
-  metadata:
-    annotations:
-      route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store
-        LE certs)
-    name: team-agent-staging-tls
-    namespace: opencode-team
-  spec:
-    entryPoints:
-    - websecure
-    routes:
-    - kind: Rule
-      match: Host(`team-agent.xieyucheng.top`)
-      services:
-      - name: opencode
-        port: 4097
-    - kind: Rule
-      match: Host(`team-agent.internal.linkseek.net.cn`)
-      services:
-      - name: opencode
-        port: 4097
-    tls:
-      certResolver: le-prod
-      domains:
-      - main: team-agent.xieyucheng.top
-      - main: team-agent.internal.linkseek.net.cn
+    route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE certs)
+rbac:
+  create: true
+  extended: false
+  pvc: true

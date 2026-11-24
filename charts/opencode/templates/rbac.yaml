@@ -1,0 +1,128 @@
+{{- if .Values.rbac.create }}
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opencode-self-verify
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "configmaps", "services", "endpoints"{{ if .Values.rbac.pvc }}, "persistentvolumeclaims"{{ end }}]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opencode-self-verify
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opencode-self-verify
+{{- end }}
+{{- if .Values.rbac.extended }}
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.namespace }}-backup-diag
+  namespace: kube-system
+  labels:
+{{ toYaml $std | indent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list"]
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.namespace }}-backup-readonly
+  labels:
+{{ toYaml $std | indent 4 }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.namespace }}-flux-readonly
+  labels:
+{{ toYaml $std | indent 4 }}
+rules:
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["gitrepositories"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch"]
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.namespace }}-backup-diag
+  namespace: kube-system
+  labels:
+{{ toYaml $std | indent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.namespace }}-backup-diag
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.namespace }}-backup-readonly
+  labels:
+{{ toYaml $std | indent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.namespace }}-backup-readonly
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.namespace }}-flux-readonly
+  labels:
+{{ toYaml $std | indent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.namespace }}-flux-readonly
+{{- end }}

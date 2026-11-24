@@ -1,0 +1,16 @@
+{{- if .Values.vpc.enabled }}
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-vpc
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+spec:
+  type: LoadBalancer
+  selector: {app: {{ .Values.appLabel }}}
+  ports:
+    - {name: http, port: {{ .Values.vpc.httpPort }}, targetPort: 4097}
+    - {name: ssh, port: {{ .Values.vpc.sshPort }}, targetPort: 2222}
+{{- end }}

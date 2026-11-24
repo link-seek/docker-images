@@ -1,0 +1,53 @@
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browserless
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml (merge (dict "app" "browserless") $std) | indent 4 }}
+spec:
+  replicas: {{ .Values.browserless.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: browserless
+  template:
+    metadata:
+      labels:
+{{ toYaml (merge (dict "app" "browserless") $std) | indent 8 }}
+    spec:
+      imagePullSecrets:
+        - name: swr-pull
+      containers:
+        - name: browserless
+          image: {{ .Values.browserless.image.repository }}@{{ .Values.browserless.image.digest }}
+          ports:
+            - {name: http, containerPort: 3000}
+          env:
+            - {name: HOST, value: "0.0.0.0"}
+            - name: EXTERNAL
+              value: http://browserless.{{ .Values.namespace }}.svc.cluster.local:3000
+            - name: CONCURRENT
+              value: {{ .Values.browserless.concurrent | quote }}
+            - name: QUEUED
+              value: {{ .Values.browserless.queued | quote }}
+            - {name: TIMEOUT, value: "600000"}
+            - {name: HEALTH, value: "true"}
+          livenessProbe:
+            tcpSocket: {port: 3000}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket: {port: 3000}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            limits: {cpu: 4000m, memory: 8Gi}
+            requests: {cpu: 1000m, memory: 2Gi}
+          volumeMounts:
+            - {name: dshm, mountPath: /dev/shm}
+      volumes:
+        - name: dshm
+          emptyDir: {medium: Memory, sizeLimit: 2Gi}
