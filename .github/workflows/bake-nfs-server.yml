@@ -43,6 +43,9 @@ jobs:
       explicit_tag: ${{ inputs.nfs_tag }}
       build_args: |
         ALPINE_TAG=${{ inputs.alpine_tag }}
+      goss_dir: docker/nfs-server
+      goss_docker_args: --entrypoint sleep
+      goss_command: "300"
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       TS_API_KEY: ${{ secrets.TS_API_KEY }}
