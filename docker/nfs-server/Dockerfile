@@ -5,7 +5,7 @@
 # 运行要求：privileged（内核 nfsd 必需），见 infra k8s/nfs/。
 ARG ALPINE_TAG=3.22.1
 FROM docker.io/library/alpine:${ALPINE_TAG}
-RUN apk add --no-cache nfs-utils \
+RUN apk update && apk upgrade --no-cache && apk add --no-cache nfs-utils \
  && mkdir -p /exports /var/lib/nfs/rpc_pipefs /var/lib/nfs/v4recovery \
  && chmod 777 /exports
 COPY docker/nfs-server/exports /etc/exports
