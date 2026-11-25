@@ -59,11 +59,6 @@ WORKDIR /app
 ADD --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds-global-bundle.pem
 COPY --from=file-tools /out/rg-bin/rg /usr/local/bin/
 COPY --from=file-tools /out/rg-bin/lib/ /usr/lib/
-# distroless 底座旧 .so：用 file-tools 的新版覆盖（只换文件，不碰 distroless 的 dpkg status）。
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7 /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/x86_64-linux-gnu/
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/
-
 COPY --from=go-base --chown=nonroot:nonroot /out/memory /var/lib/omnara/memory
 COPY --from=worker-build /out/omnara-worker /out/omnara-sandbox /usr/local/bin/
 COPY --from=file-tools /out/ /

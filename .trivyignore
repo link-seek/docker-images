@@ -105,3 +105,10 @@ CVE-2026-112366 exp:2027-02-28
 # 2026-11-19 team 认领：gh-real / obsutil 的 Go stdlib CVE-2026-97054（HTTP/1 服务端 MaxBytesReader）。
 # 两者均为客户端 CLI、容器内无监听面；obsutil 无更新二进制，gh 已升 2.105.0 若仍命中则等上游 Go 修版。
 CVE-2026-97054 exp:2027-02-28
+
+# 2026-11-26 k8s-pool 接入（worker-k8s 试用镜像）：distroless cc-debian13 底座自带旧包，
+# 非我方代码（fork 只加 provider Go 代码），worker 无公网监听面。底座跟上游 Dockerfile pin，
+# 有新 digest 即升底座清条目。
+CVE-2026-107494 exp:2027-02-26
+CVE-2026-124709 exp:2027-02-26
+CVE-2026-124851 exp:2027-02-26
