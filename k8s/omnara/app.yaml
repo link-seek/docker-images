@@ -64,7 +64,9 @@ spec:
               valueFrom: {secretKeyRef: {name: omnara-env, key: BLOB_SECRET}}
             - {name: OMNARA_BLOB_S3_USE_PATH_STYLE, value: "1"}
             - {name: OMNARA_MEMORY_DIR, value: /var/lib/omnara/memory}
-            - {name: OMNARA_EMAIL_DRIVER, value: console}
+            - {name: OMNARA_EMAIL_DRIVER, value: smtp}
+            - {name: OMNARA_SMTP_ADDR, value: "smtp.163.com:465"}
+            - {name: OMNARA_EMAIL_FROM, value: noreply@linkseek.net.cn}
             - {name: OMNARA_AUTH_SIGNUP_ENABLED, value: "1"}
             - {name: OMNARA_AUTH_PASSWORD_RESET_ENABLED, value: "1"}
             - {name: OMNARA_TRUSTED_PROXY_CIDRS, value: "10.42.0.0/16,10.43.0.0/16"}
