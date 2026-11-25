@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-chroot-sandbox ./cmd/chroot-sandbox
-COPY cmd/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
+ARG FORK_SHA
+ADD https://raw.githubusercontent.com/xieyucheng123/omnara/${FORK_SHA:-kubernetes-provider}/cmd/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
 RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
 
 FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS go-base
