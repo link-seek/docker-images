@@ -18,7 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
  && go mod download && mkdir -p /out/memory
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-chroot-sandbox ./cmd/chroot-sandbox
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-worker ./cmd/worker \
+ && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-sandbox ./cmd/sandbox \
+ && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /src/omnara-chroot-sandbox ./cmd/chroot-sandbox
 ARG FORK_SHA
 ADD https://raw.githubusercontent.com/xieyucheng123/omnara/${FORK_SHA:-kubernetes-provider}/cmd/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
 RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
