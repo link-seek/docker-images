@@ -75,12 +75,12 @@ spec:
           volumeMounts:
             - {name: memory, mountPath: /var/lib/omnara/memory}
           readinessProbe:
-            httpGet: {path: /healthz, port: 8080, host: omnara.linkseek.net.cn}
+            httpGet: {path: /readyz, port: 8081}
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
-            httpGet: {path: /healthz, port: 8080, host: omnara.linkseek.net.cn}
+            httpGet: {path: /healthz, port: 8081}
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 5
