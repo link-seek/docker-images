@@ -147,6 +147,11 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
  && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.cache
+# markitdown：与 tools 线对齐（微软 MarkItDown，文档→markdown）。
+# certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）。
+RUN pip3 install --no-cache-dir --break-system-packages "certifi==2026.10.23" "markitdown==0.1.9" \
+ && markitdown --version
+
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙 markdown+premailer）

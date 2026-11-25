@@ -1,0 +1,24 @@
+{
+  "name": "docker-images",
+  "version": "1.0.0",
+  "description": "自用派生镜像的构建与发布（opencode tools/team 线、browserless、litellm-gateway、erpnext、reloader）。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/link-seek/docker-images.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/link-seek/docker-images/issues"
+  },
+  "homepage": "https://github.com/link-seek/docker-images#readme"
+}
