@@ -20,7 +20,7 @@ opencode.ai/files/bin/<tag>/opencode-linux-<arch>.tar.gz（官方 v2 二进制�
 * 跟随：周一巡检已关，上游更新靠人发现后手点 dispatch 传版。
 * 审计：bake run 日志记 tag/digest（90 天）；仓里不记版本（无 sync-back）。
 * 测试：dgoss 成品自检＋双 runner 预检＋细测全绿才转正式版。
-* 部署：应用清单同在本仓 `k8s/opencode-*`，集群 Flux 对账上线（旧 infra compose/deliver 已退役）。
+* 部署：chart 同在本仓 `charts/opencode` + 三份 values，集群 Flux HelmRelease 对账上线（k8s/opencode-* 已删）。
 
 ## 手动触发
 
@@ -39,7 +39,7 @@ Actions → bake-tools → Run workflow，必填 `opencode_tag` / `opencode_mem_
 
 ## opencode-team（部门共用精简线）
 
-第二条流水线：`docker/opencode-team/Dockerfile` + `bake-team.yml` + `k8s/opencode-team/`。
+第二条流水线：`docker/opencode-team/Dockerfile` + `bake-team.yml` + `charts/opencode/values-team.yaml`。
 
 ```text
 opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser + mem插件 + 邮件三件套
@@ -48,7 +48,7 @@ opencode 官方 v2 二进制（glibc）→ ubuntu:24.04 → gh + agent-browser +
 ```
 
 * 与 tools 的区别：不要 aliyun/hcloud/oci/wrangler/tailscale；其余同——浏览器均走各实例独立的 browserless Pod，镜像内无本地 chrome（team / tools / xieyucheng / yingxin 已统一 browserless）。
-* 预检（k3d+Flux，#505）：`k8s_app: opencode`，manifest 同仓 `k8s/opencode-team`；team digest 经 images 注入，
+* 预检（k3d+chart）：`k8s_app: opencode`，chart 同仓 `charts/opencode`；team digest 经 YAML 感知注入，
   browserless 取 manifest tag。
 * 细测：pod 内 `agent-browser connect ws://browserless:3000/chromium?token=…` → open → snapshot → screenshot → close。
 
@@ -62,13 +62,13 @@ ghcr.io/browserless/chromium:<tag> + fonts-noto-cjk/emoji → ghcr.io/link-seek/
 ```
 
 * 仓库名带 chrome：bake-stack 新预检按镜像名含 chrome 抓 sidecar 行做 k3d import，改骨架影响全线，故命名适配。
-* 无 k8s 预检：归属 `k8s/opencode-team/`，由 bake-team 的 k3d 预检连带验证；本线细测只验单镜像（pressure + CJK + 截图）。
+* 预检归属 chart，由 bake-team 的 k3d 预检连带验证；本线细测只验单镜像（pressure + CJK + 截图）。
 
 ## bootstrap 顺序（首发）
 
 1. dispatch `bake-browserless-cjk`（`browserless_tag=2.63.1`）→ 转正出 `:2.63.1`/`:latest`。
 2. dispatch `bake-team`（`opencode_tag=2.3.0`）→ 预检拉 browserless `:latest`，细测连通后转正。
-3. `k8s/opencode-team/deployment.yaml` 改 digest pin 发 PR（manifest 跟镜像走，同一仓同一 PR）。
+3. `charts/opencode/values-team.yaml` 改 image.digest 发 PR（manifest 跟镜像走，同一仓同一 PR）。
 4. infra 仓加 `clusters/k3s/apps-opencode-team.yaml`（Flux 收编）+ pipeline mint `opencode-team-env` Secret → 对账上线试用。
 
 ## 分工：商家 vs 配送（2026-11-23 更新：应用配送已收归本仓 + Flux）

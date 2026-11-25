@@ -3,7 +3,7 @@ name: bake-team
 # 部门共用精简线（opencode + agent-browser + mem + 邮件）；浏览器走独立 browserless Pod。
 # 版本：opencode_tag 由手动 dispatch 必填传入（Dockerfile 默认值只给本地构建兜底）。
 # mem 版本单源头：只 Dockerfile 的 ARG OPENCODE_MEM_VERSION 一处定义。
-# 新预检（k3d+Flux，#505）：manifest 同仓 k8s/opencode-team；digest 经 images 注入（只注 team 本体，
+# 预检（k3d+chart）：chart 同仓 charts/opencode + values-team.yaml；digest 经 YAML 感知注入（只注 team 本体，
 # browserless 取 manifest tag——bootstrap 顺序：先 dispatch bake-browserless-cjk 转正）。
 # 细测 hook 用 kubectl 打 k3d 里同货 pod：identity + agent-browser CDP→browserless 全链路。
 
@@ -29,7 +29,6 @@ on:
     paths:
       - docker/opencode-team/Dockerfile
       - docker/opencode-team/**
-      - k8s/opencode-team/**
       - charts/opencode/**
       - .github/workflows/bake-team.yml
       - .github/workflows/bake-stack.yml
@@ -58,9 +57,7 @@ jobs:
       ghcr_temp_only: true
       cache_to_ghcr: true
       k8s_app: opencode
-      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
-      k8s_manifest_path: k8s/opencode-team
-      k8s_preflight_manifest_path: k8s/_preflight/opencode-team # 兼容保留；chart 预检启用后不再使用（见 k8s_helm_*）
+      k8s_manifest_repo: "" # 同仓 chart（PR3 起 k8s/opencode-* 已删，只留 chart 路径）
       k8s_helm_chart: charts/opencode
       k8s_helm_values: charts/opencode/values-team.yaml
       k8s_manifest_ref: main

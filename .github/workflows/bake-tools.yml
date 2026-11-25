@@ -71,11 +71,8 @@ jobs:
       ghcr_temp_only: true
       cache_to_ghcr: true
       k8s_app: opencode
-      k8s_manifest_repo: "" # 同仓：manifest 已搬进本仓 k8s/（#461）
+      k8s_manifest_repo: "" # 同仓 chart（PR3 起 k8s/opencode-* 已删，只留 chart 路径）
       # tools 没有独立的 "opencode" 部署：只有 xieyucheng / yingxin 两个生产实例，team 线另走 bake-team。
-      # 预检 base 取 xieyucheng，overlay 去 nodeSelector/hostPath + 删生产 enc Secret/Ingress。
-      k8s_manifest_path: k8s/opencode-xieyucheng
-      k8s_preflight_manifest_path: k8s/_preflight/opencode-xieyucheng
       k8s_helm_chart: charts/opencode
       k8s_helm_values: charts/opencode/values-xieyucheng.yaml
       k8s_manifest_ref: main
