@@ -19,7 +19,15 @@ spec:
       services:
         - name: web
           port: 8080
+    # 对象存储（S3 必须从根路径服务，签名含 host/path；经 Traefik 复用 le-prod 公网证，
+    # 满足 OMNARA_BLOB_S3_ENDPOINT 的 https 强制； hairpin 经公网回环，生产可切私有 CA）。
+    - match: Host(`omnara-s3.linkseek.net.cn`) && PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: rustfs
+          port: 9000
   tls:
     certResolver: le-prod
     domains:
       - main: omnara.linkseek.net.cn
+      - main: omnara-s3.linkseek.net.cn
