@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- infisical.yaml
+- postgres.yaml
+- data.yaml
+- memory-pvc.yaml
+- jobs.yaml
+- app.yaml
+- web.yaml
+- ingressroute-tls.yaml

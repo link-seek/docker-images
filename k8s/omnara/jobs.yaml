@@ -1,0 +1,81 @@
+# 建桶 + 迁库（均为 Job，带重试；api 侧 readiness 门控流量，收敛靠重试）。
+# rustfs-init：幂等 PUT（桶存在也 200），等 rustfs ready 最多 5 分钟。
+# migrate：直连 writer，超时 30m（上游要求禁代理，clusterIP 直连满足）。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-init
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app: omnara-rustfs-init
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: swr-pull
+      containers:
+        - name: init
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+          env:
+            - {name: RUSTFS_ACCESS_KEY, value: omnara}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: omnara-env, key: BLOB_SECRET}}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              for i in $(seq 1 30); do
+                if curl -fsS -o /dev/null -X PUT --aws-sigv4 'aws:amz:us-east-1:s3' --user "omnara:$RUSTFS_SECRET_KEY" http://rustfs:9000/omnara \
+                && curl -fsS -o /dev/null -X PUT --aws-sigv4 'aws:amz:us-east-1:s3' --user "omnara:$RUSTFS_SECRET_KEY" http://rustfs:9000/omnara-test; then
+                  echo "buckets ready"; exit 0
+                fi
+                echo "retry $i"; sleep 10
+              done
+              echo "FAIL: rustfs not ready"; exit 1
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app: omnara-migrate
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: swr-pull
+      initContainers:
+        - name: pg-wait
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+          command: [/bin/sh, -ec, 'for i in $(seq 1 60); do pg_isready -h postgres -U omnara -d omnara && exit 0; sleep 5; done; exit 1']
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+      containers:
+        - name: migrate
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations:v0.2.27@sha256:b05d1033c3784e80bf08f0a5f6c0c10fdfa749cd64775dd5dca66187a99035b5
+          env:
+            - name: OMNARA_DATABASE_URL
+              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: omnara-env, key: POSTGRES_PASSWORD}}
+            - {name: OMNARA_MIGRATION_TIMEOUT, value: 30m}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 1000m, memory: 1Gi}

@@ -1,0 +1,15 @@
+# agent 记忆卷（NFS RWX 唯一源；api/worker/maintenance 三服务共挂；Retain，删 PVC 不丢数据）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: memory-data
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-omnara
+  resources:
+    requests:
+      storage: 5Gi

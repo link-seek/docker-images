@@ -1,0 +1,152 @@
+# valkey（队列）+ rustfs（S3 兼容对象存储，bucket omnara/omnara-test；均为单副本 + local-path，钉 .21）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  selector:
+    app: omnara-redis
+  ports:
+    - {name: redis, port: 6379, targetPort: 6379}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app: omnara-redis
+  template:
+    metadata:
+      labels:
+        app: omnara-redis
+    spec:
+      imagePullSecrets:
+        - name: swr-pull
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [ecs-ies-euleros-jmupervm-xieyucheng]
+      containers:
+        - name: redis
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/valkey:9-alpine@sha256:c8e2d17498838af5d91e12eb7c11220b3434a7b7131a333e3af52ad5e0b80882
+          ports:
+            - {name: redis, containerPort: 6379}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          readinessProbe:
+            exec:
+              command: [valkey-cli, ping]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests: {storage: 5Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  selector:
+    app: omnara-rustfs
+  ports:
+    - {name: s3, port: 9000, targetPort: 9000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app: omnara-rustfs
+  template:
+    metadata:
+      labels:
+        app: omnara-rustfs
+    spec:
+      imagePullSecrets:
+        - name: swr-pull
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [ecs-ies-euleros-jmupervm-xieyucheng]
+      containers:
+        - name: rustfs
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+          args: [/data]
+          ports:
+            - {name: s3, containerPort: 9000}
+          env:
+            - {name: RUSTFS_ACCESS_KEY, value: omnara}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: omnara-env, key: BLOB_SECRET}}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 9000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 1000m, memory: 2Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-data
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests: {storage: 10Gi}

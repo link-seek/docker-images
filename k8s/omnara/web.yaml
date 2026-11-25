@@ -1,0 +1,46 @@
+# web 静态 SPA（nginx 8080；无 env；网关 path 路由由 IngressRoute 复刻上游 gateway.nginx.conf）。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app: omnara-web
+  template:
+    metadata:
+      labels:
+        app: omnara-web
+    spec:
+      imagePullSecrets:
+        - name: swr-pull
+      containers:
+        - name: web
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-web:v0.2.27@sha256:b17abcf8ca0d0cc3f203dd5185f90a37a7668af986c887b9f0167d36b8d2bc82
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: omnara
+  labels:
+    app.kubernetes.io/name: omnara
+spec:
+  selector:
+    app: omnara-web
+  ports:
+    - {name: http, port: 8080, targetPort: 8080}
