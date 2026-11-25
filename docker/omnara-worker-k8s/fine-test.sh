@@ -10,7 +10,8 @@ set -euo pipefail
 
 EXPECTED_BIN="${EXPECTED_BIN:-/usr/local/bin/omnara-worker}"
 EXPECTED_ENV="${EXPECTED_ENV:-}"
-IMG="swr.cn-north-9.myhuaweicloud.com/link-seek/${IMAGE_SLUG:?IMAGE_SLUG 未设置}@${DIGEST}"
+IMAGE_SLUG="omnara-worker-k8s"
+IMG="swr.cn-north-9.myhuaweicloud.com/link-seek/${IMAGE_SLUG}@${DIGEST}"
 echo "TEMP_TAG=$TEMP_TAG"
 [ -n "$EXPECTED_BIN" ]
 echo "$SWR_PASS" | docker login swr.cn-north-9.myhuaweicloud.com -u "$SWR_USER" --password-stdin >/dev/null
