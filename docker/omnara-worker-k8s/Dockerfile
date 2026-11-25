@@ -44,9 +44,11 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/o
  && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-chroot-sandbox ./cmd/chroot-sandbox
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS file-tools
+ARG FORK_SHA
 # trixie 底座自带 debian-security snapshot 源，直接装即可。
+# FORK_SHA 仅用于 bust 缓存（apt 源变化不进缓存 key，不加则复用旧层）。
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends ripgrep sed libcap2-bin libzstd1 libssl3t64 \
+    echo "fork=${FORK_SHA:-head}" && apt-get update && apt-get install -y --no-install-recommends ripgrep sed libcap2-bin libzstd1 libssl3t64 \
     && mkdir -p /out/rg-bin/lib && cp /usr/bin/rg /out/rg-bin/rg \
     && cp /usr/lib/*-linux-gnu/libpcre2-8.so.0 /out/rg-bin/lib/
 COPY --from=worker-tools /src/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
