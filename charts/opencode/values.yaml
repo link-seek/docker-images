@@ -1,6 +1,74 @@
-{}
+# opencode 通用 chart 默认值（文档化；实例文件只写差异）。
+# 设计：扁平业务旋钮 + --set 可覆盖；podSpec 转储已消除。
 
-# 默认空；实际用 -f values-<instance>.yaml。schema:
-# namespace: <ns>
-# deployments: [{name, labels, annotations, replicas, strategy, selector, podLabels, podAnnotations, podSpec}]
-# resources: [raw k8s objects]
+# namespace 是实例命名空间（HelmRelease 必须覆盖）。
+namespace: ""
+# appName 是 opencode Deployment/Service 名（yingxin 用 opencode-yingxin）。
+appName: opencode
+# appLabel 是 selector 与 pod label（Deployment 不可变，沿用既有值）。
+appLabel: opencode
+# image 是主镜像（digest pin，禁 latest）。
+image:
+  # repository 是镜像仓库路径。
+  repository: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
+  # digest 是不可变 digest（sha256:...）。
+  digest: ""
+# browserless 是远端浏览器 sidecar。
+browserless:
+  # replicas 是副本数（team 跑 1，其余 0 占位）。
+  replicas: 0
+  image:
+    repository: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk
+    digest: ""
+  # concurrent 是并发槽位数。
+  concurrent: 10
+  # queued 是排队槽位数。
+  queued: 10
+# env 是容器 env（保序 list；secretKey 表示从 <namespace>-env 取值，value 为明文）。
+env: []
+# tmpdir 为 true 时加 TMPDIR env 与 tmp/root-home 卷（仅 team）。
+tmpdir: false
+# rootHomeSeed 为 true 时 initContainer 做 /root seed（team）；否则 init-dirs。
+rootHomeSeed: false
+# privilegedSsh 为 true 时放开 sshd 所需 capabilities（仅 team）。
+privilegedSsh: false
+# features 是 entrypoint.sh 特性开关。
+features:
+  # cognee 是组织记忆 mcp 注入（仅 team）。
+  cognee: false
+  # obsutil 是 obsutil 配置段（仅 team）。
+  obsutil: false
+  # hcloud 是 hcloud 钥匙配置段（xie/ying）。
+  hcloud: false
+# gitUser 是 workspace git 身份名。
+gitUser: opencode-prod
+# nodeHostname 非空时钉 nodeSelector（空则不设）。
+nodeHostname: ""
+# workHostPath/dataHostPath 是本地卷路径。
+workHostPath: ""
+dataHostPath: ""
+# cogneeMcpRev 非空时渲染 podAnnotations（仅 team）。
+cogneeMcpRev: ""
+# vpc 是内网 ServiceLB。
+vpc:
+  enabled: true
+  httpPort: 44097
+  sshPort: 2222
+# ingress 是 Traefik IngressRoute（CR 只消费不管理）。
+ingress:
+  enabled: true
+  name: ""
+  hosts: []
+  annotations: {}
+# rbac 是自验只读角色。
+rbac:
+  # create 为 false 时不渲染任何 RBAC（yingxin）。
+  create: true
+  # extended 为 true 时保留跨 ns/cluster 诊断角色（仅 xie 历史包袱）。
+  extended: false
+  # pvc 为 true 时自验 Role 含 persistentvolumeclaims（仅 team）。
+  pvc: false
+# serviceAccount 预留（默认不建）。
+serviceAccount:
+  create: false
+  name: ""

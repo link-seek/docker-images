@@ -1,0 +1,114 @@
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml (merge (dict "app" .Values.appLabel) $std) | indent 4 }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Values.appLabel }}
+  template:
+    metadata:
+      labels:
+{{ toYaml (merge (dict "app" .Values.appLabel) $std) | indent 8 }}
+{{- if .Values.cogneeMcpRev }}
+      annotations:
+        cognee-mcp-rev: {{ .Values.cogneeMcpRev | quote }}
+{{- end }}
+    spec:
+{{- if .Values.nodeHostname }}
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.nodeHostname }}
+{{- end }}
+      imagePullSecrets:
+        - name: swr-pull
+{{- if .Values.rootHomeSeed }}
+      initContainers:
+        - name: root-home-seed
+          image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+          command: ["/bin/sh", "-c", "cp -a /root/. /seed/"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - {name: root-home, mountPath: /seed}
+{{- else }}
+      initContainers:
+        - name: init-dirs
+          image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+          command: ["sh", "-c", "mkdir -p /workspace /root/.local/share/opencode && chown -R root:root /workspace /root/.local/share/opencode || true"]
+          resources:
+            limits: {cpu: 500m, memory: 512Mi}
+            requests: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+{{- end }}
+      containers:
+        - name: {{ .Values.appName }}
+          image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+          command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
+          args: ["serve", "--port", "4097", "--hostname", "0.0.0.0"]
+{{- if .Values.privilegedSsh }}
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT", "AUDIT_WRITE"]
+              drop: ["ALL"]
+{{- end }}
+          ports:
+            - {name: http, containerPort: 4097}
+            - {name: ssh, containerPort: 2222}
+          env:
+{{- range .Values.env }}
+            - name: {{ .name }}
+{{- if .secretKey }}
+              valueFrom: {secretKeyRef: {name: {{ $.Values.namespace }}-env, key: {{ .secretKey }}}}
+{{- else }}
+              value: {{ .value | quote }}
+{{- end }}
+{{- end }}
+          livenessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet: {path: /, port: 4097}
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            limits: {cpu: 3000m, memory: 8Gi}
+            requests: {cpu: 1000m, memory: 2Gi}
+          volumeMounts:
+            - {name: prod-work, mountPath: /workspace}
+            - {name: prod-data, mountPath: /root/.local/share/opencode}
+{{- if .Values.tmpdir }}
+            - {name: root-home, mountPath: /root}
+{{- end }}
+            - {name: entrypoint, mountPath: /entrypoint}
+{{- if .Values.tmpdir }}
+            - {name: tmp, mountPath: /tmp}
+{{- end }}
+      volumes:
+        - name: prod-work
+          hostPath: {path: {{ .Values.workHostPath }}, type: DirectoryOrCreate}
+        - name: prod-data
+          hostPath: {path: {{ .Values.dataHostPath }}, type: DirectoryOrCreate}
+        - name: entrypoint
+          configMap: {name: opencode-entrypoint, defaultMode: 493}
+{{- if .Values.tmpdir }}
+        - {name: root-home, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+{{- end }}

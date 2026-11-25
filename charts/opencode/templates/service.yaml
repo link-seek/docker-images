@@ -1,0 +1,25 @@
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+spec:
+  selector: {app: {{ .Values.appLabel }}}
+  ports:
+    - {name: http, port: 4097, targetPort: 4097}
+---
+{{- $std := include "opencode.labels" . | fromYaml }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: browserless
+  namespace: {{ .Values.namespace }}
+  labels:
+{{ toYaml $std | indent 4 }}
+spec:
+  selector: {app: browserless}
+  ports:
+    - {name: http, port: 3000, targetPort: 3000}

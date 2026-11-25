@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "opencode chart values",
+  "type": "object",
+  "required": [
+    "namespace",
+    "appName",
+    "appLabel",
+    "image",
+    "browserless",
+    "vpc",
+    "ingress",
+    "rbac"
+  ],
+  "properties": {
+    "namespace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "appName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "appLabel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "image": {
+      "type": "object",
+      "required": [
+        "repository",
+        "digest"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "browserless": {
+      "type": "object",
+      "required": [
+        "replicas",
+        "image",
+        "concurrent",
+        "queued"
+      ],
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "image": {
+          "type": "object",
+          "required": [
+            "repository",
+            "digest"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "concurrent": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "queued": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "tmpdir": {
+      "type": "boolean"
+    },
+    "rootHomeSeed": {
+      "type": "boolean"
+    },
+    "privilegedSsh": {
+      "type": "boolean"
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "cognee": {
+          "type": "boolean"
+        },
+        "obsutil": {
+          "type": "boolean"
+        },
+        "hcloud": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gitUser": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nodeHostname": {
+      "type": "string"
+    },
+    "workHostPath": {
+      "type": "string"
+    },
+    "dataHostPath": {
+      "type": "string"
+    },
+    "cogneeMcpRev": {
+      "type": "string"
+    },
+    "vpc": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "httpPort",
+        "sshPort"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "httpPort": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sshPort": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "name",
+        "hosts"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "annotations": {
+          "type": "object"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "required": [
+        "create",
+        "extended",
+        "pvc"
+      ],
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "extended": {
+          "type": "boolean"
+        },
+        "pvc": {
+          "type": "boolean"
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "secretKey": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
