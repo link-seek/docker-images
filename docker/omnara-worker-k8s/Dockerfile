@@ -20,10 +20,10 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-worker ./cmd/worker \
  && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-sandbox ./cmd/sandbox \
- && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /src/omnara-chroot-sandbox ./cmd/chroot-sandbox
+ && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/omnara-chroot-sandbox ./cmd/chroot-sandbox
+# install 脚本从 fork raw 拉（构建上下文是本仓）：固定跟随 FORK_SHA。
 ARG FORK_SHA
 ADD https://raw.githubusercontent.com/xieyucheng123/omnara/${FORK_SHA:-kubernetes-provider}/cmd/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
-RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
 
 FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS go-base
 ARG FORK_BRANCH
@@ -46,8 +46,9 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/o
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS file-tools
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends ripgrep sed libcap2-bin
-# chroot 运行时文件来自 fork 内构建的 worker 产物（file-tools 必须在 fork 上下文里跑，见 Dockerfile.worker-tools）。
-COPY --from=worker-tools /out/ /
+COPY --from=worker-tools /src/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
+COPY --from=worker-tools /out/omnara-chroot-sandbox /src/omnara-chroot-sandbox
+RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2 AS worker
 WORKDIR /app
 ADD --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds-global-bundle.pem
