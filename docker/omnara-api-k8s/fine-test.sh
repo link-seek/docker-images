@@ -9,9 +9,10 @@ set -euo pipefail
 [ -n "${DIGEST:-}" ] || { echo "FAIL: DIGEST 为空"; exit 1; }
 [ -n "${SWR_USER:-}" ] || { echo "FAIL: SWR_USER 为空"; exit 1; }
 [ -n "${SWR_PASS:-}" ] || { echo "FAIL: SWR_PASS 为空"; exit 1; }
-[ -n "${TAG:-}" ] || { echo "FAIL: TAG 为空"; exit 1; }
+[ -n "${TEMP_TAG:-}" ] || { echo "FAIL: TEMP_TAG 为空"; exit 1; }
 
 IMG="swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api-k8s@${DIGEST}"
+echo "TEMP_TAG=$TEMP_TAG"
 echo "$SWR_PASS" | docker login swr.cn-north-9.myhuaweicloud.com -u "$SWR_USER" --password-stdin >/dev/null
 docker pull "$IMG" >/dev/null
 
@@ -38,4 +39,4 @@ docker cp "$CID:/app/mcp-registry.json" /tmp/omnara-mcp-registry.json >/dev/null
 python3 -c "import json; d=json.load(open('/tmp/omnara-mcp-registry.json')); assert isinstance(d, dict) and len(d) > 1000, len(d) if isinstance(d, dict) else type(d); print('MCP-REGISTRY OK: servers', len(d))"
 rm -f /tmp/omnara-mcp-registry.json
 
-echo "PASS: omnara-api-k8s $TAG 静态自检通过（entrypoint/env/user/arch/mcp-registry）"
+echo "PASS: omnara-api-k8s $DIGEST 静态自检通过（entrypoint/env/user/arch/mcp-registry）"
