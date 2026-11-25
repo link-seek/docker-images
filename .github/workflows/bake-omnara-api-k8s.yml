@@ -11,11 +11,16 @@ on:
         required: false
         type: string
         default: "v0.2.27-k8s.1"
-      fork_ref:
-        description: "fork ref（分支名或 commit sha）"
+      fork_branch:
+        description: "fork 分支（默认 kubernetes-provider）"
         required: false
         type: string
         default: "kubernetes-provider"
+      fork_sha:
+        description: "fork commit sha（空=分支尖，可复现时填）"
+        required: false
+        type: string
+        default: ""
   push:
     branches: [main]
     paths:
@@ -41,7 +46,8 @@ jobs:
       tag_mode: explicit
       explicit_tag: ${{ inputs.fork_tag }}
       build_args: |
-        FORK_REF=${{ inputs.fork_ref }}
+        FORK_BRANCH=${{ inputs.fork_branch }}
+        FORK_SHA=${{ inputs.fork_sha }}
       verification: full
       goss_dir: docker/omnara-api-k8s/goss
       layer_size_limit_mb: "1200"
