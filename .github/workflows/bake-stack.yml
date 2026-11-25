@@ -507,7 +507,10 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.build.outputs.tag }}"
-          IMAGE_REF="${{ env.SWR_IMAGE }}:${TAG}"
+          NEW_DIGEST="$(docker buildx imagetools inspect "${{ env.SWR_IMAGE }}:${TAG}" --format '{{json .Manifest}}' | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))")"
+          [ -n "$NEW_DIGEST" ] || { echo "FAIL: 读不到刚构建的 digest"; exit 1; }
+          IMAGE_REF="${{ env.SWR_IMAGE }}@${NEW_DIGEST}"
+          echo "trivy scans digest: $IMAGE_REF"
           REPORT_DIR="${RUNNER_TEMP:-/tmp}/trivy-report"
           mkdir -p "$REPORT_DIR"
           # 误报白名单仓内 .trivyignore（需 review 定）
