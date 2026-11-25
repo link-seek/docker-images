@@ -9,7 +9,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`omnara.linkseek.net.cn`) && PathPrefix(`/api`, `/mcp`, `/install`, `/.well-known`, `/healthz`)
+    - match: Host(`omnara.linkseek.net.cn`) && PathRegexp(`^/(api|mcp|install|\.well-known|healthz)(/|$)`)
       kind: Rule
       services:
         - name: api
