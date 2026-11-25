@@ -45,7 +45,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/o
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS file-tools
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends ripgrep sed libcap2-bin
+    apt-get update && apt-get upgrade -y libssl3t64 libzstd1 && apt-get install -y --no-install-recommends ripgrep sed libcap2-bin
 COPY --from=worker-tools /src/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
 COPY --from=worker-tools /out/omnara-chroot-sandbox /src/omnara-chroot-sandbox
 RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
