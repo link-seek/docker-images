@@ -71,10 +71,10 @@ spec:
         - name: migrate
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations:v0.2.27@sha256:b05d1033c3784e80bf08f0a5f6c0c10fdfa749cd64775dd5dca66187a99035b5
           env:
-            - name: OMNARA_DATABASE_URL
-              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: omnara-env, key: POSTGRES_PASSWORD}}
+            - name: OMNARA_DATABASE_URL
+              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - {name: OMNARA_MIGRATION_TIMEOUT, value: 30m}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
