@@ -11,7 +11,8 @@ ARG FORK_REF
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists \
- && git clone --depth 1 --branch "${FORK_REF}" https://github.com/xieyucheng123/omnara.git . \
+ && git init -q . && git remote add origin https://github.com/xieyucheng123/omnara.git \
+ && git fetch -q --depth 1 origin "${FORK_REF}" && git checkout -q FETCH_HEAD \
  && go mod download && mkdir -p /out/memory
 
 FROM go-base AS api-build
