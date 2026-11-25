@@ -32,6 +32,10 @@ command:
     stdout:
       - 'list'
 
+  markitdown:
+    exec: "markitdown --version"
+    exit-status: 0
+
   md2html:
     exec: "python3 /usr/local/lib/send-mail/md2html.py"
     exit-status: 2
