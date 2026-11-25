@@ -9,7 +9,7 @@ metadata:
   annotations:
     reloader.stakater.com/auto: "true"
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   strategy:
     type: Recreate
   selector:
@@ -24,10 +24,6 @@ spec:
         cognee-mcp-rev: {{ .Values.cogneeMcpRev | quote }}
 {{- end }}
     spec:
-{{- if .Values.nodeHostname }}
-      nodeSelector:
-        kubernetes.io/hostname: {{ .Values.nodeHostname }}
-{{- end }}
       imagePullSecrets:
         - name: swr-pull
 {{- if .Values.rootHomeSeed }}
@@ -103,9 +99,9 @@ spec:
 {{- end }}
       volumes:
         - name: prod-work
-          hostPath: {path: {{ .Values.workHostPath }}, type: DirectoryOrCreate}
+          persistentVolumeClaim: {claimName: {{ .Values.persistence.workClaim }}}
         - name: prod-data
-          hostPath: {path: {{ .Values.dataHostPath }}, type: DirectoryOrCreate}
+          persistentVolumeClaim: {claimName: {{ .Values.persistence.dataClaim }}}
         - name: entrypoint
           configMap: {name: opencode-entrypoint, defaultMode: 493}
 {{- if .Values.tmpdir }}

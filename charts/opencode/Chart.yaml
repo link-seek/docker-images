@@ -2,5 +2,5 @@ apiVersion: v2
 name: opencode
 description: opencode 三实例（team/xie/ying）通用 chart；差异全部走 values。
 type: application
-version: 0.2.2
+version: 0.2.3
 appVersion: "2.3.0"

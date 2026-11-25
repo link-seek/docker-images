@@ -75,9 +75,6 @@ features:
   obsutil: false
   hcloud: true
 gitUser: opencode-prod
-nodeHostname: ecs-ies-euleros-jmupervm-xieyucheng-langfuse-33b4
-workHostPath: /data/opencode-xieyucheng/work
-dataHostPath: /data/opencode-xieyucheng/data
 cogneeMcpRev: ""
 vpc:
   enabled: true
