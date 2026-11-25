@@ -1,4 +1,4 @@
 opencode {{ .Release.Name }} 已渲染（ns {{ .Values.namespace }}）。
-应用：{{ .Values.appName }}（opencode）+ browserless（远端浏览器）。
+应用：{{ .Values.appName }}（opencode）{{ if .Values.browserless.enabled }} + browserless（远端浏览器，本实例自带）{{ else }}（远端浏览器走 team 共享）{{ end }}。
 入口：VPC Service opencode-vpc（{{ .Values.vpc.httpPort }}/{{ .Values.vpc.sshPort }}）{{ if .Values.ingress.enabled }}；IngressRoute {{ .Values.ingress.name }}{{ end }}。
 密钥：{{ .Values.namespace }}-env 由外部同步（缺失时 Pod 保持 CreateContainerConfigError，属预期）。

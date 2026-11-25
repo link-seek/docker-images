@@ -53,6 +53,7 @@ env:
   - name: SMTP_PASS
     secretKey: SMTP_PASS
 browserless:
+  enabled: true
   replicas: 1
   image:
     repository: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk
@@ -85,5 +86,4 @@ ingress:
     route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE certs)
 rbac:
   create: true
-  extended: false
   pvc: true

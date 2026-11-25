@@ -1,3 +1,4 @@
+{{- if .Values.browserless.enabled }}
 {{- $std := include "opencode.labels" . | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
@@ -51,3 +52,4 @@ spec:
       volumes:
         - name: dshm
           emptyDir: {medium: Memory, sizeLimit: 2Gi}
+{{- end }}
