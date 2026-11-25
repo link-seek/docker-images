@@ -2,18 +2,19 @@
 #（含 Plain Pod machine provider，未合上游前的试用镜像）。
 # 对齐上游 Dockerfile 的 api 段（go-base→api-build→mcp 快照→distroless runtime），
 # 仅把构建上下文换成 fork 指定 ref；行为差异只有新增的 kubernetes provider。
-# 版本 pin：FORK_REF（dispatch 传入 commit sha，默认分支兜底本地构建）；
-# base digest pin（与上游 Dockerfile 同值，禁止 tag）。
-# 升级 = 改 FORK_REF 默认值 + 显式 tag 发 PR（tag 不可变门见 bake-stack）。
-ARG FORK_REF=kubernetes-provider
+# 版本 pin：FORK_BRANCH（分支）+ FORK_SHA（commit sha，空=分支尖）；
+# dispatch 传入精确 sha 可复现，转正以 run 日志 digest 为准。
+ARG FORK_BRANCH=kubernetes-provider
+ARG FORK_SHA=""
 FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS go-base
-ARG FORK_REF
+ARG FORK_BRANCH
+ARG FORK_SHA
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists \
  && git init -q . && git remote add origin https://github.com/xieyucheng123/omnara.git \
- && git fetch -q --depth 1 origin "${FORK_REF}" && git checkout -q FETCH_HEAD \
- && go mod download && mkdir -p /out/memory
+ && git fetch -q --depth 50 origin "${FORK_BRANCH}" \
+ && if [ -n "${FORK_SHA}" ]; then git checkout -q "${FORK_SHA}"; else git checkout -q FETCH_HEAD; fi \
 
 FROM go-base AS api-build
 ARG TARGETOS
