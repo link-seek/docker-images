@@ -49,8 +49,7 @@ jobs:
         FORK_BRANCH=${{ inputs.fork_branch }}
         FORK_SHA=${{ inputs.fork_sha }}
       verification: full
-      goss_dir: docker/omnara-api-k8s/goss
-      goss_docker_args: "-e OMNARA_ALLOW_INSECURE_DEV_DEFAULTS=1"
+      fine_test_hook: docker/omnara-api-k8s/fine-test.sh
       layer_size_limit_mb: "1200"
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
