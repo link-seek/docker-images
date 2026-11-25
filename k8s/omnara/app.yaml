@@ -42,10 +42,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
-            - name: OMNARA_DATABASE_URL
-              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: omnara-env, key: POSTGRES_PASSWORD}}
+            - name: OMNARA_DATABASE_URL
+              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - {name: OMNARA_REDIS_URL, value: "redis://redis:6379/0"}
             - {name: OMNARA_PUBLIC_URL, value: "https://omnara.linkseek.net.cn"}
             - {name: OMNARA_LOG_LEVEL, value: info}
@@ -117,10 +117,10 @@ spec:
         - name: worker
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-worker:v0.2.27@sha256:57137e1a35097f9a867da25bce0d2ad7585272e5d5af37c03a02c6dfe3f783be
           env:
-            - name: OMNARA_DATABASE_URL
-              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: omnara-env, key: POSTGRES_PASSWORD}}
+            - name: OMNARA_DATABASE_URL
+              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - {name: OMNARA_REDIS_URL, value: "redis://redis:6379/0"}
             - {name: OMNARA_PUBLIC_URL, value: "https://omnara.linkseek.net.cn"}
             - {name: OMNARA_LOG_LEVEL, value: info}
@@ -178,10 +178,10 @@ spec:
         - name: maintenance
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance:v0.2.27@sha256:bd81de45fb53f843344d87a2bbf979052722a41fba11532d4a0dd5549cfb2eb2
           env:
-            - name: OMNARA_DATABASE_URL
-              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: omnara-env, key: POSTGRES_PASSWORD}}
+            - name: OMNARA_DATABASE_URL
+              value: "postgres://omnara:$(POSTGRES_PASSWORD)@postgres:5432/omnara?sslmode=disable"
             - {name: OMNARA_REDIS_URL, value: "redis://redis:6379/0"}
             - {name: OMNARA_PUBLIC_URL, value: "https://omnara.linkseek.net.cn"}
             - {name: OMNARA_LOG_LEVEL, value: info}
