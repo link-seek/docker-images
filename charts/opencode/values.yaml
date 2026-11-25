@@ -44,11 +44,14 @@ features:
   hcloud: false
 # gitUser 是 workspace git 身份名。
 gitUser: opencode-prod
-# nodeHostname 非空时钉 nodeSelector（空则不设）。
-nodeHostname: ""
-# workHostPath/dataHostPath 是本地卷路径。
-workHostPath: ""
-dataHostPath: ""
+# replicaCount 是副本数（迁移停机时置 0）。
+replicaCount: 1
+# persistence 是数据卷（PVC，infra k8s/opencode-data 预建，chart 只引用不创建）。
+persistence:
+  # workClaim 是 workspace 声明名。
+  workClaim: opencode-work
+  # dataClaim 是应用数据声明名。
+  dataClaim: opencode-data
 # cogneeMcpRev 非空时渲染 podAnnotations（仅 team）。
 cogneeMcpRev: ""
 # vpc 是内网 ServiceLB。

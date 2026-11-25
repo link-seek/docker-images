@@ -57,9 +57,6 @@ features:
   obsutil: false
   hcloud: true
 gitUser: opencode-prod
-nodeHostname: ""
-workHostPath: /var/lib/opencode-yingxin/work
-dataHostPath: /var/lib/opencode-yingxin/data
 cogneeMcpRev: ""
 vpc:
   enabled: true

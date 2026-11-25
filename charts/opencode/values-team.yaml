@@ -68,9 +68,6 @@ features:
   obsutil: true
   hcloud: false
 gitUser: opencode-team
-nodeHostname: ecs-ies-euleros-jmupervm-zhangzhirui
-workHostPath: /var/lib/opencode-team/work
-dataHostPath: /var/lib/opencode-team/data
 cogneeMcpRev: "9437d3ea"
 vpc:
   enabled: true

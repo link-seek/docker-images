@@ -10,7 +10,9 @@
     "browserless",
     "vpc",
     "ingress",
-    "rbac"
+    "rbac",
+    "replicaCount",
+    "persistence"
   ],
   "properties": {
     "namespace": {
@@ -113,15 +115,6 @@
       "type": "string",
       "minLength": 1
     },
-    "nodeHostname": {
-      "type": "string"
-    },
-    "workHostPath": {
-      "type": "string"
-    },
-    "dataHostPath": {
-      "type": "string"
-    },
     "cogneeMcpRev": {
       "type": "string"
     },
@@ -214,6 +207,25 @@
           "secretKey": {
             "type": "string"
           }
+        }
+      }
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "persistence": {
+      "type": "object",
+      "required": [
+        "workClaim",
+        "dataClaim"
+      ],
+      "properties": {
+        "workClaim": {
+          "type": "string"
+        },
+        "dataClaim": {
+          "type": "string"
         }
       }
     }

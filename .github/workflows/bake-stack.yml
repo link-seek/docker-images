@@ -758,8 +758,8 @@ jobs:
                   ts = d["spec"]["template"]["spec"]
                   ts.pop("nodeSelector", None)
                   for v in ts.get("volumes", []):
-                      if "hostPath" in v:
-                          v.pop("hostPath")
+                      if "persistentVolumeClaim" in v:
+                          v.pop("persistentVolumeClaim")
                           v["emptyDir"] = {}
           with open("/tmp/preflight-apply.yaml", "w") as f:
               for x in docs:
