@@ -15,7 +15,9 @@ image:
   digest: ""
 # browserless 是远端浏览器 sidecar。
 browserless:
-  # replicas 是副本数（team 跑 1，其余 0 占位）。
+  # enabled 为 true 才渲染 browserless Deployment/Service（三实例共用 team 的；xie/ying 不跑）。
+  enabled: false
+  # replicas 是副本数。
   replicas: 0
   image:
     repository: swr.cn-north-9.myhuaweicloud.com/link-seek/browserless-chrome-cjk
@@ -64,8 +66,6 @@ ingress:
 rbac:
   # create 为 false 时不渲染任何 RBAC（yingxin）。
   create: true
-  # extended 为 true 时保留跨 ns/cluster 诊断角色（仅 xie 历史包袱）。
-  extended: false
   # pvc 为 true 时自验 Role 含 persistentvolumeclaims（仅 team）。
   pvc: false
 # serviceAccount 预留（默认不建）。

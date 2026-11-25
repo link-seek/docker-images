@@ -754,7 +754,7 @@ jobs:
               md = d.get("metadata", {})
               if d.get("kind") == "Deployment" and md.get("name") == "browserless":
                   d["spec"]["replicas"] = 0
-              if d.get("kind") == "Deployment" and md.get("name") in ("opencode", "opencode-yingxin"):
+              if d.get("kind") == "Deployment" and md.get("name") == "opencode":
                   ts = d["spec"]["template"]["spec"]
                   ts.pop("nodeSelector", None)
                   for v in ts.get("volumes", []):
@@ -776,7 +776,7 @@ jobs:
           docs = [d for d in yaml.safe_load_all(open("/tmp/preflight-apply.yaml")) if d]
           for d in docs:
               md = d.get("metadata", {})
-              if d.get("kind") == "Deployment" and md.get("name") in ("opencode", "opencode-yingxin"):
+              if d.get("kind") == "Deployment" and md.get("name") == "opencode":
                   d["spec"]["template"]["spec"]["containers"][0]["command"] = cmd
           with open("/tmp/preflight-apply.yaml", "w") as f:
               for x in docs:

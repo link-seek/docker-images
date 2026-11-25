@@ -1,7 +1,5 @@
 # yingxin 实例：与 values.yaml 默认值的差异。
 namespace: opencode-yingxin
-appName: opencode-yingxin
-appLabel: opencode-yingxin
 image:
   repository: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools
   digest: sha256:4334606278b024d91c654a4e2fadb4cca767a7f1d3c4c66e4208b9f573e13cd4
@@ -76,4 +74,3 @@ ingress:
     route-comment: staging DNS-01 via IngressRoute (Ingress provider can't store LE certs)
 rbac:
   create: false
-  extended: false

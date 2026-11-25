@@ -91,4 +91,3 @@ ingress:
   annotations: {}
 rbac:
   create: true
-  extended: true
