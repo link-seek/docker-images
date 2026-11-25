@@ -1,6 +1,6 @@
 {{/* 标准 labels（Helm 最佳实践 Labels 章 REC 四件套）。namespaced define，调用：include "opencode.labels" . */}}
 {{- define "opencode.labels" -}}
-helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" | trimSuffix "_" | quote }}
 app.kubernetes.io/name: opencode
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
