@@ -36,7 +36,7 @@ echo "USER/ARCH OK: $USER $ARCH"
 CID="$(docker create "$IMG")"
 trap 'docker rm "$CID" >/dev/null' EXIT
 docker cp "$CID:/app/mcp-registry/mcp-registry.json" /tmp/omnara-mcp-registry.json >/dev/null
-python3 -c "import json; d=json.load(open('/tmp/omnara-mcp-registry.json')); assert isinstance(d, dict) and len(d) > 1000, len(d) if isinstance(d, dict) else type(d); print('MCP-REGISTRY OK: servers', len(d))"
+python3 -c "import json; d=json.load(open('/tmp/omnara-mcp-registry.json')); servers=d.get('servers', d); assert isinstance(d, dict) and isinstance(servers, dict) and len(servers) > 1000, len(servers) if isinstance(servers, dict) else type(servers); print('MCP-REGISTRY OK: servers', len(servers))"
 rm -f /tmp/omnara-mcp-registry.json
 
 echo "PASS: omnara-api-k8s $DIGEST 静态自检通过（entrypoint/env/user/arch/mcp-registry）"
