@@ -59,9 +59,8 @@ WORKDIR /app
 ADD --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds-global-bundle.pem
 COPY --from=file-tools /out/rg-bin/rg /usr/local/bin/
 COPY --from=file-tools /out/rg-bin/lib/ /usr/lib/
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libzstd.so.1 /usr/lib/x86_64-linux-gnu/
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/x86_64-linux-gnu/
-COPY --from=file-tools /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/
+# dpkg 数据库也要新版，否则 Trivy 仍报旧版本号（.so 已换但 status 未换）。
+COPY --from=file-tools /var/lib/dpkg/status /var/lib/dpkg/status
 COPY --from=go-base --chown=nonroot:nonroot /out/memory /var/lib/omnara/memory
 COPY --from=worker-build /out/omnara-worker /out/omnara-sandbox /usr/local/bin/
 COPY --from=file-tools /out/ /
