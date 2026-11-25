@@ -1,0 +1,25 @@
+# 公网入口（复刻上游 gateway.nginx.conf 路由：api/mcp/install/.well-known/healthz → api:8080，其余 → web:8080）。
+# TLS 由 le-prod（DNS-01）自动签发；全局 80→https 在 Traefik 侧。
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: omnara-tls
+  namespace: omnara
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`omnara.linkseek.net.cn`) && PathPrefix(`/api`, `/mcp`, `/install`, `/.well-known`, `/healthz`)
+      kind: Rule
+      services:
+        - name: api
+          port: 8080
+    - match: Host(`omnara.linkseek.net.cn`) && PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: web
+          port: 8080
+  tls:
+    certResolver: le-prod
+    domains:
+      - main: omnara.linkseek.net.cn

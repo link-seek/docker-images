@@ -1,0 +1,12 @@
+# omnara 自托管（上游 omnara-ai/omnara cluster-v0.2.27；k8s 翻译自上游 compose.yaml）。
+# 域名 omnara.linkseek.net.cn → Traefik websecure（le-prod）；网关 path 路由由 IngressRoute 直接做，不起 gateway 容器。
+# 有状态（postgres/valkey/rustfs）钉主节点 .21（ecs-ies-euleros-jmupervm-xieyucheng，与 nfs-server 同机）；
+# memory-data 走 NFS RWX（api/worker/maintenance 三服务共挂，NFS 存在的首要原因）。
+# Secret（omnara-env）不进仓：Infisical proj omnara/env prod（infisical.yaml + infra iac/infisical/apps.json）。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: omnara
+  labels:
+    app.kubernetes.io/managed-by: flux
+    app.kubernetes.io/name: omnara

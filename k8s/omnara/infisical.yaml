@@ -1,0 +1,26 @@
+# omnara env（Secret omnara-env，全部键进 Infisical proj omnara/env prod；本文件只声明映射，值不进仓）。
+# 键表对齐上游 compose x-app-env/x-blob-env + 各服务专有（DB/redis/S3/加密/签名/邮件/配额）。
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: omnara-secrets
+  namespace: omnara
+spec:
+  hostAPI: http://infisical.infisical.svc.cluster.local:8080/api
+  syncConfig:
+    resyncInterval: 30s
+    instantUpdates: false
+  authentication:
+    universalAuth:
+      credentialsRef:
+        secretName: omnara-ua
+        secretNamespace: omnara
+      secretsScope:
+        projectSlug: omnara
+        envSlug: prod
+        secretsPath: /
+        recursive: false
+  managedSecretReference:
+    secretName: omnara-env
+    secretNamespace: omnara
+    creationPolicy: Orphan
