@@ -1,0 +1,59 @@
+name: bake-omnara-api-k8s
+# fork kubernetes-provider 分支源码构建的 api 试用镜像（含 Plain Pod provider）。
+# k8s_app 留空跳过预检（试用镜像不上 Flux pin，由 kubectl 试装验证）；goss 只验文件存在+可执行。
+# 版本：fork_tag dispatch 传入 commit sha（默认分支名只兜底本地构建）；转正以 run 日志 digest 为准。
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork_tag:
+        description: "fork commit sha（如 4e0ab6b…，默认分支名）"
+        required: false
+        type: string
+        default: "v0.2.27-k8s.1"
+      fork_branch:
+        description: "fork 分支（默认 kubernetes-provider）"
+        required: false
+        type: string
+        default: "kubernetes-provider"
+      fork_sha:
+        description: "fork commit sha（空=分支尖，可复现时填）"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - docker/omnara-api-k8s/Dockerfile
+      - docker/omnara-api-k8s/**
+      - .github/workflows/bake-omnara-api-k8s.yml
+      - .github/workflows/bake-stack.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    # push 没有 dispatch 参数：直接跳过，正式构建只走手动 dispatch（版本必填）。
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: omnara-api-k8s
+      dockerfile: docker/omnara-api-k8s/Dockerfile
+      ghcr_image: ghcr.io/link-seek/omnara-api-k8s
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api-k8s
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.fork_tag }}
+      build_args: |
+        FORK_BRANCH=${{ inputs.fork_branch }}
+        FORK_SHA=${{ inputs.fork_sha }}
+      verification: full
+      goss_dir: docker/omnara-api-k8s/goss
+      goss_docker_args: "-e OMNARA_ALLOW_INSECURE_DEV_DEFAULTS=1"
+      layer_size_limit_mb: "1200"
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}

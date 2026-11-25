@@ -1,0 +1,14 @@
+command:
+  omnara-api:
+    exists: true
+    executable: true
+file:
+  /usr/local/bin/omnara-api:
+    exists: true
+    filetype: application/x-pie-executable
+  /var/lib/omnara/memory:
+    exists: true
+    filetype: directory
+  /app/mcp-registry/mcp-registry.json:
+    exists: true
+    filetype: application/json

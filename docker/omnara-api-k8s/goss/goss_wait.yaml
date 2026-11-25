@@ -1,0 +1,7 @@
+# api 就绪门：insecure dev 默认值可独立启动（sqlite 本地库，无需外部依赖）。
+# retry 由 GOSS_WAIT_OPTS 提供（-r 60s -s 5s）。
+http:
+  metrics-healthz:
+    url: http://127.0.0.1:8081/healthz
+    status: 200
+    timeout: 5000
