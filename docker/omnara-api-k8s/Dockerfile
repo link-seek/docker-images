@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
  && rm -rf /var/lib/apt/lists \
  && git init -q . && git remote add origin https://github.com/xieyucheng123/omnara.git \
  && git fetch -q --depth 50 origin "${FORK_BRANCH}" \
- && if [ -n "${FORK_SHA}" ]; then git checkout -q "${FORK_SHA}"; else git checkout -q FETCH_HEAD; fi \
+ && if [ -n "${FORK_SHA}" ]; then git checkout -q "${FORK_SHA}"; else git checkout -q FETCH_HEAD; fi
 
 FROM go-base AS api-build
 ARG TARGETOS
