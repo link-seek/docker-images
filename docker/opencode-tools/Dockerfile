@@ -76,6 +76,8 @@ RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
  && mv package.json package-lock.json node_modules /mem/c5/ \
  && for d in /mem/c1 /mem/c2 /mem/c3 /mem/c4 /mem/c5; do s=$(du -sm "$d" | cut -f1); [ "$s" -lt 450 ] || { echo "chunk too big: $d ${s}MB（门限 500，留 50 余量；重切分块）"; exit 1; }; done \
  && du -sh /mem/c* \
+ && echo "--- c4 contents:" && ls /mem/c4/ \
+ && echo "--- locate @opencode-ai:" && find /mem /root/.cache/opencode/npm -maxdepth 4 -name "@opencode-ai" 2>/dev/null \
  && leftovers="$(ls -A "$STAGE/0" 2>/dev/null)" && [ -z "$leftovers" ] || { echo "unpack split leftover: $leftovers"; exit 1; }
 
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
