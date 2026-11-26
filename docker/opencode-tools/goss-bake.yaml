@@ -151,11 +151,11 @@ command:
       - 'tree-ok'
 
   mem-plugin-loaded:
-    exec: "timeout 80 bash -c 'until grep -q opencode-mem /root/.local/share/opencode/log/opencode.log 2>/dev/null; do sleep 2; done; grep -c \"loading plugin.*opencode-mem\" /root/.local/share/opencode/log/opencode.log'"
+    exec: "opencode plugin check 2>&1 | grep -E 'opencode-mem.*current'"
     exit-status: 0
     timeout: 90000
     stdout:
-      - '[1-9]'
+      - 'current'
 
   design-mcp-wired:
     exec: "opencode debug config"

@@ -36,7 +36,7 @@ RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
 # 背景：`opencode plugin add` 一次写下 ~1.3G（onnxruntime/turso natives 大头），单层必超门限；
 # 跨洋按 blob 传，小 blob 断流重试代价小，拆分符合门限本意。总量与布局与 plugin add 产物一致。
 # loader 按 <name>@<version>/<ts>/ 扫描单目录（见 #525 讨论），builder 内归一化时间戳为 0；
-# 运行时路径与 plugin add 产物一致，goss mem-plugin-loaded 验证真实加载。
+# goss mem-plugin-tree/mem-plugin-loaded 双重验证（入口文件 + plugin check 报 current）。
 # 版本 pin：全局 ARG OPENCODE_MEM_VERSION（单源头）；bump=改文件头那一行发 PR。
 # 分块（2.41.1 实测 MB 值；bump 插件版本后若门限红，按体积重切 c1..c5；c5=剩余物自动兜底）：
 # c1 onnxruntime-node ~294 / c2 @huggingface+effect ~353 / c3 @opencode ~326 /
