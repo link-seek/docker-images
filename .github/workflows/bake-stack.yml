@@ -160,6 +160,21 @@ on:
         required: false
         type: string
         default: ""
+      sync_ref:
+        description: "sync_from_repo 的 checkout ref（分支/sha；空=对方默认分支；fork 构建必须传精确 sha 才可复现）"
+        required: false
+        type: string
+        default: ""
+      build_context:
+        description: "docker build 上下文目录（默认 .；正本在他仓时指向 infra-src 或 sync 落点）"
+        required: false
+        type: string
+        default: "."
+      build_target:
+        description: "多阶段 Dockerfile 的 --target（默认空=最终 stage；fork 上游 Dockerfile 按服务分 stage）"
+        required: false
+        type: string
+        default: ""
       k8s_app:
         required: false
         type: string
@@ -315,12 +330,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.sync_from_repo }}
+          ref: ${{ inputs.sync_ref }}
           path: infra-src
           sparse-checkout: |
             ${{ inputs.sync_paths }}
           sparse-checkout-cone-mode: false
       - name: Stage build context
-        if: inputs.sync_from_repo != ''
+        if: inputs.sync_from_repo != '' && inputs.sync_dest != ''
         run: |
           set -euo pipefail
           # shellcheck disable=SC2086 # sync_paths  multi-line：先装变量再分词（直接 for 会撑断脚本）
@@ -388,12 +404,16 @@ jobs:
           if [ "${{ inputs.cache_to_ghcr }}" = "true" ]; then
             echo "build cache: GHCR registry (${GHCR_IMAGE}:buildcache)"
             docker buildx create --name odkcache --driver docker-container --use --bootstrap >/dev/null 2>&1 || true
+            TARGET_ARGS=()
+            if [ -n "${{ inputs.build_target }}" ]; then TARGET_ARGS+=(--target "${{ inputs.build_target }}"); fi
             docker buildx build --load \
               --cache-from "type=registry,ref=${GHCR_IMAGE}:buildcache" \
               --cache-to "type=registry,ref=${GHCR_IMAGE}:buildcache,mode=max" \
-              -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
+              -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} "${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}" -t "${{ env.SWR_IMAGE }}:${TAG}" "${{ inputs.build_context }}"
           else
-            docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t "${{ env.SWR_IMAGE }}:${TAG}" .
+            TARGET_ARGS=()
+            if [ -n "${{ inputs.build_target }}" ]; then TARGET_ARGS+=(--target "${{ inputs.build_target }}"); fi
+            docker build -f "${{ inputs.dockerfile }}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} "${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}" -t "${{ env.SWR_IMAGE }}:${TAG}" "${{ inputs.build_context }}"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "built ${TAG}"
