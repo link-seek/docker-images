@@ -85,7 +85,9 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
 # 版本 pin（沿用 Dockerfile.tools 验证过的版本）
 ARG GH_VERSION=2.103.3
 ARG ALIYUN_VERSION=3.5.2
-ARG OCI_SPEC=oci-cli==3.97.0
+# oci-cli pin 回退到 3.96.3：3.97.0 依赖的 oci==2.192.1 从未发布到 PyPI
+#（只有 2.192.0/2.193.0），上游打包事故，装即红；等 Oracle 修好再跟进。
+ARG OCI_SPEC=oci-cli==3.96.3
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 ARG KUBECTL_VERSION=1.37.2
