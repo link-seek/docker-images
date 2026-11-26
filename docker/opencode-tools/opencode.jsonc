@@ -2,10 +2,10 @@
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow",
   "model": "opencode-go/muse-spark-1.3-contributor",
-  // 常态记忆 L2：opencode-mem 向量插件（pin 死版本，autoUpdate 在 opencode-mem.jsonc 里关；
-  // 插件版本单源头：只看 Dockerfile 的 ARG OPENCODE_MEM_VERSION（构建时 sed 注入下行占位符，
+  // 长期记忆：opencode-cognee（Cognee REST + 每用户数据集 + EBAC 隔离）。
+  // 插件版本单源头：只看 Dockerfile 的 ARG OPENCODE_COGNEE_VERSION（构建时 sed 注入下行占位符，
   // 本文件不手写版本号）；版本前移只走 digest pin 流程，不接受 floating。
-  "plugins": ["opencode-mem@__OPENCODE_MEM_VERSION__"],
+  "plugins": ["@linkseek/opencode-cognee@__OPENCODE_COGNEE_VERSION__"],
   // 设计 MCP（feimacode/open-design-agent-kit-mcp，烘焙进镜像走本地二进制直调；
   // 2.1.4 实测：timeout 必须是完整对象（含 catalog），缺键整段 mcp 被静默丢弃；
   // 数字也行（会展开成三键同值），但对象保留 startup<execution 的分级意图）。

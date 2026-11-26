@@ -120,8 +120,8 @@ command:
     stdout:
       - 'removed'
 
-  mem-pin-versioned:
-    exec: "grep -E '\"opencode-mem@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
+  cognee-pin-versioned:
+    exec: "grep -E '\"@linkseek/opencode-cognee@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
     exit-status: 0
 
   design-mcp-wired:
@@ -171,10 +171,8 @@ file:
     exists: true
 
 
-  /root/.config/opencode/opencode-mem.jsonc:
+  /root/.config/opencode/node_modules/@linkseek/opencode-cognee/.opencode/plugins/cognee/index.ts:
     exists: true
-    contents:
-      - '/"autoUpdate": *false/'
 
   /proc/1/cmdline:
     exists: true

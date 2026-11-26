@@ -87,10 +87,10 @@ SSH 直连（`tssh` 已烘入镜像，key-only，免 pty 喂密码）：
 
 - 铁律：运行环境缺工具时，禁止在容器内手工安装——去仓库 Dockerfile 加、走流水线重打镜像（2026-10-09 runner 黑户事故教训，详见 docker/README.md）。
 
-记忆系统（L1 文件 + L2 向量，设计见仓库 Discussions #11）：
+记忆系统（L1 文件 + L2 Cognee，设计见 link-seek/opencode-cognee RFC #2）：
 
 - L1：规矩在各 AGENTS.md；内容在 `/workspace/memory/`（`GLOBAL.md` 个人偏好、`PROJECTS/<名>.md` 项目架构决策踩坑、`DAILY/` 临时沉淀）。做 A 项目只读 A 的文件，不相关的不进上下文。
 - 开工读 `GLOBAL.md` + 对应 `PROJECTS` 文件（`memory({mode:"search"})` 按需补）；收工只记 lasting 的决策/偏好/坑，不记流水账；`DAILY` 7 天提炼后删。
-- L2（opencode-mem 插件）：auto-capture 自动记、首条自动注入；手动用 `memory({mode:"add/search/list/profile/forget"})` 即时存取；跨项目查必须显式 `scope: "all-projects"`。
+- L2（opencode-cognee 插件）：会话 idle 自动蒸馏、首条/记忆意图自动注入；手动用 `cognee_memory_search` / `cognee_memory_remember`。身份由 `auth.user_id` 注入，插件只写该身份的 `u_<id>` 私有数据集；没有身份就完全禁用记忆（fail-closed）。
 - 记忆正文不进 AGENTS.md（每次全量注入，塞多等于给每个 token 交税）。
 - 每月 10 分钟晋升评审：稳定的提进 AGENTS.md/L1，错的删，shard 水位检查。评审一半时间在处理矛盾记忆 → 启动 L3（Graphiti）。
