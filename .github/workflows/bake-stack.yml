@@ -186,10 +186,10 @@ on:
         type: boolean
         default: false
       layer_size_limit_mb:
-        description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过）"
+        description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过。默认 1500：oci SDK 安装层 ~723MB 为第三方体积下限，不可裁；插件 1.4G 大层已拆 5 小块）"
         required: false
         type: string
-        default: "500"
+        default: "1500"
       force_retag:
         required: false
         type: boolean
@@ -420,7 +420,7 @@ jobs:
                   continue
               mb = float(m.group(1)) * unit[m.group(2)] / 1024**2
               if mb > limit:
-                  bad.append((mb, cmd[:120]))
+                  bad.append((mb, cmd[:300]))
           if bad:
               print('FAIL: layers over %dMB:' % limit)
               for mb, cmd in sorted(bad, reverse=True):
@@ -629,6 +629,10 @@ jobs:
           DEPLOY="${{ inputs.k8s_deploy_name }}"; [ -n "$DEPLOY" ] || DEPLOY="$APP"
           CONTAINER="${{ inputs.k8s_container_name }}"; [ -n "$CONTAINER" ] || CONTAINER="$APP"
           KIND="${{ inputs.k8s_workload_kind }}"; [ -n "$KIND" ] || KIND="Deployment"
+          # kustomize 预检才需要 manifest 路径；chart 预检（k8s_helm_chart 非空）走 helm
+          # template，manifest 相关检查跳过（2026-11-26 试跑教训：tools 只传 chart，
+          # k8s_manifest_path 为空时 PREFLIGHT_REL 必空，不跳就必红）。
+          if [ -z "${{ inputs.k8s_helm_chart }}" ]; then
           MANIFEST="k8s-src/${{ inputs.k8s_manifest_path }}"
           [ -d "$MANIFEST" ] || { echo "FAIL: manifest 目录缺失 $MANIFEST"; exit 1; }
           # 预检 overlay（默认回落 base；team 用 preflight overlay，同机制解密 test 密文）
@@ -639,6 +643,7 @@ jobs:
           fi
           PREFLIGHT_REL="${PREFLIGHT_MANIFEST#k8s-src/}"
           [ -n "$PREFLIGHT_REL" ] || { echo "FAIL: 预检路径为空"; exit 1; }
+          fi
           [ -n "${{ inputs.k8s_image_names }}" ] || { echo "FAIL: k8s_image_names 未传"; exit 1; }
           # 镜像先 import 进簇（digest 对单，簇内免 pull）
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
@@ -648,9 +653,11 @@ jobs:
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml 2>/dev/null | awk '{print $2}' || true)"
-          # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
+          # chart 预检时从 values 取 sidecar 镜像：browserless.image 下 repository +
+          # digest 分两行写（chart 重构后格式），拼成 repo@digest；缺任一即空走 FAIL。
+          # 单行 python（heredoc 缩进在 bash 不认终止符，见 2026-11-26 试跑）。
           if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
-            SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
+            SIDECAR_IMG="$(python3 -c "import yaml;d=yaml.safe_load(open('k8s-src/${{ inputs.k8s_helm_values }}'));b=(d.get('browserless') or {}).get('image') or {};r=(b.get('repository') or '').strip();g=(b.get('digest') or '').strip();print((r+'@'+g) if (r and g) else '')" || true)"
           fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"

@@ -38,6 +38,26 @@ command:
     exec: "flux --version"
     exit-status: 0
 
+  cloudrobo-cli:
+    exec: "cloudrobo --version"
+    exit-status: 0
+    stdout:
+      - 'cloudrobo, version'
+
+  cloudrobo-groups:
+    exec: "cloudrobo --help"
+    exit-status: 0
+    stdout:
+      - 'workspace'
+      - 'robot'
+      - 'config'
+
+  cloudrobo-sdk:
+    exec: "python3 -c \"from cloudrobo_core.sdk import Config, HttpClient; Config(); print('sdk-ok')\""
+    exit-status: 0
+    stdout:
+      - 'sdk-ok'
+
   send-mail:
     exec: "send-mail --help"
     exit-status: 0
@@ -123,6 +143,22 @@ command:
   mem-pin-versioned:
     exec: "grep -E '\"opencode-mem@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
     exit-status: 0
+
+  mem-plugin-tree:
+    exec: "test -f /root/.cache/opencode/npm/opencode-mem@*/0/node_modules/opencode-mem/dist/plugin.js && echo tree-ok"
+    exit-status: 0
+    stdout:
+      - 'tree-ok'
+
+# 构建期/goss 验证用 dummy key：只证明模块可加载+依赖完整，不连远端。
+# 真值只活生产 .env + agent-secrets，从不进 GitHub Secrets/CI（查过组织+repo 级，均无此 key）。
+# plugin.js import 即读配置，secret-resolver 要求变量存在（不校验值），无 dummy 直接 throw。
+  mem-plugin-loaded:
+    exec: "CF_AI_TOKEN=dummy-goss-verify node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const d=fs.readdirSync(\"/root/.cache/opencode/npm/\").find(x=>x.startsWith(\"opencode-mem@\"));await import(\"/root/.cache/opencode/npm/\"+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")' 2>&1"
+    exit-status: 0
+    timeout: 90000
+    stdout:
+      - 'import-ok'
 
   design-mcp-wired:
     exec: "opencode debug config"

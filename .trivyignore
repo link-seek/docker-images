@@ -112,3 +112,9 @@ CVE-2026-97054 exp:2027-02-28
 CVE-2026-107494 exp:2027-02-26
 CVE-2026-124709 exp:2027-02-26
 CVE-2026-124851 exp:2027-02-26
+
+# 2026-11-26 tools 试跑认领：tailscaled 肚子里 insomniacslk/dhcp GHSA-jp3c-6v3g-mpxv
+#（HIGH，畸形 IPv4 DoS，有修版）。第三方 Go 二进制、容器内 userspace 组网无公网监听面，
+# 与本仓 x/net 认领（CVE-2026-78661）同口径；tailscale 1.104.7 是否带修版未验证，
+# 升版另议，本条 exp 到期重审。
+GHSA-jp3c-6v3g-mpxv exp:2027-02-28
