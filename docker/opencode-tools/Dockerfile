@@ -194,7 +194,7 @@ COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-cognee 插件烘入（纯 TS，零 runtime 依赖；每用户数据集 + REST）。
 # OpenCode 只扫描 ~/.config/opencode/{plugin,plugins}/*.{ts,js} 作为文件插件；
 # 包插件需要它自己的 npm 缓存（opencode plugin add），这里直接落单文件，避免 registry/cache 依赖。
-ARG OPENCODE_COGNEE_VERSION=0.3.1
+ARG OPENCODE_COGNEE_VERSION=0.3.2
 RUN curl -fsSL -o /tmp/cognee.tgz \
       "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
  && tar -xzf /tmp/cognee.tgz -C /tmp \
