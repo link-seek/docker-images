@@ -653,9 +653,11 @@ jobs:
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
           SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml 2>/dev/null | awk '{print $2}' || true)"
-          # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
+          # chart 预检时从 values 取 sidecar 镜像：browserless.image 下 repository +
+          # digest 分两行写（chart 重构后格式），拼成 repo@digest；缺任一即空走 FAIL。
+          # 单行 python（heredoc 缩进在 bash 不认终止符，见 2026-11-26 试跑）。
           if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
-            SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
+            SIDECAR_IMG="$(python3 -c "import yaml;d=yaml.safe_load(open('k8s-src/${{ inputs.k8s_helm_values }}'));b=(d.get('browserless') or {}).get('image') or {};r=(b.get('repository') or '').strip();g=(b.get('digest') or '').strip();print((r+'@'+g) if (r and g) else '')" || true)"
           fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
