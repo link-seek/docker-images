@@ -23,8 +23,7 @@ on:
   push:
     branches: [main]
     paths:
-      - docker/omnara-maintenance-k8s/Dockerfile
-      - docker/omnara-maintenance-k8s/**
+      - docker/omnara-maintenance-k8s/fine-test.sh
       - .github/workflows/bake-omnara-maintenance-k8s.yml
       - .github/workflows/bake-stack.yml
 
@@ -39,14 +38,16 @@ jobs:
     uses: ./.github/workflows/bake-stack.yml
     with:
       image_slug: omnara-maintenance-k8s
-      dockerfile: docker/omnara-maintenance-k8s/Dockerfile
+      # 正本在 fork 仓：sync 上游 Dockerfile 原样构建，不在本仓养手抄 Dockerfile。
+      sync_from_repo: xieyucheng123/omnara
+      sync_ref: ${{ inputs.fork_sha != '' && inputs.fork_sha || inputs.fork_branch }}
+      dockerfile: infra-src/Dockerfile
+      build_context: infra-src
+      build_target: maintenance
       ghcr_image: ghcr.io/link-seek/omnara-maintenance-k8s
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance-k8s
       tag_mode: explicit
       explicit_tag: ${{ inputs.fork_tag }}
-      build_args: |
-        FORK_BRANCH=${{ inputs.fork_branch }}
-        FORK_SHA=${{ inputs.fork_sha }}
       verification: full
       fine_test_hook: docker/omnara-maintenance-k8s/fine-test.sh
       layer_size_limit_mb: "1200"
