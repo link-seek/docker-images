@@ -195,11 +195,12 @@ COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
 # 该包只发布在 GitHub tag（npm scope 暂不可用）；npm 会把 GitHub 包改写成 ssh，先强制 https。
 ARG OPENCODE_COGNEE_VERSION=0.2.2
-RUN git config --global url.https://github.com/.insteadOf ssh://git@github.com/ \
- && git config --global --add url.https://github.com/.insteadOf git@github.com: \
- && sed -i "s/__OPENCODE_COGNEE_VERSION__/${OPENCODE_COGNEE_VERSION}/" /root/.config/opencode/opencode.json \
+RUN sed -i "s/__OPENCODE_COGNEE_VERSION__/${OPENCODE_COGNEE_VERSION}/" /root/.config/opencode/opencode.json \
  && grep -q "@linkseek/opencode-cognee@${OPENCODE_COGNEE_VERSION}" /root/.config/opencode/opencode.json \
- && opencode plugin add "github:link-seek/opencode-cognee#v${OPENCODE_COGNEE_VERSION}" \
+ && npm install --prefix /root/.config/opencode \
+      "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
+      --omit=dev --no-audit --no-fund \
+ && test -f /root/.config/opencode/node_modules/@linkseek/opencode-cognee/.opencode/plugins/cognee/index.ts \
  && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
