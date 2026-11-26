@@ -151,7 +151,7 @@ command:
       - 'tree-ok'
 
   mem-plugin-loaded:
-    exec: "node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const b=\"/root/.cache/opencode/npm/\";const d=fs.readdirSync(b).find(x=>x.startsWith(\"opencode-mem@\"));await import(b+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")'"
+    exec: "node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const b=\"/root/.cache/opencode/npm/\";const d=fs.readdirSync(b).find(x=>x.startsWith(\"opencode-mem@\"));console.log(\"plugdir:\",b+d);await import(b+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")' 2>&1; echo GOSS-EXIT:$?"
     exit-status: 0
     timeout: 90000
     stdout:
