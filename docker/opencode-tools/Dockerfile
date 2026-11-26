@@ -257,9 +257,20 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
 COPY --from=mem-builder /mem/c5/package.json /mem/c5/package-lock.json /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/
 COPY --from=mem-builder /mem/c5/node_modules /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules
 COPY --from=mem-builder /mem/c1/onnxruntime-node /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-node
-COPY --from=mem-builder /mem/c2/@huggingface /mem/c2/effect /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
-COPY --from=mem-builder /mem/c3/@opencode /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
-COPY --from=mem-builder /mem/c4/onnxruntime-web /mem/c4/@img /mem/c4/@opentelemetry /mem/c4/@libsql /mem/c4/@tursodatabase /mem/c4/@redis /mem/c4/@smithy /mem/c4/zod /mem/c4/web-streams-polyfill /mem/c4/@aws-sdk /mem/c4/@opencode-ai /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
+COPY --from=mem-builder /mem/c2/@huggingface /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@huggingface
+COPY --from=mem-builder /mem/c2/effect /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/effect
+COPY --from=mem-builder /mem/c3/@opencode /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opencode
+COPY --from=mem-builder /mem/c4/onnxruntime-web /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-web
+COPY --from=mem-builder /mem/c4/@img /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@img
+COPY --from=mem-builder /mem/c4/@opentelemetry /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opentelemetry
+COPY --from=mem-builder /mem/c4/@libsql /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@libsql
+COPY --from=mem-builder /mem/c4/@tursodatabase /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@tursodatabase
+COPY --from=mem-builder /mem/c4/@redis /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@redis
+COPY --from=mem-builder /mem/c4/@smithy /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@smithy
+COPY --from=mem-builder /mem/c4/zod /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/zod
+COPY --from=mem-builder /mem/c4/web-streams-polyfill /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/web-streams-polyfill
+COPY --from=mem-builder /mem/c4/@aws-sdk /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@aws-sdk
+COPY --from=mem-builder /mem/c4/@opencode-ai /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opencode-ai
 RUN test -f /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/opencode-mem/dist/plugin.js \
  && test -d /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-node \
  && echo "mem-tree-ok" \
