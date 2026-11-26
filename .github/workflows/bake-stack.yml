@@ -420,7 +420,7 @@ jobs:
                   continue
               mb = float(m.group(1)) * unit[m.group(2)] / 1024**2
               if mb > limit:
-                  bad.append((mb, cmd[:120]))
+                  bad.append((mb, cmd[:300]))
           if bad:
               print('FAIL: layers over %dMB:' % limit)
               for mb, cmd in sorted(bad, reverse=True):

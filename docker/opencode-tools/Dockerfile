@@ -4,10 +4,12 @@
 # onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
 # 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
 # 二进制版本线：v2 tag 有 release 资产（x64/arm64，x64 取 baseline 最大兼容，随 brew 配方）。
-# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
+# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（全局 ARG 单源头，各 stage 内 bare 重声明继承；
+# 构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.3.0
+ARG OPENCODE_MEM_VERSION=2.41.1
 
 # --- open-design MCP server 从 git main 构建（含 PR #114「远程 CDP 浏览器」能力；npm 最新 0.4.0 未含）---
 # 产物 out/index.js 由 esbuild 打成自包含 CJS（core + puppeteer-core 全 bundle），
@@ -30,8 +32,54 @@ RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
  && mkdir -p /out && npm pack -w packages/mcp-server --pack-destination /out \
  && cp -a /src/.agents/skills/open-design /out/open-design-skill
 
+# --- opencode-mem 插件烘焙（builder 分块：单层体积门 500MB，~1.3G 缓存拆 5 个 COPY 层）---
+# 背景：`opencode plugin add` 一次写下 ~1.3G（onnxruntime/turso natives 大头），单层必超门限；
+# 跨洋按 blob 传，小 blob 断流重试代价小，拆分符合门限本意。总量与布局与 plugin add 产物一致。
+# loader 按 <name>@<version>/<ts>/ 扫描单目录（见 #525 讨论），builder 内归一化时间戳为 0；
+# 运行时路径与 plugin add 产物一致，goss mem-plugin-loaded 验证真实加载。
+# 版本 pin：全局 ARG OPENCODE_MEM_VERSION（单源头）；bump=改文件头那一行发 PR。
+# 分块（2.41.1 实测 MB 值；bump 插件版本后若门限红，按体积重切 c1..c5；c5=剩余物自动兜底）：
+# c1 onnxruntime-node ~294 / c2 @huggingface+effect ~353 / c3 @opencode ~326 /
+# c4 onnxruntime-web + 中小件 ~280 / c5 其余 ~100。
+# digest-exempt: builder-stage（编译期，不发布；底座与最终镜像同 digest，有变更两处同步改）。
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS mem-builder
+ARG OPENCODE_TAG
+ARG OPENCODE_MEM_VERSION
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates nodejs npm \
+ && rm -rf /var/lib/apt/lists/* \
+ && node --version && npm --version
+# opencode 二进制（与最终镜像同版本同源；只用于 builder 内 plugin add，不进最终镜像）
+RUN ARCH="$(uname -m)"; case "$ARCH" in \
+      x86_64) BIN_ARCH=x64-baseline;; \
+      aarch64) BIN_ARCH=arm64;; \
+      *) echo "unsupported arch $ARCH" && exit 1;; \
+    esac \
+ && curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://opencode.ai/files/bin/${OPENCODE_TAG}/opencode-linux-${BIN_ARCH}.tar.gz" \
+ && tar -xzf /tmp/opencode.tar.gz -C /tmp \
+ && mv /tmp/opencode /usr/local/bin/opencode \
+ && chmod +x /usr/local/bin/opencode \
+ && rm -f /tmp/opencode.tar.gz \
+ && opencode --version
+# 插件安装（行为与原最终镜像 RUN 一字不差；config 缺省由 add 自动创建，builder 产物只取缓存树）
+COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
+RUN opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
+ && STAGE="/root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}" \
+ && TS="$(ls "$STAGE")" && [ -n "$TS" ] && [ "$(echo "$TS" | wc -l)" = "1" ] \
+ && mv "$STAGE/$TS" "$STAGE/0" \
+ && cd "$STAGE/0" \
+ && mkdir -p /mem/c1 /mem/c2 /mem/c3 /mem/c4 /mem/c5 \
+ && mv node_modules/onnxruntime-node /mem/c1/ \
+ && mv node_modules/@huggingface node_modules/effect /mem/c2/ \
+ && mv node_modules/@opencode /mem/c3/ \
+ && for d in onnxruntime-web @img @opentelemetry @libsql @tursodatabase @redis @smithy zod web-streams-polyfill @aws-sdk @opencode-ai; do mv "node_modules/$d" /mem/c4/ 2>/dev/null || true; done \
+ && mv package.json package-lock.json node_modules /mem/c5/ \
+ && for d in /mem/c1 /mem/c2 /mem/c3 /mem/c4 /mem/c5; do s=$(du -sm "$d" | cut -f1); [ "$s" -lt 450 ] || { echo "chunk too big: $d ${s}MB（门限 500，留 50 余量；重切分块）"; exit 1; }; done \
+ && du -sh /mem/c* \
+ && leftovers="$(ls -A "$STAGE/0" 2>/dev/null)" && [ -z "$leftovers" ] || { echo "unpack split leftover: $leftovers"; exit 1; }
+
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
-# 行为=digest：重打即刷新底座；bump=改这行发 PR。
+# 行为=digest：重打即刷新底座；bump=改这行发 PR（mem-builder 底座同步改，保持同源）。
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 USER root
@@ -196,13 +244,23 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_
 COPY docker/_shared/opencode-mem.jsonc /root/.config/opencode/
 COPY docker/opencode-tools/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
-# opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
-# 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
-ARG OPENCODE_MEM_VERSION=2.41.1
+# opencode-mem 插件本体烘焙（~1.3G 缓存；单层体积门 500MB，mem-builder 拆 5 块 COPY，每块 <450MB）。
+# - 布局与 plugin add 产物一致（时间戳目录归一化为 0；loader 扫描单目录，goss mem-plugin-loaded 验真加载）。
+# - 版本 pin：全局 ARG OPENCODE_MEM_VERSION（见文件头）；bump=改那一行发 PR。
+# - 分块清单按 2.41.1 实测划分；c5=剩余物自动兜底；版本变更后若门限红，按 builder 日志 du 重切。
+ARG OPENCODE_MEM_VERSION
 RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
- && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
- && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
+ && opencode --version
+COPY --from=mem-builder /mem/c5/package.json /mem/c5/package-lock.json /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/
+COPY --from=mem-builder /mem/c5/node_modules /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules
+COPY --from=mem-builder /mem/c1/onnxruntime-node /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-node
+COPY --from=mem-builder /mem/c2/@huggingface /mem/c2/effect /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
+COPY --from=mem-builder /mem/c3/@opencode /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
+COPY --from=mem-builder /mem/c4/onnxruntime-web /mem/c4/@img /mem/c4/@opentelemetry /mem/c4/@libsql /mem/c4/@tursodatabase /mem/c4/@redis /mem/c4/@smithy /mem/c4/zod /mem/c4/web-streams-polyfill /mem/c4/@aws-sdk /mem/c4/@opencode-ai /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/
+RUN test -f /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/opencode-mem/dist/plugin.js \
+ && test -d /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-node \
+ && echo "mem-tree-ok"
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）

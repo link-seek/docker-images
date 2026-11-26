@@ -144,6 +144,19 @@ command:
     exec: "grep -E '\"opencode-mem@[0-9]+\\.[0-9]+\\.[0-9]+\"' /root/.config/opencode/opencode.json"
     exit-status: 0
 
+  mem-plugin-tree:
+    exec: "test -f /root/.cache/opencode/npm/opencode-mem@*/0/node_modules/opencode-mem/dist/plugin.js && echo tree-ok"
+    exit-status: 0
+    stdout:
+      - 'tree-ok'
+
+  mem-plugin-loaded:
+    exec: "timeout 80 bash -c 'until grep -q opencode-mem /root/.local/share/opencode/log/opencode.log 2>/dev/null; do sleep 2; done; grep -c \"loading plugin.*opencode-mem\" /root/.local/share/opencode/log/opencode.log'"
+    exit-status: 0
+    timeout: 90000
+    stdout:
+      - '[1-9]'
+
   design-mcp-wired:
     exec: "opencode debug config"
     exit-status: 0
