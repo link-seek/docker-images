@@ -121,7 +121,7 @@ command:
       - 'removed'
 
   cognee-file-plugin:
-    exec: "grep -q 'id: \"cognee\"' /root/.config/opencode/plugins/cognee.ts"
+    exec: "grep -q 'id: \"cognee\"' /.opencode/plugins/cognee/index.ts"
     exit-status: 0
 
   design-mcp-wired:
@@ -171,7 +171,7 @@ file:
     exists: true
 
 
-  /root/.config/opencode/plugins/cognee.ts:
+  /.opencode/plugins/cognee/index.ts:
     exists: true
 
   /proc/1/cmdline:
