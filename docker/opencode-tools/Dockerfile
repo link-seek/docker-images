@@ -276,7 +276,7 @@ RUN test -f /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/nod
  && echo "mem-tree-ok" \
  && ls /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/ | head -30 \
  && ls /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opencode-ai/ \
- && node --input-type=module -e 'await import("/root/.cache/opencode/npm/opencode-mem@'"${OPENCODE_MEM_VERSION}"'/0/node_modules/opencode-mem/dist/plugin.js"); console.log("mem-import-ok")'
+ && CF_AI_TOKEN=dummy-build-verify node --input-type=module -e 'await import("/root/.cache/opencode/npm/opencode-mem@'"${OPENCODE_MEM_VERSION}"'/0/node_modules/opencode-mem/dist/plugin.js"); console.log("mem-import-ok")'
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）

@@ -150,8 +150,11 @@ command:
     stdout:
       - 'tree-ok'
 
+# 构建期/goss 验证用 dummy key：只证明模块可加载+依赖完整，不连远端。
+# 真值只活生产 .env + agent-secrets，从不进 GitHub Secrets/CI（查过组织+repo 级，均无此 key）。
+# plugin.js import 即读配置，secret-resolver 要求变量存在（不校验值），无 dummy 直接 throw。
   mem-plugin-loaded:
-    exec: "node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const b=\"/root/.cache/opencode/npm/\";const d=fs.readdirSync(b).find(x=>x.startsWith(\"opencode-mem@\"));console.log(\"plugdir:\",b+d);await import(b+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")' 2>&1; echo GOSS-EXIT:$?"
+    exec: "CF_AI_TOKEN=dummy-goss-verify node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const d=fs.readdirSync(\"/root/.cache/opencode/npm/\").find(x=>x.startsWith(\"opencode-mem@\"));await import(\"/root/.cache/opencode/npm/\"+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")' 2>&1"
     exit-status: 0
     timeout: 90000
     stdout:
