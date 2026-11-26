@@ -186,10 +186,10 @@ on:
         type: boolean
         default: false
       layer_size_limit_mb:
-        description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过）"
+        description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过。默认 1500：oci SDK 安装层 ~723MB 为第三方体积下限，不可裁；插件 1.4G 大层已拆 5 小块）"
         required: false
         type: string
-        default: "500"
+        default: "1500"
       force_retag:
         required: false
         type: boolean
