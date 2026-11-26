@@ -54,7 +54,7 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
 COPY --from=worker-tools /src/chroot-sandbox/install.sh /src/chroot-sandbox/install.sh
 COPY --from=worker-tools /out/omnara-chroot-sandbox /src/omnara-chroot-sandbox
 RUN sh /src/chroot-sandbox/install.sh /src/omnara-chroot-sandbox /out
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2 AS worker
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:29ee70762214fe8190cea04ef1c0a84a8365879e047ce8f911ae5a5ab2355fa2 AS worker
 WORKDIR /app
 ADD --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds-global-bundle.pem
 COPY --from=file-tools /out/rg-bin/rg /usr/local/bin/
