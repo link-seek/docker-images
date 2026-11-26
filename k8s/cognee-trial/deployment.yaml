@@ -1,9 +1,7 @@
-# k8s/cognee-trial 主 Deployment（GH runner 已验镜像可 boot：/health 200，见 url2hc#6）。
-# digest pin 即行为版本（trial 自烘焙 cognee-mcp-trial:20261117-fastembed，digest 5e6d33f5，url2hc run 44013862171；fastembed 显式 FASTEMBED_CACHE_PATH=/app/fastembed-cache，离线 dims=384 实证）。
-# trial 约束：ClusterIP 仅集群内（无 tailscale 暴露）、数据 emptyDir。
-# LLM 接线（TEXT_MODEL=beam-free，EMBEDDING 初期 fastembed 本地，bge-m3 后续切）：
-# - LLM 经 litellm 网关 OpenAI 兼容（custom + openai/ 前缀 + /v1 endpoint）；
-# - key 走 cognee-trial-env Secret（pipeline mint，Flux 不碰），与生产 Secret 隔离。
+# Cognee 1.6.8: REST API (sole DB writer) + MCP proxy (API mode).
+# - API: /api/v1/auth, /datasets, /remember, /recall, ...
+# - MCP: keeps the existing :8000/mcp contract for opencode-team; proxies to the API.
+# - One PVC, one writer. EBAC + JWT + hashed API keys.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,61 +12,122 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate # 单副本+本地卷：滚动无意义
+    type: Recreate
   selector:
     matchLabels:
       app: cognee
   template:
     metadata:
       annotations:
-        cognee-trial-restart: "2026-11-17T0306-secret-live"
+        cognee-rest: "2026-11-27"
       labels:
         app: cognee
     spec:
       containers:
-        - name: cognee
+        - name: cognee-mcp
           image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp-trial@sha256:5e6d33f5159b3fa4dd81aca21882d30bb1d0a684331578a9ae58a3bc76ff50ae
-          ports:
-            - {name: http, containerPort: 8000}
+          command: ["/app/.venv/bin/cognee-mcp"]
+          args:
+            - --transport
+            - http
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --api-url
+            - http://127.0.0.1:8001
+            - --api-token
+            - $(COGNEE_MCP_API_TOKEN)
+            - --api-auth-scheme
+            - x-api-key
+            - --tool-mode
+            - default
+            - --no-migration
           env:
-            - {name: TRANSPORT_MODE, value: "http"}
+            - name: COGNEE_MCP_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cognee-trial-env
+                  key: COGNEE_MCP_API_TOKEN
             - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
-            # LLM：TEXT_MODEL（beam-free）经 litellm 网关
+            - {name: TELEMETRY_DISABLED, value: "true"}
+            - {name: MCP_ALLOWED_HOSTS, value: "cognee:*,cognee.cognee-trial:*,cognee.cognee-trial.svc:*,cognee.cognee-trial.svc.cluster.local:*"}
+          ports:
+            - {name: mcp, containerPort: 8000}
+          readinessProbe:
+            tcpSocket: {port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 8000}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+
+        - name: cognee-api
+          image: swr.cn-north-9.myhuaweicloud.com/link-seek/cognee-mcp-trial@sha256:5e6d33f5159b3fa4dd81aca21882d30bb1d0a684331578a9ae58a3bc76ff50ae
+          command:
+            - /app/.venv/bin/uvicorn
+            - cognee.api.client:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8001"
+            - --workers
+            - "1"
+          env:
+            - {name: ENABLE_BACKEND_ACCESS_CONTROL, value: "true"}
+            - {name: REQUIRE_AUTHENTICATION, value: "true"}
+            - {name: HASH_API_KEY, value: "true"}
+            - {name: COGNEE_SKIP_CONNECTION_TEST, value: "true"}
+            - {name: TELEMETRY_DISABLED, value: "true"}
+            - {name: COGNEE_LOG_SEARCH_HISTORY, value: "false"}
+            - {name: SYSTEM_ROOT_DIRECTORY, value: "/cognee-storage/system"}
+            - {name: DATA_ROOT_DIRECTORY, value: "/cognee-storage/data"}
             - {name: LLM_PROVIDER, value: "custom"}
-            - {name: LLM_MODEL, value: "openai/muse-spark-1.3-contributor"} # TEXT_MODEL 临时改 Go 档（beam-free 日配额烧干；定版换回变量值）
+            - {name: LLM_MODEL, value: "openai/muse-spark-1.3-contributor"}
             - {name: LLM_ENDPOINT, value: "http://litellm-gateway.litellm.svc.cluster.local:4000/v1"}
             - name: LLM_API_KEY
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: LITELLM_API_KEY, optional: true}}
-            # Embedding：CF Workers AI OpenAI 兼容端点（@cf/baai/bge-m3，1024 维，与 EMBEDDING_MODEL 变量一致）；
-            # custom provider 经 LiteLLM 走 /v1/embeddings；key 用 Secret 内 CF_AI_TOKEN（pipeline 现签，不进仓）。
-            # fastembed-local 已判死（.69 上起 onnx 即崩 worker，mock 也绕不开模型加载），不再用。
-            - {name: EMBEDDING_PROVIDER, value: "openai_compatible"} # 裸 openai client 直调 CF，不经 LiteLLM（避 dimensions 守卫）
-            # DNS-rebinding 守卫放行簇内短名/FQDN（官方 MCP_ALLOWED_HOSTS，:* 端口 glob 必填；不加 team 经 Service 名打过来 421）。
-            # 只放行 cognee 自家名，不关总闸。
-            - {name: MCP_ALLOWED_HOSTS, value: "cognee:*,cognee.cognee-trial:*,cognee.cognee-trial.svc:*,cognee.cognee-trial.svc.cluster.local:*"}
-            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"} # 裸 client 原样转发 model 名给 CF
+            - {name: EMBEDDING_PROVIDER, value: "openai_compatible"}
+            - {name: EMBEDDING_MODEL, value: "@cf/baai/bge-m3"}
             - {name: EMBEDDING_DIMENSIONS, value: "1024"}
             - {name: EMBEDDING_ENDPOINT, value: "https://api.cloudflare.com/client/v4/accounts/47ce24ced58f17c9fb15351adcbe67d4/ai/v1"}
             - name: EMBEDDING_API_KEY
-              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true }}
-          volumeMounts:
-            - {name: data, mountPath: /root/.cognee_system}
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: CF_AI_TOKEN, optional: true}}
+            - name: FASTAPI_USERS_JWT_SECRET
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: FASTAPI_USERS_JWT_SECRET}}
+            - name: FASTAPI_USERS_RESET_PASSWORD_TOKEN_SECRET
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: FASTAPI_USERS_RESET_PASSWORD_TOKEN_SECRET}}
+            - name: FASTAPI_USERS_VERIFICATION_TOKEN_SECRET
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: FASTAPI_USERS_VERIFICATION_TOKEN_SECRET}}
+            - name: DEFAULT_USER_PASSWORD
+              valueFrom: {secretKeyRef: {name: cognee-trial-env, key: DEFAULT_USER_PASSWORD}}
+          ports:
+            - {name: http, containerPort: 8001}
           readinessProbe:
-            httpGet: {path: /health, port: 8000}
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 10
+            httpGet: {path: /health, port: 8001}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
-            httpGet: {path: /health, port: 8000}
-            initialDelaySeconds: 120
+            httpGet: {path: /health, port: 8001}
+            initialDelaySeconds: 90
             periodSeconds: 30
             timeoutSeconds: 10
+          volumeMounts:
+            - {name: data, mountPath: /cognee-storage}
           resources:
-            requests: {cpu: 200m, memory: 1Gi}
-            limits: {cpu: 2000m, memory: 4Gi} # trial ingests吃内存（onnx+抽取），先放宽；定版按实测收敛
+            requests: {cpu: 500m, memory: 1536Mi}
+            limits: {cpu: "2", memory: 4Gi}
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: cognee-data
 ---
 apiVersion: v1
 kind: Service
@@ -80,4 +139,5 @@ metadata:
 spec:
   selector: {app: cognee}
   ports:
-    - {name: http, port: 8000, targetPort: 8000}
+    - {name: mcp, port: 8000, targetPort: 8000}
+    - {name: http, port: 8001, targetPort: 8001}
