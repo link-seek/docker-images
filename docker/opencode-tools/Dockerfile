@@ -212,6 +212,24 @@ COPY docker/opencode-tools/tssh.sh /usr/local/bin/tssh
 ARG MD_DEPS="markdown==3.7 premailer==3.10.0"
 RUN pip3 install --no-cache-dir --break-system-packages $MD_DEPS \
  && python3 -c "import markdown, premailer; print('md-ok')"
+# CloudRobo 控制面 CLI + Python SDK（具身智能平台；Apache-2.0，PyPI 公开包）：
+# - 按需装 10 个控制面子包，不装 hw-cloudrobo-r2c（Zenoh/opencv 数据面 ~400M，
+#   且其 numpy<2.5 pin 会降级镜像现有 numpy；R2C 走边缘侧运行时拉取，不进镜像）。
+# - 版本 pin：ARG CLOUDROBO_VERSION 单源头；bump=改这行发 PR（goss 断言只认前缀，不两处手抄版本）。
+ARG CLOUDROBO_VERSION=0.3.0
+RUN pip3 install --no-cache-dir --break-system-packages \
+      "hw-cloudrobo-core==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-asset==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-dataset==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-train==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-infer==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-dispatch==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-workspace==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-resource==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-robot==${CLOUDROBO_VERSION}" \
+      "hw-cloudrobo-ingestion==${CLOUDROBO_VERSION}" \
+ && cloudrobo --version \
+ && python3 -c "from cloudrobo_core.sdk import Config, HttpClient; Config(); print('cloudrobo-sdk-ok')"
 RUN chmod +x /usr/local/bin/send-mail /usr/local/bin/fetch-mail /usr/local/bin/tssh && send-mail --help >/dev/null \
  && fetch-mail --help >/dev/null \
  && tssh --help >/dev/null \
