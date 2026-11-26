@@ -198,9 +198,9 @@ ARG OPENCODE_COGNEE_VERSION=0.2.2
 RUN curl -fsSL -o /tmp/cognee.tgz \
       "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
  && tar -xzf /tmp/cognee.tgz -C /tmp \
- && mkdir -p /root/.config/opencode/plugins \
- && cp "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}/.opencode/plugins/cognee/index.ts" /root/.config/opencode/plugins/cognee.ts \
- && grep -q 'id: "cognee"' /root/.config/opencode/plugins/cognee.ts \
+ && mkdir -p /.opencode/plugins/cognee \
+ && cp "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}/.opencode/plugins/cognee/index.ts" /.opencode/plugins/cognee/index.ts \
+ && grep -q 'id: "cognee"' /.opencode/plugins/cognee/index.ts \
  && rm -rf /tmp/cognee.tgz "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
