@@ -192,15 +192,16 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_
 COPY docker/opencode-tools/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
 # opencode-cognee 插件烘入（纯 TS，零 runtime 依赖；每用户数据集 + REST）。
-# 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
-# 该包只发布在 GitHub tag（npm scope 暂不可用）；npm 会把 GitHub 包改写成 ssh，先强制 https。
+# OpenCode 只扫描 ~/.config/opencode/{plugin,plugins}/*.{ts,js} 作为文件插件；
+# 包插件需要它自己的 npm 缓存（opencode plugin add），这里直接落单文件，避免 registry/cache 依赖。
 ARG OPENCODE_COGNEE_VERSION=0.2.2
-RUN sed -i "s/__OPENCODE_COGNEE_VERSION__/${OPENCODE_COGNEE_VERSION}/" /root/.config/opencode/opencode.json \
- && grep -q "@linkseek/opencode-cognee@${OPENCODE_COGNEE_VERSION}" /root/.config/opencode/opencode.json \
- && npm install --prefix /root/.config/opencode \
+RUN curl -fsSL -o /tmp/cognee.tgz \
       "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
-      --omit=dev --no-audit --no-fund \
- && test -f /root/.config/opencode/node_modules/@linkseek/opencode-cognee/.opencode/plugins/cognee/index.ts \
+ && tar -xzf /tmp/cognee.tgz -C /tmp \
+ && mkdir -p /root/.config/opencode/plugins \
+ && cp "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}/.opencode/plugins/cognee/index.ts" /root/.config/opencode/plugins/cognee.ts \
+ && grep -q 'id: "cognee"' /root/.config/opencode/plugins/cognee.ts \
+ && rm -rf /tmp/cognee.tgz "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
