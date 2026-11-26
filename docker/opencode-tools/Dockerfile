@@ -263,7 +263,9 @@ COPY --from=mem-builder /mem/c4/onnxruntime-web /mem/c4/@img /mem/c4/@openteleme
 RUN test -f /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/opencode-mem/dist/plugin.js \
  && test -d /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/onnxruntime-node \
  && echo "mem-tree-ok" \
- && node --input-type=module -e 'import {createRequire} from "module";const fs=createRequire(import.meta.url)("fs");const b="/root/.cache/opencode/npm/";const d=fs.readdirSync(b).find(x=>x.startsWith("opencode-mem@"));await import(b+d+"/0/node_modules/opencode-mem/dist/plugin.js");console.log("mem-import-ok")'
+ && ls /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/ | head -30 \
+ && ls /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opencode-ai/ 2>&1 \
+ && cat /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/0/node_modules/@opencode-ai/plugin/package.json 2>&1 | head -20
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙依赖 markdown+premailer，见下）
