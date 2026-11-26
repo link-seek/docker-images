@@ -151,11 +151,11 @@ command:
       - 'tree-ok'
 
   mem-plugin-loaded:
-    exec: "opencode plugin check 2>&1 | grep -E 'opencode-mem.*current'"
+    exec: "node --input-type=module -e 'import {createRequire} from \"module\";const fs=createRequire(import.meta.url)(\"fs\");const b=\"/root/.cache/opencode/npm/\";const d=fs.readdirSync(b).find(x=>x.startsWith(\"opencode-mem@\"));await import(b+d+\"/0/node_modules/opencode-mem/dist/plugin.js\");console.log(\"import-ok\")'"
     exit-status: 0
     timeout: 90000
     stdout:
-      - 'current'
+      - 'import-ok'
 
   design-mcp-wired:
     exec: "opencode debug config"
