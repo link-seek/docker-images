@@ -112,3 +112,6 @@ CVE-2026-97054 exp:2027-02-28
 CVE-2026-107494 exp:2027-02-26
 CVE-2026-124709 exp:2027-02-26
 CVE-2026-124851 exp:2027-02-26
+
+# tailscaled Go module (third-party CLI; userspace mode, no DHCP listener on our side)
+GHSA-jp3c-6v3g-mpxv exp:2027-01-31
