@@ -188,7 +188,7 @@ base = "/usr/local/lib/python3.12/dist-packages/oci"
 # _vendor + auth（顶层 __init__ 第一行即 import，缺则 oci 起不来；auth 内只引
 # 共享件无重型服务依赖）+ circuit_breaker + identity 全包；其它服务目录全删。
 # e2e case-oci 只调 iam availability-domain；如后续用例需其它服务，加目录名即恢复。
-keep_dirs = {"_vendor", "auth", "circuit_breaker", "identity"}
+keep_dirs = {"_vendor", "auth", "circuit_breaker", "identity", "pagination", "retry"}  # 后两者是共享小件（<0.1MB），顶层 __init__ 硬 import
 gone, freed = 0, 0
 for e in sorted(os.listdir(base)):
     p = os.path.join(base, e)
