@@ -184,10 +184,11 @@ RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" "certifi==
 RUN python3 - <<'PYEOF'
 import os, shutil
 base = "/usr/local/lib/python3.12/dist-packages/oci"
-# 白名单（oci-cli iam 调用链实测）：顶层共享文件（base_client/signer/config/regions/
-# retry/exceptions 等）+ _vendor + identity 全包；其它 190+ 服务目录全删。
+# 白名单（oci-cli iam 调用链实测 + 顶层 __init__ 硬依赖）：顶层 .py 共享底座 +
+# _vendor + auth（顶层 __init__ 第一行即 import，缺则 oci 起不来；auth 内只引
+# 共享件无重型服务依赖）+ circuit_breaker + identity 全包；其它服务目录全删。
 # e2e case-oci 只调 iam availability-domain；如后续用例需其它服务，加目录名即恢复。
-keep_dirs = {"_vendor", "identity"}
+keep_dirs = {"_vendor", "auth", "circuit_breaker", "identity"}
 gone, freed = 0, 0
 for e in sorted(os.listdir(base)):
     p = os.path.join(base, e)
