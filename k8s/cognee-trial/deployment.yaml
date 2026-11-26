@@ -109,16 +109,23 @@ spec:
               valueFrom: {secretKeyRef: {name: cognee-trial-env, key: DEFAULT_USER_PASSWORD}}
           ports:
             - {name: http, containerPort: 8001}
+          startupProbe:
+            httpGet: {path: /health, port: 8001}
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
           readinessProbe:
             httpGet: {path: /health, port: 8001}
             initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 6
           livenessProbe:
             httpGet: {path: /health, port: 8001}
-            initialDelaySeconds: 90
+            initialDelaySeconds: 120
             periodSeconds: 30
-            timeoutSeconds: 10
+            timeoutSeconds: 30
+            failureThreshold: 10
           volumeMounts:
             - {name: data, mountPath: /cognee-storage}
           resources:
