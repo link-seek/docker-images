@@ -172,8 +172,35 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) HCLOUD_ARCH=amd64;; aarch64) HCL
 
 # oci-cli + markitdown：pip（Oracle/微软官方 PyPI）
 # certifi 钉死（CVE GHSA-6q48：旧版 bundle 已沦陷中间 CA，Trivy CRITICAL 门）
+# oci SDK 自带全量服务目录（安装层 ~723MB，超 500MB 体积门），其中只有 oci.identity
+# 被动态加载用到（e2e case-oci 调 iam availability-domain；service_mapping 另有
+# identity-domains 但 e2e/排障只用 iam，保持最小，需要时加回即恢复）：
+# 分两层——先装全量（oci --version 冒烟保证 pip 解析正确），再 prune 非 identity
+# 服务目录（白名单：顶层 .py + _vendor + config/regions/retry/util/auth/exceptions/
+# signer/waiter/base_client/response/request/service_endpoints/version/constants +
+# identity 全包；oci-cli 自身目录不动）。
 RUN pip3 install --no-cache-dir --break-system-packages "${OCI_SPEC}" "certifi==2026.10.23" \
  && oci --version
+RUN python3 - <<'PYEOF'
+import os, shutil
+base = "/usr/local/lib/python3.12/dist-packages/oci"
+# 白名单（oci-cli iam 调用链实测）：顶层共享文件（base_client/signer/config/regions/
+# retry/exceptions 等）+ _vendor + identity 全包；其它 190+ 服务目录全删。
+# e2e case-oci 只调 iam availability-domain；如后续用例需其它服务，加目录名即恢复。
+keep_dirs = {"_vendor", "identity"}
+gone, freed = 0, 0
+for e in sorted(os.listdir(base)):
+    p = os.path.join(base, e)
+    if os.path.isfile(p) or e in keep_dirs or e.startswith("__"):
+        continue
+    freed += sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(p) for f in fs)
+    shutil.rmtree(p)
+    gone += 1
+print(f"oci-prune: removed {gone} service dirs, freed {freed/1048576:.0f}MB")
+PYEOF
+RUN du -sm /usr/local/lib/python3.12/dist-packages/oci \
+ && oci --version \
+ && oci iam availability-domain --help >/dev/null && echo "oci-iam-ok"
 RUN pip3 install --no-cache-dir --break-system-packages markitdown==0.1.9 \
  && markitdown --version
 
