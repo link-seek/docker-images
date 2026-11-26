@@ -650,7 +650,10 @@ jobs:
           CONTAINER="${{ inputs.k8s_container_name }}"; [ -n "$CONTAINER" ] || CONTAINER="$APP"
           KIND="${{ inputs.k8s_workload_kind }}"; [ -n "$KIND" ] || KIND="Deployment"
           MANIFEST="k8s-src/${{ inputs.k8s_manifest_path }}"
-          [ -d "$MANIFEST" ] || { echo "FAIL: manifest 目录缺失 $MANIFEST"; exit 1; }
+          # chart 预检（opencode 三线）没有 manifest 路径；只有 manifest 线才要求目录存在。
+          if [ -n "${{ inputs.k8s_manifest_path }}" ]; then
+            [ -d "$MANIFEST" ] || { echo "FAIL: manifest 目录缺失 $MANIFEST"; exit 1; }
+          fi
           # 预检 overlay（默认回落 base；team 用 preflight overlay，同机制解密 test 密文）
           PREFLIGHT_MANIFEST="$MANIFEST"
           if [ -n "${{ inputs.k8s_preflight_manifest_path }}" ]; then
@@ -658,7 +661,9 @@ jobs:
             [ -d "$PREFLIGHT_MANIFEST" ] || { echo "FAIL: 预检 manifest 目录缺失 $PREFLIGHT_MANIFEST"; exit 1; }
           fi
           PREFLIGHT_REL="${PREFLIGHT_MANIFEST#k8s-src/}"
-          [ -n "$PREFLIGHT_REL" ] || { echo "FAIL: 预检路径为空"; exit 1; }
+          if [ -z "${{ inputs.k8s_helm_chart }}" ] && [ -z "$PREFLIGHT_REL" ]; then
+            echo "FAIL: 预检路径为空"; exit 1
+          fi
           [ -n "${{ inputs.k8s_image_names }}" ] || { echo "FAIL: k8s_image_names 未传"; exit 1; }
           # 镜像先 import 进簇（digest 对单，簇内免 pull）
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u github-actions --password-stdin
@@ -667,7 +672,10 @@ jobs:
           # 命名空间先建（后面所有 -n $NS 操作的前提；flux 同名会接管，幂等）
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
           # sidecar 同簇（CDP e2e 用；manifest 名不动 + 建 swr-pull secret 供 kubelet，二者缺一不可）
-          SIDECAR_IMG="$(grep -m1 'image: .*chrome' k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml 2>/dev/null | awk '{print $2}' || true)"
+          SIDECAR_IMG=""
+          if [ -n "${{ inputs.k8s_manifest_path }}" ]; then
+            SIDECAR_IMG="$(grep -m1 'image: .*chrome' "k8s-src/${{ inputs.k8s_manifest_path }}/deployment.yaml" 2>/dev/null | awk '{print $2}' || true)"
+          fi
           # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
           if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
             SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"

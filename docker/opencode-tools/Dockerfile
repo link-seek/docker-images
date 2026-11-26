@@ -1,10 +1,9 @@
 # opencode-tools（glibc 线）：官方 opencode 二进制 + 自研工具层 + 记忆插件烘焙
 # 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-tools/Dockerfile -t <镜像> .
-# 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
-# onnxruntime/turso 原生件缺 fcntl64 起不来（实测）。此文件改走 ubuntu:24.04 +
-# 官方 release 二进制（opencode.ai/files/bin，非 GHCR），glibc 全兼容。
+# 背景：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，原生件兼容性差。
+# 此文件改走 ubuntu:24.04 + 官方 release 二进制（opencode.ai/files/bin，非 GHCR）。
 # 二进制版本线：v2 tag 有 release 资产（x64/arm64，x64 取 baseline 最大兼容，随 brew 配方）。
-# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
+# 版本 pin：OPENCODE_TAG（dispatch 传参）+ opencode-cognee（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.3.0
@@ -85,7 +84,7 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in \
 # 版本 pin（沿用 Dockerfile.tools 验证过的版本）
 ARG GH_VERSION=2.103.3
 ARG ALIYUN_VERSION=3.5.2
-ARG OCI_SPEC=oci-cli==3.97.0
+ARG OCI_SPEC=oci-cli==3.97.1
 ARG AGENT_BROWSER_VERSION=0.41.0
 ARG TAILSCALE_VERSION=1.102.4
 ARG KUBECTL_VERSION=1.37.2
@@ -185,21 +184,23 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) FLUX_ARCH=amd64;; aarch64) FLUX_
 # 部署侧必须保证 browserless 可达且其 EXTERNAL 指向可路由地址（否则 /json/version 返回 ws://0.0.0.0 连不上）。
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
-# - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
-# - opencode-mem.jsonc：记忆插件配置（storagePath 钉 prod-data 卷，密钥全走 env://）
+# - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-cognee
 # - AGENTS.md：agent 使用说明（含记忆系统规约）
 # 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
 # 注意：源文件叫 opencode.jsonc（保留注释），但必须落盘为 opencode.json——
 # 2.1.4 实测 daemon 只读 opencode.json，.jsonc 同内容零命中（debug config 0 结果）。
-COPY docker/_shared/opencode-mem.jsonc /root/.config/opencode/
 COPY docker/opencode-tools/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-tools/opencode.jsonc /root/.config/opencode/opencode.json
-# opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
+# opencode-cognee 插件烘入（纯 TS，零 runtime 依赖；每用户数据集 + REST）。
 # 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
-ARG OPENCODE_MEM_VERSION=2.41.1
-RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
- && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
- && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
+# 该包只发布在 GitHub tag（npm scope 暂不可用）；npm 会把 GitHub 包改写成 ssh，先强制 https。
+ARG OPENCODE_COGNEE_VERSION=0.2.2
+RUN sed -i "s/__OPENCODE_COGNEE_VERSION__/${OPENCODE_COGNEE_VERSION}/" /root/.config/opencode/opencode.json \
+ && grep -q "@linkseek/opencode-cognee@${OPENCODE_COGNEE_VERSION}" /root/.config/opencode/opencode.json \
+ && npm install --prefix /root/.config/opencode \
+      "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
+      --omit=dev --no-audit --no-fund \
+ && test -f /root/.config/opencode/node_modules/@linkseek/opencode-cognee/.opencode/plugins/cognee/index.ts \
  && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
