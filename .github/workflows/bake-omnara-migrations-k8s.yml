@@ -1,0 +1,48 @@
+name: bake-omnara-migrations-k8s
+# fork kubernetes-provider 构建的 migrations 镜像；必须与 api 同一 commit，
+# 避免官方 v0.2.27 迁移落后于基线（main / cluster-v0.2.29）。
+on:
+  workflow_dispatch:
+    inputs:
+      fork_tag:
+        description: "镜像 tag（如 0.2.29-k8s.1）"
+        required: true
+        type: string
+      fork_branch:
+        description: "fork 分支（默认 kubernetes-provider-review）"
+        required: false
+        type: string
+        default: "kubernetes-provider-review"
+      fork_sha:
+        description: "fork commit sha（空=分支尖，可复现时填）"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: omnara-migrations-k8s
+      sync_from_repo: xieyucheng123/omnara
+      sync_ref: ${{ inputs.fork_sha != '' && inputs.fork_sha || inputs.fork_branch }}
+      dockerfile: infra-src/Dockerfile
+      build_context: infra-src
+      build_target: migrations
+      ghcr_image: ghcr.io/link-seek/omnara-migrations-k8s
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations-k8s
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.fork_tag }}
+      verification: full
+      fine_test_hook: docker/omnara-migrations-k8s/fine-test.sh
+      layer_size_limit_mb: "300"
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
