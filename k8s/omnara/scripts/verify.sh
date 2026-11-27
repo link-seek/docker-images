@@ -23,7 +23,11 @@ echo "none"
 echo "== public endpoints =="
 curl -fsS -o /dev/null -w "app=%{http_code}\n" "$PUBLIC_URL/"
 curl -fsS -o /dev/null -w "healthz=%{http_code}\n" "$PUBLIC_URL/healthz"
-curl -fsS -o /dev/null -w "s3=%{http_code}\n" "$S3_URL/"
+S3_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$S3_URL/")
+case "$S3_CODE" in
+  200|403) echo "s3=$S3_CODE" ;;
+  *) echo "FAIL: s3=$S3_CODE"; exit 1 ;;
+esac
 
 echo "== TLS =="
 echo | openssl s_client -connect "${PUBLIC_URL#https://}:443" -servername "${PUBLIC_URL#https://}" 2>/dev/null \
