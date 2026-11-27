@@ -30,6 +30,9 @@ patches:
       spec:
         template:
           spec:
+            hostAliases:
+              - ip: 117.135.214.23
+                hostnames: [smtp.163.com]
             affinity:
               nodeAffinity:
                 requiredDuringSchedulingIgnoredDuringExecution:
