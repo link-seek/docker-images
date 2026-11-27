@@ -1,5 +1,6 @@
 #!/bin/bash
-# omnara-migrations-k8s 细测：migrate 二进制可执行，且与 api 同源的迁移文件在镜像内。
+# omnara-migrations-k8s 细测：migrate 二进制可执行，且入口点正确。
+# 该二进制没有 --help；无配置运行会打印 load migrate config 并以 1 退出，用它证明二进制可执行。
 set -euo pipefail
 [ -n "${DIGEST:-}" ] || { echo "FAIL: DIGEST 为空"; exit 1; }
 [ -n "${SWR_USER:-}" ] || { echo "FAIL: SWR_USER 为空"; exit 1; }
@@ -11,9 +12,12 @@ echo "TEMP_TAG=$TEMP_TAG"
 echo "$SWR_PASS" | docker login swr.cn-north-9.myhuaweicloud.com -u "$SWR_USER" --password-stdin >/dev/null
 docker pull "$IMG" >/dev/null
 
-docker run --rm "$IMG" --help >/dev/null
-echo "PASS: omnara-migrate --help"
-
 ENTRY="$(docker inspect --format='{{json .Config.Entrypoint}}' "$IMG")"
 [ "$ENTRY" = '["/usr/local/bin/omnara-migrate"]' ] || { echo "FAIL: entrypoint=$ENTRY"; exit 1; }
-echo "PASS: entrypoint"
+
+OUT="$(docker run --rm "$IMG" 2>&1 || true)"
+case "$OUT" in
+  *"load migrate config"*) ;;
+  *) echo "FAIL: binary did not start: $OUT"; exit 1 ;;
+esac
+echo "PASS: omnara-migrate binary + entrypoint"
