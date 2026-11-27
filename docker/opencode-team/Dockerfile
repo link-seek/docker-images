@@ -14,7 +14,7 @@ ARG OPENCODE_TAG=2.4.2
 # 仅 content/sdk 两个外部依赖随 npm install 拉；构建独立放在 builder 阶段，不污染最终镜像层。
 # 版本 pin：ODK_REF（单源头）；bump=改这行发 PR。
 # digest-exempt: builder-stage（编译期，不发布）
-FROM node:22-bookworm-slim@sha256:170fab707454b1350981adcdc2f536ec21f24d06d7f008e8d40064afeacb8a94 AS odk-builder
+FROM node:22-bookworm-slim@sha256:be979e5523c76fa4d5ca4ebd3099078f220aa47ec39c48ad5b5df9314debd6eb AS odk-builder
 ARG ODK_REF=fcf21f35113a4d0ea116b4d50e2251b0c52fc8bd
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
