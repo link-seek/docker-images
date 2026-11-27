@@ -4,10 +4,9 @@
   "model": "huawei-maas/deepseek-v4.1-flash-1017",
   // team 只用华为 MAAS：白名单隐藏其他供应商（未配 key 的排前面问题），默认即 1017。
   "enabled_providers": ["huawei-maas"],
-  // 常态记忆 L2：opencode-mem 向量插件（pin 死版本，autoUpdate 在 opencode-mem.jsonc 里关；
-  // 插件版本单源头：只看 Dockerfile 的 ARG OPENCODE_MEM_VERSION（构建时 sed 注入下行占位符，
-  // 本文件不手写版本号）；版本前移只走 digest pin 流程，不接受 floating。
-  "plugins": ["opencode-mem@__OPENCODE_MEM_VERSION__"],
+  // 长期记忆：opencode-cognee 文件插件（/.opencode/plugins/cognee/，目录扫描加载；
+  // 版本单源头：Dockerfile 的 ARG OPENCODE_COGNEE_VERSION；opencode-mem 已于 2026-11-27 下线）。
+  "plugins": [],
   // 设计 MCP（feimacode/open-design-agent-kit-mcp，烘焙进镜像走本地二进制直调；
   // 2.1.4 实测：timeout 必须是完整对象（含 catalog），缺键整段 mcp 被静默丢弃；
   // 数字也行（会展开成三键同值），但对象保留 startup<execution 的分级意图）。
