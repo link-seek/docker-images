@@ -679,6 +679,11 @@ jobs:
           # chart 预检时从 values 取 sidecar 镜像（browserless-chrome-cjk@sha256，固定格式）
           if [ -n "${{ inputs.k8s_helm_chart }}" ]; then
             SIDECAR_IMG="$(grep -m1 -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' "k8s-src/${{ inputs.k8s_helm_values }}" || true)"
+            if [ -z "$SIDECAR_IMG" ]; then
+              # 兼容拆分写法（repository 与 digest 分两行，如 values-team.yaml）：
+              # 取 browserless-chrome-cjk 行之后最近的 digest 行，避免抓到主镜像的 digest。
+              SIDECAR_IMG="$(awk '/browserless-chrome-cjk/{repo=$0} repo && /digest: sha256:[0-9a-f]{64}/{print repo "@" $2; exit}' "k8s-src/${{ inputs.k8s_helm_values }}" | grep -oE 'swr\.cn-north-9\.myhuaweicloud\.com/link-seek/browserless-chrome-cjk@sha256:[0-9a-f]{64}' || true)"
+            fi
           fi
           if [ "${{ inputs.k8s_skip_sidecar }}" = "true" ]; then
             echo "SIDECAR SKIP: 按 k8s_skip_sidecar=true 跳过（manifest 里的 sidecar 行不拉）"
