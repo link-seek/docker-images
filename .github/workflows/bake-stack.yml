@@ -28,7 +28,7 @@
 #   goss_docker_args  dgoss run 的 docker 参数（如 "--network host -e FOO=bar"）；空=默认。
 #   goss_command    容器内替代命令（如 "serve --port 4096 --hostname 127.0.0.1"）；空=镜像默认 CMD。
 #   e2e_cases       透传给 hook 的 E2E 名单（skip/full/名单/空=full）；骨架只透传不解释。
-#   layer_size_limit_mb 单层体积上限 MB（默认 500，超即红；0=跳过）。
+#   layer_size_limit_mb 单层体积上限 MB（默认 1000，超即红；0=跳过）。
 #   k8s_app         新预检开关：应用名（如 opencode），非空=走 k3d+Flux 预检（#505）；
 #                   空=跳过预检。
 #   k8s_manifest_repo  manifest 所在仓（如 link-seek/infra，过渡用）；空=本仓。
@@ -204,7 +204,7 @@ on:
         description: "单层体积上限 MB（超即红，防跨境转正断流；0=跳过）"
         required: false
         type: string
-        default: "500"
+        default: "1000"
       force_retag:
         required: false
         type: boolean

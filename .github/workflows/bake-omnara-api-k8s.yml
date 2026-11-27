@@ -51,7 +51,7 @@ jobs:
       explicit_tag: ${{ inputs.fork_tag }}
       verification: full
       fine_test_hook: docker/omnara-api-k8s/fine-test.sh
-      layer_size_limit_mb: "1200"
+      layer_size_limit_mb: "1000"
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       TS_API_KEY: ${{ secrets.TS_API_KEY }}
