@@ -8,19 +8,19 @@ resources:
 images:
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api
     newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api-k8s
-    newTag: 0.2.29-k8s.5
+    newTag: 0.2.29-k8s.6
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-worker
     newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-worker-k8s
-    newTag: 0.2.29-k8s.5
+    newTag: 0.2.29-k8s.6
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance
     newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance-k8s
-    newTag: 0.2.29-k8s.5
+    newTag: 0.2.29-k8s.6
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-web
     newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-web-k8s
-    newTag: 0.2.29-k8s.5
+    newTag: 0.2.29-k8s.6
   - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations
     newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations-k8s
-    newTag: 0.2.29-k8s.5
+    newTag: 0.2.29-k8s.6
 patches:
   - target: {kind: Deployment, name: api}
     patch: |-
