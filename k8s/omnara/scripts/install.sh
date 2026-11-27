@@ -4,7 +4,7 @@
 # Required environment:
 #   REPO          path to a link-seek/docker-images checkout at the reviewed SHA
 #   OVERLAY       kustomize overlay to apply (default: k8s/omnara-overlays/kubernetes-provider)
-#   SECRET_DIR    directory with bootstrap secrets: swr-pull.yaml and omnara-ua.yaml
+#   SECRET_DIR    directory with bootstrap secrets: swr-pull.yaml, omnara-ua.yaml, omnara-smtp.yaml
 #   KUBECTL       optional, default "k3s kubectl"
 set -euo pipefail
 K="${KUBECTL:-k3s kubectl}"
@@ -12,7 +12,7 @@ REPO="${REPO:?REPO is required}"
 OVERLAY="${OVERLAY:-k8s/omnara-overlays/kubernetes-provider}"
 SECRET_DIR="${SECRET_DIR:?SECRET_DIR is required}"
 
-for f in "$SECRET_DIR/swr-pull.yaml" "$SECRET_DIR/omnara-ua.yaml"; do
+for f in "$SECRET_DIR/swr-pull.yaml" "$SECRET_DIR/omnara-ua.yaml" "$SECRET_DIR/omnara-smtp.yaml"; do
   test -f "$f" || { echo "missing bootstrap secret: $f"; exit 1; }
 done
 
@@ -22,6 +22,7 @@ $K apply -f "$REPO/k8s/omnara/namespace.yaml"
 echo "== bootstrap secrets =="
 $K apply -f "$SECRET_DIR/swr-pull.yaml"
 $K apply -f "$SECRET_DIR/omnara-ua.yaml"
+$K apply -f "$SECRET_DIR/omnara-smtp.yaml"
 
 echo "== overlay: $OVERLAY =="
 $K apply -k "$REPO/$OVERLAY"
