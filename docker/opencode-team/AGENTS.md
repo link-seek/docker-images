@@ -20,7 +20,10 @@
 
 - 铁律：测试/验证类负载只跑 GitHub 临时 runner（ephemeral，现建现焚），禁止落到生产常驻节点（hw21/hw41/ali-gz/.69 k3s 等）——含 canary、探针、试送靶机。生产只接受 Flux 对账/main 切流。
 - 触发分级：`user` 身份（只动 HW）可流水线触发、无人值守——门禁全绿＋fail-closed，只验收结果；`admin` 身份（碰 OCI/阿里云等非 HW）必须活人手动 dispatch、全程盯到底，禁止自动触发。
-- 底座红线（软约束，RBAC/Kyverno/分支保护是硬底）：禁止直推 main、禁止 `--admin` 合并，一律分支 PR 由人类合入；禁止写 flux-system/kube-system/kube-public/kube-node-lease/kyverno（被拒就停，不要绕行）；发布走代码仓+Flux+digest pin，手动 kubectl 只限 `opencode-sandbox`/自有 ns 试飞；节点 SSH 与云凭证只做只读查询，凡改底座的动作（开关机/删机/改网络/动节点文件）一律先问用户；`GH_TOKEN` 只用于开 PR/推分支，不用于合并。
+- 底座红线（软约束，RBAC/Kyverno/分支保护是硬底；下面每一次越线都必须单独向用户确认）：
+  越线清单：直推 main、`--admin` 合并、写 flux-system/kube-system/kube-public/kube-node-lease/kyverno、删改线上数据、云 AK 高危操作（开关机/删机/改网络/删资源）、节点 SSH 写操作、用 `GH_TOKEN` 合并 main。
+  协议：识别出越线 → 立刻停下 → 用显式提问逐项确认，每次越线单独确认一次，不把多次越线打包成一次确认，不默认通过；被拒（RBAC/Kyverno/分支保护）就停，不要绕行。
+  正常链路：发布走代码仓+Flux+digest pin，手动 kubectl 只限 `opencode-sandbox`/自有 ns 试飞；云凭证与节点 SSH 默认只读；`GH_TOKEN` 只用于开 PR/推分支。
 
 ## 本线可用
 
