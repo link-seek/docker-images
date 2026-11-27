@@ -7,7 +7,7 @@
 # 版本 pin：OPENCODE_TAG（dispatch 必填传入）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
-ARG OPENCODE_TAG=2.3.0
+ARG OPENCODE_TAG=2.4.2
 
 # --- open-design MCP server 从 git main 构建（含 PR #114「远程 CDP 浏览器」能力；npm 最新 0.4.0 未含）---
 # 产物 out/index.js 由 esbuild 打成自包含 CJS（core + puppeteer-core 全 bundle），
@@ -147,6 +147,18 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
  && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
  && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.cache
+# opencode-cognee 文件插件（与 tools 线同版本；OpenCode 目录扫描加载，不写 jsonc plugins 数组）。
+# 迁移期与 opencode-mem 共存：mem 只读旧库做迁移源，线上读写走 cognee；迁移验证后另起 PR 下掉 mem。
+ARG OPENCODE_COGNEE_VERSION=0.5.0
+RUN curl -fsSL -o /tmp/cognee.tgz \
+      "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \
+ && tar -xzf /tmp/cognee.tgz -C /tmp \
+ && mkdir -p /.opencode/plugins/cognee \
+ && cp "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}/.opencode/plugins/cognee/index.ts" "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}/.opencode/plugins/cognee/lib.ts" /.opencode/plugins/cognee/ \
+ && grep -q 'id: "cognee"' /.opencode/plugins/cognee/index.ts \
+ && grep -q 'safeDatasetName' /.opencode/plugins/cognee/lib.ts \
+ && rm -rf /tmp/cognee.tgz "/tmp/opencode-cognee-${OPENCODE_COGNEE_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量）
 # - fetch-mail：IMAP 只读薄客户端（标准库 imaplib；IMAP_* 缺省回落 SMTP_*，163 收发共用授权码）
 # - md2html：send-mail -m 用的 markdown→HTML 转换（烘焙 markdown+premailer）
