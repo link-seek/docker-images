@@ -1,7 +1,6 @@
 # Kubernetes machine pool (fork kubernetes-provider) overlay.
-# The base pins official images by digest; this overlay swaps only the three
-# services that contain the fork's provider code. Keep tags in sync with the
-# bake-omnara-*-k8s workflow run that produced them.
+# The base pins official images by digest; this overlay swaps only the services
+# that contain the fork's provider code and enables the provider.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -31,11 +30,25 @@ patches:
       spec:
         template:
           spec:
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                    - matchExpressions:
+                        - key: kubernetes.io/hostname
+                          operator: In
+                          values: [ecs-ies-euleros-jmupervm-xieyucheng]
             containers:
               - name: api
                 env:
                   - {name: OMNARA_KUBERNETES_POOLS_ENABLED, value: "1"}
                   - {name: OMNARA_PRIVATE_ENDPOINT_CIDRS, value: "10.42.0.0/16,10.43.0.0/16,192.168.1.21:6443"}
+                  - name: OMNARA_SMTP_USERNAME
+                    valueFrom:
+                      secretKeyRef: {name: omnara-smtp, key: username}
+                  - name: OMNARA_SMTP_PASSWORD
+                    valueFrom:
+                      secretKeyRef: {name: omnara-smtp, key: password}
   - target: {kind: Deployment, name: worker}
     patch: |-
       apiVersion: apps/v1
