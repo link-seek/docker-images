@@ -12,6 +12,7 @@
 
 - 铁律：所有测试/验证类负载只跑在 GitHub 临时 runner（ephemeral，现建现焚）上；禁止以任何形式落到生产常驻节点（hw21/hw41/ali-gz/.69 k3s 等）——含 canary、探针、试送靶机、tailnet 加网生产簇。生产只接受 Flux 对账/main 切流；k3d 预检等验证一律用 ephemeral runner + 临时名。（2026-11-02 hw41 误投教训：deliver-stack 曾被 dispatch 到 host:mesh-hw-41 起 canary，探针红才没切流；此后生产节点只跑正式切流，不当试验场。）
 - 触发分级：`user` 身份（只动 HW）可流水线触发、无人值守——门禁全绿＋fail-closed，只验收结果；`admin` 身份（碰 OCI/阿里云等非 HW）必须活人手动 dispatch、全程盯到底，禁止自动触发。
+- 底座红线（软约束，RBAC/Kyverno/分支保护是硬底）：禁止直推 main、禁止 `--admin` 合并，一律分支 PR 由人类合入；禁止写 flux-system/kube-system/kube-public/kube-node-lease/kyverno（被拒就停，不要绕行）；发布走代码仓+Flux+digest pin，手动 kubectl 只限 `opencode-sandbox`/自有 ns 试飞；节点 SSH 与云凭证只做只读查询，凡改底座的动作（开关机/删机/改网络/动节点文件）一律先问用户；`GH_TOKEN` 只用于开 PR/推分支，不用于合并。
 
 密钥验证白名单（只读验证可直接跑，不用问；名单外的命令先问）：
 - `gh auth status`（GitHub 身份）
