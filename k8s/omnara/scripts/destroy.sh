@@ -3,6 +3,11 @@
 set -euo pipefail
 K="${KUBECTL:-k3s kubectl}"
 
+# Stop Flux before deleting: otherwise it recreates the namespaces mid-install.
+for k in flux-system omnara omnara-machines; do
+  $K -n flux-system patch kustomization "$k" --type merge -p '{"spec":{"suspend":true}}' >/dev/null 2>&1 || true
+done
+
 for ns in omnara omnara-machines; do
   if $K get namespace "$ns" >/dev/null 2>&1; then
     echo "deleting namespace $ns"

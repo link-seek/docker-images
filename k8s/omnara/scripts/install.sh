@@ -49,4 +49,9 @@ for d in api worker maintenance web redis rustfs; do
   $K -n omnara rollout status "deployment/$d" --timeout=300s
 done
 
+echo "== resume Flux =="
+for k in omnara omnara-machines flux-system; do
+  $K -n flux-system patch kustomization "$k" --type merge -p '{"spec":{"suspend":false}}' >/dev/null 2>&1 || true
+done
+
 echo "install complete"
