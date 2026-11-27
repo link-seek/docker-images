@@ -48,6 +48,8 @@ patches:
                   - {name: OMNARA_PRIVATE_ENDPOINT_CIDRS, value: "10.42.0.0/16,10.43.0.0/16,192.168.1.21:6443"}
                   # The API's SMTP client supports STARTTLS, not implicit TLS on 465.
                   - {name: OMNARA_SMTP_ADDR, value: "smtp.163.com:25"}
+                  # 163 rejects MAIL FROM unless it equals the authenticated user.
+                  - {name: OMNARA_EMAIL_FROM, value: "122306789@163.com"}
                   - name: OMNARA_SMTP_USERNAME
                     valueFrom:
                       secretKeyRef: {name: omnara-smtp, key: username}
@@ -68,6 +70,8 @@ patches:
                   - {name: OMNARA_PRIVATE_ENDPOINT_CIDRS, value: "10.42.0.0/16,10.43.0.0/16,192.168.1.21:6443"}
                   # The API's SMTP client supports STARTTLS, not implicit TLS on 465.
                   - {name: OMNARA_SMTP_ADDR, value: "smtp.163.com:25"}
+                  # 163 rejects MAIL FROM unless it equals the authenticated user.
+                  - {name: OMNARA_EMAIL_FROM, value: "122306789@163.com"}
   - target: {kind: Deployment, name: maintenance}
     patch: |-
       apiVersion: apps/v1
@@ -82,3 +86,5 @@ patches:
                   - {name: OMNARA_PRIVATE_ENDPOINT_CIDRS, value: "10.42.0.0/16,10.43.0.0/16,192.168.1.21:6443"}
                   # The API's SMTP client supports STARTTLS, not implicit TLS on 465.
                   - {name: OMNARA_SMTP_ADDR, value: "smtp.163.com:25"}
+                  # 163 rejects MAIL FROM unless it equals the authenticated user.
+                  - {name: OMNARA_EMAIL_FROM, value: "122306789@163.com"}
