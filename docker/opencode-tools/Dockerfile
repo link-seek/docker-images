@@ -31,7 +31,7 @@ RUN git clone https://github.com/feimacode/open-design-agent-kit /src \
 
 # 底座 digest pin（2026-10-18，ubuntu 24.04 当日最新 manifest list，不断 arm 兼容）。
 # 行为=digest：重打即刷新底座；bump=改这行发 PR。
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
 
 USER root
 SHELL ["/bin/bash", "-c"]
