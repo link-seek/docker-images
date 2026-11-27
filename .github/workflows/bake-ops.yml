@@ -1,0 +1,47 @@
+name: bake-ops
+# 薄调用：opencode-ops 只声明参数，构建/自检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
+# 派生自 opencode-tools（OPENTOOLS_TAG 必填）；只补 helm/k9s/stern/yq + ops 手册/技能。
+# 宿主部署（HW21 docker），不经 Flux，无 k8s 预检。版本：ops_tag 留空则继承基 tag。
+on:
+  workflow_dispatch:
+    inputs:
+      opentools_tag:
+        description: "基底 opencode-tools tag（必填，如 2.3.0）"
+        required: true
+        type: string
+      ops_tag:
+        description: "本镜像 tag（留空=继承基 tag）"
+        required: false
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - docker/opencode-ops/**
+      - .github/workflows/bake-ops.yml
+permissions:
+  contents: read
+  packages: write
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bake-stack.yml
+    with:
+      image_slug: opencode-ops
+      verification: full
+      dockerfile: docker/opencode-ops/Dockerfile
+      ghcr_image: ghcr.io/link-seek/opencode-ops
+      swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-ops
+      tag_mode: explicit
+      explicit_tag: ${{ inputs.ops_tag || inputs.opentools_tag }}
+      build_args: |
+        OPENTOOLS_TAG=${{ inputs.opentools_tag }}
+      push_temp_to_ghcr: true
+      ghcr_temp_only: true
+      goss_dir: docker/opencode-ops
+      goss_docker_args: -e OPENCODE_SERVER_PASSWORD=gate-dummy
+      goss_command: serve --port 4096 --hostname 127.0.0.1
+    secrets:
+      gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
+      SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
+      SWR_LOGIN_PASS: ${{ secrets.SWR_LOGIN_PASS }}
+      TS_API_KEY: ${{ secrets.TS_API_KEY }}
