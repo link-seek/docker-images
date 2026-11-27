@@ -1,10 +1,10 @@
-# opencode-team（部门共用精简线）：opencode + agent-browser + mem + 邮件 + obsutil；其余云 CLI 全砍。
+# opencode-team（部门共用精简线）：opencode + agent-browser + cognee + 邮件 + obsutil；其余云 CLI 全砍。
 # 用法：docker build --build-arg OPENCODE_TAG=<版本> -f docker/opencode-team/Dockerfile -t <镜像> .
 # 与 opencode-tools 的区别：不要 aliyun/hcloud/oci/wrangler/lmnr/tailscale/本地 chrome；
 # 浏览器走独立 browserless Pod（部署侧 BROWSER_CDP_URL 指向 browserless Service，agent-browser connect 直连）。
-# 背景同 tools：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，opencode-mem 的
-# onnxruntime/turso 原生件缺 fcnt64 起不来（实测）。此文件走 ubuntu:24.04 + 官方 release 二进制。
-# 版本 pin：OPENCODE_TAG（dispatch 必填传入）+ opencode-mem（只 Dockerfile 的 ARG 一处定义，构建时注入 jsonc）。
+# 背景同 tools：官方 ghcr.io/anomalyco/opencode 镜像是 Alpine/musl，neon/turso 原生件缺 fcnt64 起不来（实测）。
+# 此文件走 ubuntu:24.04 + 官方 release 二进制。
+# 版本 pin：OPENCODE_TAG（dispatch 必填传入）+ opencode-cognee（ARG 一处定义，见下）。
 # 注意：CI 全按 dispatch 必填参数构建，从不读这里的默认值；默认值只给本地 docker build 兜底。
 # 审计靠 bake run 日志（tag/digest），不在仓里记版本。
 ARG OPENCODE_TAG=2.4.2
@@ -131,24 +131,15 @@ RUN npm install -g /tmp/odk-mcp.tgz \
  && npm cache clean --force && rm -rf /root/.npm /tmp/*
 
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
-# - opencode.jsonc：模型走 LiteLLM 网关 + plugins pin 死 opencode-mem
-# - opencode-mem.jsonc：记忆插件配置（storagePath 钉 prod-data 卷，密钥全走 env://）
+# - opencode.jsonc：模型走华为 MAAS；记忆走 cognee 文件插件（见下）
 # - AGENTS.md：agent 使用说明（含记忆系统规约）
 # 注意：部署侧不要再挂载这些文件，否则会盖住烘入的版本。
 # 注意：源文件叫 opencode.jsonc（保留注释），但必须落盘为 opencode.json——
 # 2.1.4 实测 daemon 只读 opencode.json，.jsonc 同内容零命中（debug config 0 结果）。
-COPY docker/_shared/opencode-mem.jsonc /root/.config/opencode/
 COPY docker/opencode-team/AGENTS.md /root/.config/opencode/
 COPY docker/opencode-team/opencode.jsonc /root/.config/opencode/opencode.json
-# opencode-mem 插件本体烘入（约 600MB natives；构建机一次下载，运行免下）。
-# 单源头落位：ARG 是唯一版本号来源——先把 jsonc 占位符注入成实值（注入失败直接红），再按同一值 install。
-ARG OPENCODE_MEM_VERSION=2.41.1
-RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
- && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
- && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
- && npm cache clean --force && rm -rf /root/.npm /tmp/* ~/.cache
 # opencode-cognee 文件插件（与 tools 线同版本；OpenCode 目录扫描加载，不写 jsonc plugins 数组）。
-# 迁移期与 opencode-mem 共存：mem 只读旧库做迁移源，线上读写走 cognee；迁移验证后另起 PR 下掉 mem。
+# 2026-11-27 起 opencode-mem 已下线：旧库迁入 Cognee（u_team），归档见 PVC 下 opencode-mem.retired-*。
 ARG OPENCODE_COGNEE_VERSION=0.5.0
 RUN curl -fsSL -o /tmp/cognee.tgz \
       "https://github.com/link-seek/opencode-cognee/archive/refs/tags/v${OPENCODE_COGNEE_VERSION}.tar.gz" \

@@ -2,7 +2,7 @@
 
 本文件**只**描述 `opencode-team`（部门共用精简线）镜像与部署，与 tools 线各自维护、互不照抄。
 
-- **team 线**：opencode + agent-browser（远程 browserless）+ opencode-mem + 邮件 + obsutil + open-design。
+- **team 线**：opencode + agent-browser（远程 browserless）+ cognee（长期记忆）+ 邮件 + obsutil + open-design。
 - **不含**：aliyun / hcloud / oci / wrangler / tailscale / lmnr / 本地 Chrome。
 - tools 线（整套云 CLI）见 `docker/opencode-tools/AGENTS.md`；浏览器两条线都一样走独立 browserless，镜像内无本地 Chrome。
 
@@ -29,7 +29,7 @@
 - `agent-browser` + 远程 browserless（CDP）
 - `send-mail` / `fetch-mail`（163 SMTP/IMAP）
 - open-design（MCP `open-design-mcp` + skill）
-- `opencode-mem`（L2 记忆）
+- `cognee` 文件插件（长期记忆：`memory_search` / `memory_remember` 工具 + 自动召回/归档；身份固定为 `team`）
 - `ssh` / `sshpass`（openssh-client + 密码认证）：免密走 key/agent；只有密码时用 `SSHPASS="$PW" sshpass -e ssh -o StrictHostKeyChecking=accept-new user@host '<cmd>'`（`-p` 会把密码带进 ps，别用）。本线不在 tailnet，目标机走可达 IP/域名；私钥/密码不进镜像。
 
 ## 本线没有（不要照抄 tools 线的命令）
@@ -108,7 +108,7 @@
 # 工作区与卷
 
 - `/workspace` = prod-work（hostPath `/var/lib/opencode-team/work`），git 仓库，改动前会自动 checkpoint。
-- `/root/.local/share/opencode` = prod-data（hostPath `/var/lib/opencode-team/data`）；opencode-mem 数据库在此，重建容器不失忆。
+- `/root/.local/share/opencode` = prod-data（hostPath `/var/lib/opencode-team/data`）；旧 opencode-mem 库已归档为 `opencode-mem.retired-*`（只读备份），线上记忆走 Cognee（`u_team`）。
 - 本线不挂 `/old-workspace`。
 - 模型经本地 LiteLLM 网关（`$LITELLM_BASE_URL`）。
 - 不要在容器内改 `/root/.config/opencode/` 下文件（随容器重建丢失）；要改就改本镜像仓 `docker/opencode-team/` 后重打镜像。
@@ -117,7 +117,7 @@
 
 - L1：`/workspace/memory/`（`GLOBAL.md` 个人偏好、`PROJECTS/<名>.md`、`DAILY/` 7 天提炼后删）；做 A 项目只读 A 的文件。
 - 目录可能只有骨架（`GLOBAL.md` 不存在时按需新建），不要假装有内容。
-- L2：`opencode-mem` 插件（auto-capture + 首条注入）；`memory({mode:"add/search/list/profile/forget"})`；跨项目查显式 `scope:"all-projects"`。
+- L2：`cognee` 插件（按 `team` 身份自动召回/闲时归档）；显式读写用 `cognee` 命名空间下的 `memory_search` / `memory_remember` 工具。
 - 记忆正文不进 AGENTS.md。
 - 每月 10 分钟晋升评审：稳定的提进 AGENTS.md/L1，错的删。
 
