@@ -20,8 +20,8 @@ RUN set -eux; ARCH="$(uname -m)"; case "$ARCH" in \
       && mv "/tmp/linux-${A}/helm" /usr/local/bin/helm && rm -rf "/tmp/linux-${A}"; \
     curl -fsSL -o /tmp/k9s.tgz "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_${A}.tar.gz" \
       && tar -xzf /tmp/k9s.tgz -C /usr/local/bin k9s && rm -f /tmp/k9s.tgz; \
-    curl -fsSL -o /usr/local/bin/stern "https://github.com/stern/stern/releases/download/v${STERN_VERSION}/stern_${STERN_VERSION}_linux_${A}" \
-      && chmod +x /usr/local/bin/stern; \
+    curl -fsSL -o /tmp/stern.tgz "https://github.com/stern/stern/releases/download/v${STERN_VERSION}/stern_${STERN_VERSION}_linux_${A}.tar.gz" \
+      && tar -xzf /tmp/stern.tgz -C /usr/local/bin stern && rm -f /tmp/stern.tgz; \
     curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${A}" \
       && chmod +x /usr/local/bin/yq; \
     helm version --short && stern --version && yq --version
