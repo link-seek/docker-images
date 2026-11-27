@@ -1,0 +1,24 @@
+# Kubernetes machine pool (fork kubernetes-provider) overlay.
+# The base pins official images by digest; this overlay swaps only the three
+# services that contain the fork's provider code. Keep tags in sync with the
+# bake-omnara-*-k8s workflow run that produced them.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../omnara
+images:
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api
+    newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-api-k8s
+    newTag: PLACEHOLDER
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-worker
+    newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-worker-k8s
+    newTag: PLACEHOLDER
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance
+    newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-maintenance-k8s
+    newTag: PLACEHOLDER
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-web
+    newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-web-k8s
+    newTag: PLACEHOLDER
+  - name: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations
+    newName: swr.cn-north-9.myhuaweicloud.com/link-seek/omnara-migrations-k8s
+    newTag: PLACEHOLDER
