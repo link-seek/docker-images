@@ -31,7 +31,7 @@ run_mode() { # $1 = add|search
         mkdir -p /root/.local/share/opencode/opencode-mem
         cp -a /opt/opencode-mem/.cache /root/.local/share/opencode/opencode-mem/.cache
       fi
-      D="$(ls -d /root/.cache/opencode/npm/opencode-mem@*/node_modules/opencode-mem | head -1)"
+      D="$(ls -d /root/.cache/opencode/npm/opencode-mem@*/*/node_modules/opencode-mem | head -1)"
       cat > /tmp/memtest.mjs <<EOF
 import { initConfig } from "$D/dist/config.js"
 import { handleAddMemory, handleSearch } from "$D/dist/services/api-handlers.js"
