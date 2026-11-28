@@ -1,0 +1,85 @@
+{
+  // 本地长期记忆：opencode-mem（tickernelz）——本地 Turso/libSQL 向量库 + 本地 embedding。
+  // 不依赖集群 Cognee，也不依赖外部 API key；数据落在持久卷，K3S 挂了记忆仍在。
+  // 参考：https://github.com/tickernelz/opencode-mem/blob/main/opencode-mem.example.jsonc
+  // 版本 pin 在 opencode.json 的 plugins；autoUpdate 永远关。
+
+  // 存储必须在持久卷内：compose 把 /var/lib/opencode-ops 挂到 /root/.local/share/opencode。
+  "storagePath": "/root/.local/share/opencode/opencode-mem",
+  "databaseEncryptionEnabled": false,
+  "databaseEncryptionCipher": "aes256gcm",
+
+  // 本地 embedding：Xenova/nomic-embed-text-v1（768 维，多语言）。
+  // 首启从 HuggingFace 下约 500MB 模型，缓存进 {storagePath}/.cache（在卷上，只下一次）。
+  "embeddingModel": "Xenova/nomic-embed-text-v1",
+  "embeddingDimensions": 768,
+
+  "webServerEnabled": true,
+  "webServerPort": 4747,
+  "webServerHost": "127.0.0.1",
+
+  "maxVectorsPerShard": 50000,
+  "autoCleanupEnabled": true,
+  "autoCleanupRetentionDays": 180,
+  "deduplicationEnabled": true,
+  "deduplicationSimilarityThreshold": 0.9,
+
+  "memory": {
+    "defaultScope": "project"
+  },
+
+  "compaction": {
+    "enabled": true,
+    "memoryLimit": 20
+  },
+
+  "chatMessage": {
+    "enabled": true,
+    "maxMemories": 8,
+    "excludeCurrentSession": true,
+    "injectOn": "first",
+    "filterInjectedPrompts": true,
+    "captureChildSessions": false
+  },
+
+  // Auto-capture 复用 opencode 会话内 provider（鉴权/路由归 opencode，不新增 key）
+  "opencodeProvider": "opencode-go",
+  "opencodeModel": "inherit",
+  "opencodeTimeoutMs": 180000,
+
+  "autoCaptureEnabled": true,
+  "memoryProvider": "openai-chat",
+  "autoCaptureMaxIterations": 5,
+  "autoCaptureIterationTimeout": 30000,
+  "autoCaptureMaxRetries": 3,
+  "autoCaptureMaxContextBytes": 131072,
+  "aiSessionRetentionDays": 7,
+  "memoryTemperature": 0.3,
+
+  "showAutoCaptureToasts": true,
+  "showUserProfileToasts": true,
+  "showErrorToasts": true,
+  "autoUpdate": false,
+
+  "userProfileAnalysisInterval": 10,
+  "userProfileMaxContextBytes": 32768,
+  "userProfileStaleDays": 30,
+  "userProfileDisplayPreferences": 20,
+  "userProfileDisplayPatterns": 15,
+  "userProfileDisplayWorkflows": 10,
+  "userProfileInjectPreferences": 10,
+  "userProfileInjectPatterns": 10,
+  "userProfileInjectWorkflows": 6,
+  "userProfileConfidenceDecayDays": 30,
+  "userProfileChangelogRetentionCount": 5,
+  "userProfileMinEvidenceForRetention": 3,
+  "userProfileAutoCleanupEnabled": true,
+  "userProfileAutoCleanupInterval": 100,
+  "userProfileValidationEnabled": true,
+
+  "similarityThreshold": 0.6,
+  "maxMemories": 10,
+  "maxProfileItems": 10,
+  "containerTagPrefix": "opencode-ops",
+  "injectProfile": true
+}

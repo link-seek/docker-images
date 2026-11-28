@@ -3,8 +3,8 @@
 #       全套云 CLI（kubectl/flux/hcloud/aliyun/oci/tailscale/gh/ssh/node/python）、以及烘焙的模型配置。
 #       本线只补 ops 缺的 helm/k9s/stern/yq，并把 ops 入口/手册/技能烘进去。
 # 版本：OPENTOOLS_TAG 由 dispatch 必填传入；此处默认值仅给本地构建兜底。
-# 注意：不覆盖基底烘焙的 /root/.config/opencode/opencode.json（沿用它验证过的 litellm 网关配置），
-#       只追加 AGENTS.md 与 skills，避免 ops 线与 tools 线的模型/插件配置漂移。
+# 记忆：本地优先 —— 覆盖基底 opencode.json，启用 opencode-mem（本地向量库+本地 embedding），
+#       不用集群 Cognee（避免记忆随 K3S 一起挂）。
 ARG OPENTOOLS_TAG=pin-required
 FROM swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools:${OPENTOOLS_TAG}
 
@@ -26,7 +26,16 @@ RUN set -eux; ARCH="$(uname -m)"; case "$ARCH" in \
       && chmod +x /usr/local/bin/yq; \
     helm version --short && stern --version && yq --version
 
-# ops 手册 + 技能（追加，不覆盖基底 opencode.json）
+# 本地长期记忆：opencode-mem（tickernelz）。版本单源头 = 本 ARG，注入 opencode.json 后安装。
+ARG OPENCODE_MEM_VERSION=2.41.1
+COPY docker/opencode-ops/opencode.json /root/.config/opencode/opencode.json
+COPY docker/opencode-ops/opencode-mem.jsonc /root/.config/opencode/opencode-mem.jsonc
+RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/opencode/opencode.json \
+ && grep -q "\"opencode-mem@${OPENCODE_MEM_VERSION}\"" /root/.config/opencode/opencode.json \
+ && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
+ && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
+
+# ops 手册 + 技能
 COPY docker/opencode-ops/AGENTS.md /root/.config/opencode/AGENTS.md
 COPY docker/opencode-ops/skills /root/.config/opencode/skills
 COPY docker/opencode-ops/ops-entrypoint.sh /usr/local/bin/ops-entrypoint.sh
