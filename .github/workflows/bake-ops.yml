@@ -9,6 +9,11 @@ on:
         description: "本镜像 tag（必填，如 2.3.0）"
         required: true
         type: string
+      layer_size_limit_mb:
+        description: "单层体积门 MB（opencode-mem 原生层约 600MB，默认放宽到 1500）"
+        required: false
+        type: string
+        default: "1500"
   push:
     branches: [main]
     paths:
@@ -29,6 +34,7 @@ jobs:
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-ops
       tag_mode: explicit
       explicit_tag: ${{ inputs.ops_tag }}
+      layer_size_limit_mb: ${{ inputs.layer_size_limit_mb }}
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       goss_dir: docker/opencode-ops
