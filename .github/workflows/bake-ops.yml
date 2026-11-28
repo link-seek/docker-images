@@ -40,6 +40,7 @@ jobs:
       goss_dir: docker/opencode-ops
       goss_docker_args: -e OPENCODE_SERVER_PASSWORD=gate-dummy
       goss_command: serve --port 4096 --hostname 127.0.0.1
+      fine_test_hook: docker/opencode-ops/fine-test.sh
     secrets:
       gh_token: ${{ secrets.AGENT_GITHUB_TOKEN }}
       SWR_LOGIN_USER: ${{ secrets.SWR_LOGIN_USER }}
