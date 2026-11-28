@@ -12,7 +12,7 @@ set -euo pipefail
 
 REG="swr.cn-north-9.myhuaweicloud.com/link-seek"
 VOL="$(mktemp -d /tmp/ops-mem-e2e.XXXXXX)"
-trap 'rm -rf "$VOL" || true' EXIT
+trap 'sudo rm -rf "$VOL" || true' EXIT
 
 IMG="$(docker images --format '{{.Repository}}:{{.Tag}}' --filter "reference=${REG}/opencode-ops:*" | grep -v '<none>' | head -1 || true)"
 [ -n "$IMG" ] || { echo "FAIL: 本地找不到 ${REG}/opencode-ops:*（构建镜像）"; exit 1; }
@@ -37,7 +37,7 @@ import { initConfig } from "$D/dist/config.js"
 import { handleAddMemory, handleSearch } from "$D/dist/services/api-handlers.js"
 initConfig("/workspace")
 if (process.env.MODE === "add") {
-  const a = await handleAddMemory({ content: "e2e codeword " + process.env.CODE, containerTag: "opencode-ops", type: "fact", tags: ["e2e"] })
+  const a = await handleAddMemory({ content: "e2e codeword " + process.env.CODE, containerTag: "opencode_user_0123456789abcdef", type: "fact", tags: ["e2e"] })
   if (!a.success) { console.error("ADD-FAIL", JSON.stringify(a)); process.exit(1) }
 }
 const s = await handleSearch(process.env.CODE, undefined, 1, 10)
