@@ -32,5 +32,8 @@ COPY docker/opencode-ops/skills /root/.config/opencode/skills
 COPY docker/opencode-ops/ops-entrypoint.sh /usr/local/bin/ops-entrypoint.sh
 RUN chmod +x /usr/local/bin/ops-entrypoint.sh
 
+# OpenCode 默认项目目录；配合 /workspace 的 git init，worktree 功能可用
+WORKDIR /workspace
+
 ENTRYPOINT ["/usr/local/bin/ops-entrypoint.sh"]
 CMD ["serve", "--port", "4097", "--hostname", "0.0.0.0"]

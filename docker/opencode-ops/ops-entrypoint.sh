@@ -38,4 +38,12 @@ fi
 git config --global user.name  "${GIT_AUTHOR_NAME:-opencode-ops}" 2>/dev/null || true
 git config --global user.email "${GIT_AUTHOR_EMAIL:-opencode-ops@local}" 2>/dev/null || true
 
+# 6) /workspace 必须是 git 仓库，OpenCode worktree 才能工作（对齐 k8s 实例 entrypoint）
+if [ ! -d /workspace/.git ]; then
+  git init -b main /workspace >/dev/null 2>&1 || true
+  git -C /workspace config user.name  "${GIT_AUTHOR_NAME:-opencode-ops}" 2>/dev/null || true
+  git -C /workspace config user.email "${GIT_AUTHOR_EMAIL:-opencode-ops@local}" 2>/dev/null || true
+  git -C /workspace commit --allow-empty -m init >/dev/null 2>&1 || true
+fi
+
 exec opencode "$@"
