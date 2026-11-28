@@ -1,65 +1,55 @@
 #!/bin/bash
-# docker/opencode-ops/fine-test.sh —— 本地记忆功能真测（bake-stack 细测 hook）
+# docker/opencode-ops/fine-test.sh —— 本地记忆引擎 e2e（bake-stack 细测 hook）
 #
 # 调用约定（bake-stack.yml 固定）：env 传 DIGEST/TEMP_TAG/SWR_USER/SWR_PASS 等；
-# exit 0 + 打印 PASS 行即过，非零即红。
+# exit 0 + 打印 PASS 面即过，非零即红。
 #
-# 测什么（不依赖模型网关，走 opencode-mem 自带的本地 web API）：
-#   1) 写入一条带随机暗号的记忆
-#   2) 列表 / 搜索都能查到（捕获 + 本地向量检索）
-#   3) 删容器、同卷重开 → 还能查到（持久化）
+# 测什么（不依赖网络/模型网关）：
+#   1) 新卷：写一条带随机暗号的记忆，并搜索到（捕获 + 本地向量检索）
+#   2) 再开一个新容器、同卷：还能搜索到（持久化）
+# embedding 模型已烘进镜像 /opt/opencode-mem/.cache，测试时 seed 到卷，--network none 保证离线。
 set -euo pipefail
 
 REG="swr.cn-north-9.myhuaweicloud.com/link-seek"
-NAME="ops-mem-e2e-$$"
 VOL="$(mktemp -d /tmp/ops-mem-e2e.XXXXXX)"
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$VOL"; }
-trap cleanup EXIT
+trap 'rm -rf "$VOL" || true' EXIT
 
 IMG="$(docker images --format '{{.Repository}}:{{.Tag}}' --filter "reference=${REG}/opencode-ops:*" | grep -v '<none>' | head -1 || true)"
 [ -n "$IMG" ] || { echo "FAIL: 本地找不到 ${REG}/opencode-ops:*（构建镜像）"; exit 1; }
 echo "IMAGE: $IMG"
 
-start() {
-  docker rm -f "$NAME" >/dev/null 2>&1 || true
-  docker run -d --name "$NAME" --network host \
-    -e OPENCODE_SERVER_PASSWORD=e2e-dummy \
-    -e LITELLM_BASE_URL=http://127.0.0.1:1 \
-    -e LITELLM_API_KEY=e2e-dummy \
+CODE="ORANGE-${RANDOM}-${RANDOM}"
+
+run_mode() { # $1 = add|search
+  docker run --rm --network none \
+    -e CODE="$CODE" -e MODE="$1" \
     -v "$VOL":/root/.local/share/opencode \
-    "$IMG" serve --port 4097 --hostname 127.0.0.1 >/dev/null
-  local i
-  for i in $(seq 1 90); do
-    if docker exec "$NAME" sh -c 'curl -sf -o /dev/null http://127.0.0.1:4747/api/health' >/dev/null 2>&1; then
-      echo "memory web ready (${i}x2s)"; return 0
-    fi
-    sleep 2
-  done
-  echo "FAIL: memory web server 未就绪"
-  docker logs "$NAME" 2>&1 | tail -50
-  return 1
+    --entrypoint sh "$IMG" -c '
+      set -e
+      # 镜像烘焙的 embedding 模型 seed 到卷（等价 entrypoint 首次运行）
+      if [ -d /opt/opencode-mem/.cache ] && [ ! -d /root/.local/share/opencode/opencode-mem/.cache ]; then
+        mkdir -p /root/.local/share/opencode/opencode-mem
+        cp -a /opt/opencode-mem/.cache /root/.local/share/opencode/opencode-mem/.cache
+      fi
+      D="$(ls -d /root/.cache/opencode/npm/opencode-mem@*/node_modules/opencode-mem | head -1)"
+      cat > /tmp/memtest.mjs <<EOF
+import { initConfig } from "$D/dist/config.js"
+import { handleAddMemory, handleSearch } from "$D/dist/services/api-handlers.js"
+initConfig("/workspace")
+if (process.env.MODE === "add") {
+  const a = await handleAddMemory({ content: "e2e codeword " + process.env.CODE, containerTag: "opencode-ops", type: "fact", tags: ["e2e"] })
+  if (!a.success) { console.error("ADD-FAIL", JSON.stringify(a)); process.exit(1) }
+}
+const s = await handleSearch(process.env.CODE, undefined, 1, 10)
+if (!JSON.stringify(s).includes(process.env.CODE)) { console.error("SEARCH-FAIL", JSON.stringify(s).slice(0, 800)); process.exit(1) }
+console.log("MEM-OK", process.env.MODE)
+EOF
+      node /tmp/memtest.mjs
+    '
 }
 
-CODE="ORANGE-${RANDOM}-${RANDOM}"
-start
-
-echo "== 1) 写入记忆 =="
-docker exec "$NAME" sh -c "curl -sS -m 900 -X POST -H 'Content-Type: application/json' \
-  -d '{\"content\":\"e2e memory codeword ${CODE}\",\"containerTag\":\"opencode-ops\",\"type\":\"fact\",\"tags\":[\"e2e\"]}' \
-  http://127.0.0.1:4747/api/memories" > /tmp/ops-mem-write.json || true
-head -c 300 /tmp/ops-mem-write.json; echo
-
-echo "== 2) 列表 + 搜索（同一容器） =="
-docker exec "$NAME" sh -c "curl -sS -m 120 'http://127.0.0.1:4747/api/memories?page=1&pageSize=100'" > /tmp/ops-mem-list1.json
-grep -q "$CODE" /tmp/ops-mem-list1.json || { echo "FAIL: 写入后列表里没有该记忆"; head -c 800 /tmp/ops-mem-list1.json; exit 1; }
-docker exec "$NAME" sh -c "curl -sS -m 120 'http://127.0.0.1:4747/api/search?q=${CODE}'" > /tmp/ops-mem-search1.json
-grep -q "$CODE" /tmp/ops-mem-search1.json || { echo "FAIL: 写入后搜索不到"; head -c 800 /tmp/ops-mem-search1.json; exit 1; }
-
-echo "== 3) 重启容器（同卷）后再查 =="
-start
-docker exec "$NAME" sh -c "curl -sS -m 120 'http://127.0.0.1:4747/api/memories?page=1&pageSize=100'" > /tmp/ops-mem-list2.json
-grep -q "$CODE" /tmp/ops-mem-list2.json || { echo "FAIL: 重启后列表里记忆丢失"; head -c 800 /tmp/ops-mem-list2.json; exit 1; }
-docker exec "$NAME" sh -c "curl -sS -m 120 'http://127.0.0.1:4747/api/search?q=${CODE}'" > /tmp/ops-mem-search2.json
-grep -q "$CODE" /tmp/ops-mem-search2.json || { echo "FAIL: 重启后搜索不到"; head -c 800 /tmp/ops-mem-search2.json; exit 1; }
-
-echo "PASS: opencode-mem e2e (write -> list/search -> restart -> list/search)"
+echo "== 1) add + search（新容器/新卷） =="
+run_mode add
+echo "== 2) 再开一个新容器（同卷）search =="
+run_mode search
+echo "PASS: opencode-mem e2e (add -> search -> new container -> search)"

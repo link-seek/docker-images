@@ -46,4 +46,10 @@ if [ ! -d /workspace/.git ]; then
   git -C /workspace commit --allow-empty -m init >/dev/null 2>&1 || true
 fi
 
+# 7) 本地 embedding 模型（镜像烘焙）首次 seed 到持久卷；之后完全离线
+if [ -d /opt/opencode-mem/.cache ] && [ ! -d /root/.local/share/opencode/opencode-mem/.cache ]; then
+  mkdir -p /root/.local/share/opencode/opencode-mem
+  cp -a /opt/opencode-mem/.cache /root/.local/share/opencode/opencode-mem/.cache
+fi
+
 exec opencode "$@"
