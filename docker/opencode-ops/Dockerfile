@@ -2,10 +2,9 @@
 # 定位：单机（HW21 宿主 docker）维护台。继承 opencode-tools 的 glibc 底座、opencode v2 二进制、
 #       全套云 CLI（kubectl/flux/hcloud/aliyun/oci/tailscale/gh/ssh/node/python）、以及烘焙的模型配置。
 #       本线只补 ops 缺的 helm/k9s/stern/yq，并把 ops 入口/手册/技能烘进去。
-# 版本：底座按 digest 钉死（不可变）。要升级底座 = 主动改下面这行（或 dispatch 传 OPENTOOLS_IMAGE）；
-#       别人把 :tag 挪走/重建 tools 线，都不会影响我们重新构建的结果。
-ARG OPENTOOLS_IMAGE=swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:e3ecd5a610158db70d8b512c2885def650f8dc3fcc2c58e8cfc94ac375309e16
-FROM ${OPENTOOLS_IMAGE}
+# 版本：底座 digest pin（不可变）。升级底座 = 改这一行发 PR（digest 即行为版本）；
+#       别人把 :tag 挪走/重建 tools 线，都不会影响我们的构建结果。
+FROM swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:e3ecd5a610158db70d8b512c2885def650f8dc3fcc2c58e8cfc94ac375309e16
 
 ARG HELM_VERSION=3.16.4
 ARG K9S_VERSION=0.32.7

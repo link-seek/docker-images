@@ -5,11 +5,6 @@ name: bake-ops
 on:
   workflow_dispatch:
     inputs:
-      opentools_image:
-        description: "基底镜像（完整不可变引用；默认已钉 digest）"
-        required: false
-        type: string
-        default: "swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:e3ecd5a610158db70d8b512c2885def650f8dc3fcc2c58e8cfc94ac375309e16"
       ops_tag:
         description: "本镜像 tag（必填，如 2.3.0）"
         required: true
@@ -34,8 +29,6 @@ jobs:
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-ops
       tag_mode: explicit
       explicit_tag: ${{ inputs.ops_tag }}
-      build_args: |
-        OPENTOOLS_IMAGE=${{ inputs.opentools_image }}
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       goss_dir: docker/opencode-ops
