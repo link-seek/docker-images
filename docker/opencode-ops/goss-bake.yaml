@@ -1,5 +1,5 @@
 # opencode-ops 成品自检（dgoss）
-# 只验 ops 线实际依赖：opencode、本地记忆插件、k8s/helm 工具。
+# 只验 ops 线实际依赖：opencode、本地记忆插件、kubectl。
 command:
   opencode-version:
     exec: "opencode --version"
@@ -15,8 +15,4 @@ command:
 
   kubectl:
     exec: "kubectl version --client"
-    exit-status: 0
-
-  helm:
-    exec: "helm version --short"
     exit-status: 0
