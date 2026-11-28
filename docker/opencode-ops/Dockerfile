@@ -16,6 +16,15 @@ RUN sed -i "s/__OPENCODE_MEM_VERSION__/${OPENCODE_MEM_VERSION}/" /root/.config/o
  && opencode plugin add "opencode-mem@${OPENCODE_MEM_VERSION}" \
  && npm cache clean --force && rm -rf /root/.npm /tmp/opencode-* 2>/dev/null; opencode --version
 
+# 烘入本地 embedding 模型：CI 构建机可访问 HuggingFace，运行环境（如华为云）不一定。
+# 运行期由 entrypoint 把 /opt/opencode-mem/.cache 复制进持久卷，之后完全离线。
+RUN set -eux; \
+    D="$(ls -d /root/.cache/opencode/npm/opencode-mem@${OPENCODE_MEM_VERSION}/*/node_modules/opencode-mem | head -1)"; \
+    node --input-type=module -e "const c=await import('${D}/dist/config.js'); c.initConfig('/workspace'); const e=await import('${D}/dist/services/embedding.js'); await e.embeddingService.warmup();"; \
+    mkdir -p /opt/opencode-mem; \
+    mv /root/.local/share/opencode/opencode-mem/.cache /opt/opencode-mem/.cache; \
+    rm -rf /root/.local/share/opencode/opencode-mem
+
 # ops 手册 + 技能
 COPY docker/opencode-ops/AGENTS.md /root/.config/opencode/AGENTS.md
 COPY docker/opencode-ops/skills /root/.config/opencode/skills

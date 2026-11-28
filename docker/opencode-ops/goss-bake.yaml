@@ -13,6 +13,10 @@ command:
     exec: "sh -c 'ls -d /root/.cache/opencode/npm/opencode-mem@* >/dev/null'"
     exit-status: 0
 
+  embedding-model-baked:
+    exec: "sh -c 'ls -A /opt/opencode-mem/.cache | grep -q .'"
+    exit-status: 0
+
   kubectl:
     exec: "kubectl version --client"
     exit-status: 0
