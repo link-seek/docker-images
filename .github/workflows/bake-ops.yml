@@ -1,17 +1,18 @@
 name: bake-ops
 # 薄调用：opencode-ops 只声明参数，构建/自检/细测/转正逻辑全在 bake-stack.yml（共用骨架）。
-# 派生自 opencode-tools（OPENTOOLS_TAG 必填）；只补 helm/k9s/stern/yq + ops 手册/技能。
-# 宿主部署（HW21 docker），不经 Flux，无 k8s 预检。版本：ops_tag 留空则继承基 tag。
+# 派生自 opencode-tools（底座按 digest 钉死，不可变）；只补 helm/k9s/stern/yq + ops 手册/技能。
+# 宿主部署（HW21 docker），不经 Flux，无 k8s 预检。版本：ops_tag 必填。
 on:
   workflow_dispatch:
     inputs:
-      opentools_tag:
-        description: "基底 opencode-tools tag（必填，如 2.3.0）"
-        required: true
-        type: string
-      ops_tag:
-        description: "本镜像 tag（留空=继承基 tag）"
+      opentools_image:
+        description: "基底镜像（完整不可变引用；默认已钉 digest）"
         required: false
+        type: string
+        default: "swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-tools@sha256:e3ecd5a610158db70d8b512c2885def650f8dc3fcc2c58e8cfc94ac375309e16"
+      ops_tag:
+        description: "本镜像 tag（必填，如 2.3.0）"
+        required: true
         type: string
   push:
     branches: [main]
@@ -32,9 +33,9 @@ jobs:
       ghcr_image: ghcr.io/link-seek/opencode-ops
       swr_image: swr.cn-north-9.myhuaweicloud.com/link-seek/opencode-ops
       tag_mode: explicit
-      explicit_tag: ${{ inputs.ops_tag || inputs.opentools_tag }}
+      explicit_tag: ${{ inputs.ops_tag }}
       build_args: |
-        OPENTOOLS_TAG=${{ inputs.opentools_tag }}
+        OPENTOOLS_IMAGE=${{ inputs.opentools_image }}
       push_temp_to_ghcr: true
       ghcr_temp_only: true
       goss_dir: docker/opencode-ops
